@@ -48,10 +48,15 @@ export interface AudioDiagnostics {
   droppedFrames: number;
   clippedSamples: number;
   lastRms: number;
+  peakRms?: number;
   ambientNoiseRms: number;
   staleChunksDiscarded: number;
   localBargeInCount: number;
   localPlaybackStopMs: number | null;
+  serverFramesReceived?: number;
+  serverBytesReceived?: number;
+  serverAudioRms?: number;
+  sttConnected?: boolean;
 }
 
 export interface VoiceLatencyMetrics {
@@ -466,32 +471,47 @@ export class BrowserVoiceClient {
       try {
         await this.captureContext.audioWorklet.addModule('/audio-capture-worklet.js');
         if (!this.captureContext || this.isClosing) return;
+
+        this.silentGain = this.captureContext.createGain();
+        this.silentGain.gain.value = 0;
+        this.silentGain.connect(this.captureContext.destination);
+
         this.workletNode = new AudioWorkletNode(
           this.captureContext,
           'sakshya-capture-processor',
-          { numberOfInputs: 1, numberOfOutputs: 0, channelCount: 1 }
+          { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 1 }
         );
         this.workletNode.port.onmessage = (ev: MessageEvent) => {
           const payload = ev.data as {
+            buffer?: ArrayBuffer;
             pcmBuffer?: ArrayBuffer;
             rms?: number;
+            peak?: number;
+            clipped?: number;
             clippedSamples?: number;
           };
-          if (!payload?.pcmBuffer) return;
+          const rawBuf = payload?.pcmBuffer || payload?.buffer;
+          if (!rawBuf) return;
           if (!this.isMicStreaming) return;
           if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
             this.audioDiag.droppedFrames += 1;
             return;
           }
-          handleFrameStats(Number(payload.rms || 0), Number(payload.clippedSamples || 0));
-          this.ws.send(payload.pcmBuffer);
+          const rmsVal = Number(payload.rms || 0);
+          const clipVal = Number(payload.clipped || payload.clippedSamples || 0);
+          handleFrameStats(rmsVal, clipVal);
+          if (payload.peak !== undefined) {
+            this.audioDiag.peakRms = Number(payload.peak);
+          }
+          this.ws.send(rawBuf);
           this.audioDiag.framesSent += 1;
-          this.audioDiag.bytesSent += payload.pcmBuffer.byteLength;
-          if (this.audioDiag.framesSent % 20 === 0) {
+          this.audioDiag.bytesSent += rawBuf.byteLength;
+          if (this.audioDiag.framesSent % 10 === 0) {
             this.callbacks.onAudioDiagnostics?.({ ...this.audioDiag });
           }
         };
         captureNode.connect(this.workletNode);
+        this.workletNode.connect(this.silentGain);
         this.audioDiag.usedAudioWorklet = true;
         this.callbacks.onAudioDiagnostics?.({ ...this.audioDiag });
         return;
@@ -579,6 +599,17 @@ export class BrowserVoiceClient {
   private handleServerEvent(raw: Record<string, unknown>): void {
     const type = raw.type as string;
     switch (type) {
+      case 'server_audio_stats':
+      case 'audio_diagnostics': {
+        this.audioDiag.serverFramesReceived = Number(raw.frames_received || raw.frames || 0);
+        this.audioDiag.serverBytesReceived = Number(raw.bytes_received || raw.bytes || 0);
+        this.audioDiag.serverAudioRms = Number(raw.rms || 0);
+        if (raw.stt_connected !== undefined) {
+          this.audioDiag.sttConnected = Boolean(raw.stt_connected);
+        }
+        this.callbacks.onAudioDiagnostics?.({ ...this.audioDiag });
+        break;
+      }
       case 'session_ready': {
         this.sessionReadyAtMs = Date.now();
         const ev = raw as unknown as ServerSessionReadyEventV1;

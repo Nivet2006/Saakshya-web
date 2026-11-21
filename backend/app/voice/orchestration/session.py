@@ -196,6 +196,27 @@ class VoiceSessionOrchestrator:
                 retryable=True,
             )
 
+        if self.audio_frames_received == 1 or self.audio_frames_received % 25 == 0:
+            import numpy as np
+            arr = np.frombuffer(pcm_bytes, dtype=np.int16)
+            rms_val = float(np.sqrt(np.mean(arr.astype(np.float32) ** 2))) if len(arr) > 0 else 0.0
+            log_event(
+                logger,
+                "audio_frame_rx",
+                session=self.session_id,
+                frames=self.audio_frames_received,
+                bytes=self.audio_bytes_received,
+                rms=round(rms_val, 1),
+                stt_connected=self._stt.is_connected,
+            )
+            await self.emit_event(
+                "server_audio_stats",
+                frames_received=self.audio_frames_received,
+                bytes_received=self.audio_bytes_received,
+                rms=round(rms_val, 1),
+                stt_connected=self._stt.is_connected,
+            )
+
     async def handle_text_input(self, text: str) -> None:
         """Accept direct text utterance (for testing/fallback) through the same pipeline."""
         cleaned = text.strip()

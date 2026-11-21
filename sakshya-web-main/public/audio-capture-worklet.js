@@ -93,9 +93,11 @@ class SakshyaCaptureProcessor extends AudioWorkletProcessor {
         {
           type: 'pcm_frame',
           buffer: frame.buffer,
+          pcmBuffer: frame.buffer,
           rms,
           peak,
           clipped,
+          clippedSamples: clipped,
           inputRate: this.inputRate,
         },
         [frame.buffer]

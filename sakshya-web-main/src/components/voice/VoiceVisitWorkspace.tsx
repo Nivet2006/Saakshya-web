@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { DangerAlertBanner } from '@/components/DangerAlertBanner';
 import { ErrorBanner } from '@/components/ui/ClinicalUI';
 import { AdvancedVisitView } from '@/components/voice/AdvancedVisitView';
+import { AudioDiagnosticsPanel } from '@/components/voice/AudioDiagnosticsPanel';
 import { BasicVisitView } from '@/components/voice/BasicVisitView';
 import { ModeSelector } from '@/components/voice/ModeSelector';
 import { useVoiceVisitSession } from '@/hooks/useVoiceVisitSession';
@@ -84,6 +85,20 @@ export const VoiceVisitWorkspace: React.FC<VoiceVisitWorkspaceProps> = ({
 
       {/* Mode Switcher: Basic (Default) vs Advanced */}
       <ModeSelector mode={mode} onChange={handleModeChange} />
+
+      {/* Developer Diagnostic Panel & Live Mic Loopback Test */}
+      <AudioDiagnosticsPanel
+        diagnostics={voice.audioDiagnostics}
+        audioLevel={voice.audioLevel}
+        waveformBands={voice.waveformBands}
+        isConnected={voice.isConnected}
+        sessionId={voice.sessionId}
+        inputDevices={voice.inputDevices}
+        selectedDeviceId={voice.selectedDeviceId}
+        onSelectDevice={voice.setSelectedDeviceId}
+        onSendTextUtterance={voice.submitVoiceTextInput}
+        language={language}
+      />
 
       {/* Urgent Danger Sign Alerts ALWAYS Override Normal Flow & Stay Visible */}
       {voice.dangerAlerts.length > 0 && (
