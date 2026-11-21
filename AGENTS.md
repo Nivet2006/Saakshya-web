@@ -391,6 +391,136 @@ Do not let styling work delay the complete voice workflow and secure persistence
 
 ---
 
+# 10A. GOOGLE STITCH — MANDATORY UI DESIGN WORKFLOW
+
+**You must use Google Stitch to design the web application's interface before implementing the main UI.** Do not jump directly from this specification to ad-hoc JSX/Tailwind screens.
+
+Use the current Google Stitch workspace at <https://stitch.withgoogle.com/>. If a Stitch MCP server, SDK or supported agent integration is available in the development environment, use it. Otherwise, use the Stitch web application directly. Do not claim Stitch was used unless an actual Stitch project/design was created and reviewed.
+
+Google Stitch is the design/prototyping stage, not the production application runtime. Its generated screens and code are design inputs. Implement the approved design in the existing Next.js + TypeScript codebase, wire every interaction to real application state/APIs, and preserve the shared architecture. Do not replace the application with a static Stitch export or deploy a separate disconnected prototype.
+
+## 10A.1 Create a coherent Stitch project
+
+Create one project named **ASHA Voice Field Register** and design both product areas under one consistent design system:
+
+- **ASHA Worker Portal:** mobile-first, voice-first, low-friction interface for use between household visits.
+- **PHC Supervisor Portal:** desktop-first operational command center that remains fully usable on tablet and mobile.
+
+Both areas must look and feel like parts of the same healthcare platform. Do not create two unrelated themes.
+
+## 10A.2 Design the complete screen inventory
+
+Create and iterate on the important screens and states, not just a landing page or dashboard.
+
+**ASHA Worker screens:**
+1. Sign in / session state.
+2. First-time onboarding and language selection.
+3. Worker home with assigned beneficiaries, today's visits and follow-ups.
+4. Start visit / choose or identify beneficiary.
+5. Active voice capture with prominent microphone control, waveform/audio level, language and connection state.
+6. Listening, partial transcription, processing, assistant speaking, interrupted and reconnecting states.
+7. Live transcript and structured visit draft.
+8. Read-back / review and explicit confirmation.
+9. Voice correction state with the field being corrected clearly identified.
+10. Full-screen, accessible danger-sign alert and referral instruction state.
+11. Beneficiary directory and beneficiary profile.
+12. Visit history and visit detail.
+13. Immunisation/vaccination tracking.
+14. Follow-up queue and follow-up detail.
+15. Offline drafts, pending sync, sync failure and conflict resolution.
+
+**PHC Supervisor / Admin screens:**
+1. PHC command center overview.
+2. Live danger-sign alert queue and alert detail.
+3. ASHA worker list, worker detail and assignment views.
+4. Beneficiary administration and beneficiary detail.
+5. Visit register with filters and visit detail.
+6. Follow-up and immunisation monitoring.
+7. Referral tracking.
+8. Analytics and coverage reports.
+9. Export/report configuration and audit trail.
+
+Prioritise the complete ASHA voice journey and danger-alert states. Avoid spending disproportionate design time on decorative analytics before the worker workflow is designed.
+
+## 10A.3 Responsive design is mandatory
+
+Design and explicitly review responsive layouts for these viewport classes:
+
+- **Small mobile:** approximately 360–390 CSS px wide.
+- **Large mobile:** approximately 414–430 CSS px wide.
+- **Tablet:** approximately 768–1024 CSS px wide, including portrait and landscape where relevant.
+- **Desktop:** approximately 1280–1440 CSS px wide and wider.
+
+Do not merely scale down a desktop dashboard. Define intentional responsive behaviour:
+- ASHA worker experience is mobile-first and touch-first; its core voice action must remain immediately visible and easy to reach.
+- Supervisor navigation may use a collapsible sidebar on smaller screens and a persistent sidebar on desktop.
+- Dense data tables must transform into readable cards, lists or appropriately scrollable regions on smaller viewports.
+- Filters, dialogs, charts, forms, alerts and navigation must reflow without clipping or accidental horizontal page overflow.
+- Keep controls comfortably tappable (target at least 44 × 44 CSS px where practical), text legible and contrast accessible.
+- Respect safe areas and mobile browser viewport behaviour.
+- Do not hide critical danger alerts or primary voice controls at any breakpoint.
+
+Create separate Stitch frames/variants for the important breakpoints instead of assuming one generated frame is responsive by default.
+
+## 10A.4 Prototype the core user journeys in Stitch
+
+Use Stitch's prototype/flow capability to connect the screens and inspect the interaction sequence for at least:
+
+**ASHA visit journey:**
+`Sign in → Select language → Choose beneficiary → Start voice session → Live capture/transcript → Structured draft → Read-back → Voice correction → Re-read → Confirm → Saved visit → Follow-up`
+
+**Danger-sign journey:**
+`Active voice session → Danger-sign event → Immediate prominent alert/referral instruction → Alert retained on visit → Supervisor alert queue`
+
+**Supervisor journey:**
+`Command center → Open danger alert → Review permitted details → Acknowledge/update referral status → Audit trail`
+
+The prototype must represent key states and navigation. Do not treat prototype click-through as proof that production API, audio, database or authentication behaviour works.
+
+## 10A.5 Create and preserve the design system
+
+Use Stitch to establish a consistent design system and export or author its agent-friendly `DESIGN.md` where supported. Keep it in the repository at:
+
+`docs/DESIGN.md`
+
+It should document:
+- Brand direction and visual principles.
+- Colour tokens and semantic status colours.
+- Typography scale and language/font fallback choices.
+- Spacing, sizing, grid and responsive breakpoints.
+- Buttons, inputs, cards, tables, navigation, dialogs and alert patterns.
+- Voice-session states and their visual treatment.
+- Danger-alert treatment and accessibility requirements.
+- Component states: default, hover, focus, active, disabled, loading and error.
+- Accessibility and contrast decisions.
+
+Use design tokens consistently in the Next.js implementation. Do not copy arbitrary CSS values from unrelated screens or create one-off styles without a reason.
+
+## 10A.6 Implement the Stitch design as a real application
+
+After the Stitch design direction and core responsive layouts are established:
+- Implement the screens using the existing project's Next.js, TypeScript and styling conventions.
+- Build reusable components and shared layouts from the design system.
+- Connect routes, controls, forms, filters, dialogs and actions to real app state and backend operations.
+- Implement actual loading, empty, success, disabled, error, offline and permission-denied states.
+- Use synthetic data only in design examples and UI fixtures.
+- Do not leave decorative buttons, fake charts, dead links or nonfunctional voice controls.
+- Do not expose real beneficiary information, credentials or secrets in Stitch prompts, uploaded references, shared links or screenshots.
+- Ensure web UI communicates clearly when microphone/browser permissions or network connectivity prevent an action.
+
+Stitch-generated HTML/CSS/React, if exported, may be used as a reference or selectively adapted. Reconcile it with the existing app architecture, accessibility, TypeScript types, shared components and security model. Do not blindly overwrite existing source files with generated code.
+
+## 10A.7 Stitch deliverables and acceptance
+
+Commit/document these artifacts:
+- Stitch project name and share URL (if sharing is enabled and safe).
+- `docs/DESIGN.md` — the design system.
+- `docs/STITCH_DESIGN_HANDOFF.md` — screen inventory, prototype flows, selected design direction, responsive decisions, component mapping and any deviations from Stitch output.
+- A responsive screen/route matrix showing small mobile, large mobile, tablet and desktop coverage.
+- A mapping from each designed screen to its implemented Next.js route/component.
+
+The UI milestone is not complete until the key ASHA and supervisor screens have Stitch designs, the core flows have been prototyped, responsive layouts have been considered, and the implementation follows the design system. Any inability to access Stitch must be reported explicitly as a blocker; never fabricate a Stitch project, export, URL or completed design review.
+
 # 11. REPORTS, ANALYTICS AND EXPORTS
 
 Build reports only from persisted data and authorized query scopes.
@@ -431,6 +561,9 @@ Owns beneficiary directory/profile, visit history, immunisation tracking, follow
 Owns dashboard, realtime danger alerts, ASHA worker oversight, referral tracking, analytics and exports.
 
 ### Sub-agent 3E — Integration, Security & QA
+
+### Sub-agent 3F — Stitch Design System & Responsive Prototyping
+Owns the Google Stitch project, full screen inventory, small-mobile/large-mobile/tablet/desktop variants, core clickable prototypes, exported `docs/DESIGN.md` and `docs/STITCH_DESIGN_HANDOFF.md`. This agent owns design artifacts and design review only; it must not independently rewrite application screens, voice logic or database/business logic. Coordinate the approved designs with Sub-agents 3B and 3D before implementation.
 Owns end-to-end contract conformance, auth/RLS test cases, duplicate-submit tests, offline-sync tests, accessibility review and manual test documentation.
 
 For every sub-agent assignment, state:
@@ -533,6 +666,7 @@ At completion, provide:
 - `docs/AGENT1_INTEGRATION.md`.
 - `docs/AGENT2_WEB_PARITY.md`.
 - `docs/MANUAL_TEST_CHECKLIST.md`.
+- `docs/DESIGN.md` and `docs/STITCH_DESIGN_HANDOFF.md`, plus the Stitch project reference and responsive screen matrix.
 - `docs/KNOWN_LIMITATIONS.md`.
 - A completed Android ↔ Web feature parity matrix.
 - Migration and synthetic demo-data setup instructions.
@@ -561,10 +695,11 @@ Start now. Do not respond with only a plan.
 4. Initialize Git only if needed; preserve existing history; commit the clean baseline and push only if a remote is already configured.
 5. Spawn specialist agents for database/RLS, worker portal, supervisor portal and integration/security review. Assign disjoint scopes.
 6. Establish the schema and API adapter boundaries from the actual shared contracts. If Agent 1's contracts are not yet available, keep adapters provisional and document blockers.
-7. Build the complete ASHA worker web workflow first or in parallel with the supervisor shell; do not deliver a supervisor-only dashboard.
-8. Implement Supabase persistence, RLS, synthetic seeds, offline drafts and idempotent sync.
-9. Add supervisor realtime alerts, referral tracking, reports and exports.
-10. Run automated checks, inspect Git changes, commit and push each coherent milestone.
-11. Produce the feature-parity matrix and manual test checklist.
+7. Start the Google Stitch design workflow: create the ASHA and supervisor screen inventory, mobile/tablet/desktop variants, core prototypes and `docs/DESIGN.md`; delegate this to Sub-agent 3F.
+8. Implement the complete ASHA worker web workflow first or in parallel with the supervisor shell, following the approved Stitch design; do not deliver a supervisor-only dashboard.
+9. Implement Supabase persistence, RLS, synthetic seeds, offline drafts and idempotent sync.
+10. Add supervisor realtime alerts, referral tracking, reports and exports.
+11. Run automated checks, inspect Git changes, commit and push each coherent milestone.
+12. Produce the feature-parity matrix, Stitch design handoff and manual test checklist.
 
 **Definition of success:** the browser application is a complete ASHA-worker client and a PHC-supervisor platform on top of one shared, secure healthcare system. The ASHA workflow must work end-to-end in the browser using the real shared voice backend, and the web client must not fork clinical or voice business logic. A visually complete dashboard with mocked controls or placeholder voice events is not completion.
