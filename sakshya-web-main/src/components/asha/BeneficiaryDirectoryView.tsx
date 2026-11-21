@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
+import { AddPatientModal, type NewPatientInput } from '@/components/asha/AddPatientModal';
 import { EmptyState } from '@/components/ui/ClinicalUI';
 import { useTranslation } from '@/lib/i18n/LanguageContext';
 import type {
   Beneficiary,
   FollowUpTask,
   ImmunisationScheduleItem,
+  LanguageCode,
   VisitDraft,
 } from '@/types';
 import {
@@ -18,6 +20,7 @@ import {
   Search,
   Syringe,
   User,
+  UserPlus,
   X,
 } from 'lucide-react';
 
@@ -27,6 +30,8 @@ interface BeneficiaryDirectoryViewProps {
   followUps: FollowUpTask[];
   immunisations: ImmunisationScheduleItem[];
   onStartVoiceVisit: (beneficiary: Beneficiary) => void;
+  onAddBeneficiary?: (input: NewPatientInput) => Promise<Beneficiary>;
+  currentLanguage?: LanguageCode;
 }
 
 export const BeneficiaryDirectoryView: React.FC<BeneficiaryDirectoryViewProps> = ({
@@ -35,11 +40,14 @@ export const BeneficiaryDirectoryView: React.FC<BeneficiaryDirectoryViewProps> =
   followUps,
   immunisations,
   onStartVoiceVisit,
+  onAddBeneficiary,
+  currentLanguage = 'hi-IN',
 }) => {
   const { ui } = useTranslation();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [selectedProfile, setSelectedProfile] = useState<Beneficiary | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -95,22 +103,34 @@ export const BeneficiaryDirectoryView: React.FC<BeneficiaryDirectoryViewProps> =
           </p>
         </div>
 
-        <div className="relative w-full sm:w-72">
-          <Search
-            className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
-            aria-hidden="true"
-          />
-          <label htmlFor="directory-search" className="sr-only">
-            {ui.searchBeneficiariesPlaceholder}
-          </label>
-          <input
-            id="directory-search"
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={ui.searchBeneficiariesPlaceholder}
-            className="w-full pl-9 pr-3 py-2 rounded-xl border border-clinical-border bg-white text-sm"
-          />
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto">
+          <div className="relative w-full sm:w-72">
+            <Search
+              className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+              aria-hidden="true"
+            />
+            <label htmlFor="directory-search" className="sr-only">
+              {ui.searchBeneficiariesPlaceholder}
+            </label>
+            <input
+              id="directory-search"
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={ui.searchBeneficiariesPlaceholder}
+              className="w-full pl-9 pr-3 py-2 rounded-xl border border-clinical-border bg-white text-sm"
+            />
+          </div>
+          {onAddBeneficiary && (
+            <button
+              type="button"
+              onClick={() => setShowAddModal(true)}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-clinical-primary hover:bg-clinical-primary-dark text-white text-xs font-bold shadow-sm whitespace-nowrap"
+            >
+              <UserPlus className="h-4 w-4" aria-hidden="true" />
+              <span>{ui.addNewPatientBtn}</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -228,13 +248,13 @@ export const BeneficiaryDirectoryView: React.FC<BeneficiaryDirectoryViewProps> =
                   {selectedProfile.full_name}
                 </h2>
                 <p className="text-xs text-slate-600 mt-0.5">
-                  {selectedProfile.village} · Household Head: {selectedProfile.household_head || '—'}
+                  {selectedProfile.village} · {ui.householdHead}: {selectedProfile.household_head || '—'}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedProfile(null)}
-                aria-label="Close profile details"
+                aria-label={ui.cancelLabel}
                 className="p-2 rounded-lg text-slate-500 hover:bg-slate-100"
               >
                 <X className="h-5 w-5" />
@@ -257,10 +277,10 @@ export const BeneficiaryDirectoryView: React.FC<BeneficiaryDirectoryViewProps> =
             {/* Visit History */}
             <section>
               <h3 className="text-sm font-bold text-clinical-text mb-2">
-                Visit History ({profileVisits.length})
+                {ui.visitHistoryTitle} ({profileVisits.length})
               </h3>
               {profileVisits.length === 0 ? (
-                <p className="text-xs text-slate-500 italic">No recorded visits yet.</p>
+                <p className="text-xs text-slate-500 italic">{ui.noRecordedVisitsYet}</p>
               ) : (
                 <ul className="space-y-2">
                   {profileVisits.map((v) => (
@@ -269,12 +289,12 @@ export const BeneficiaryDirectoryView: React.FC<BeneficiaryDirectoryViewProps> =
                       className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1"
                     >
                       <div className="flex justify-between font-bold">
-                        <span>{v.visit_type || 'Visit'}</span>
+                        <span>{v.visit_type || ui.visitTypeLabel}</span>
                         <span className="tabular-nums text-slate-500">
                           {new Date(v.visit_date).toLocaleDateString()}
                         </span>
                       </div>
-                      {v.weight_kg !== null && <p>Weight: {v.weight_kg} kg</p>}
+                      {v.weight_kg !== null && <p>{ui.weightLabel}: {v.weight_kg} kg</p>}
                       {v.raw_transcript_summary && (
                         <p className="text-slate-600">{v.raw_transcript_summary}</p>
                       )}
@@ -288,10 +308,10 @@ export const BeneficiaryDirectoryView: React.FC<BeneficiaryDirectoryViewProps> =
             <section>
               <h3 className="text-sm font-bold text-clinical-text mb-2 flex items-center gap-1.5">
                 <Syringe className="h-4 w-4 text-clinical-primary" aria-hidden="true" />
-                <span>Immunisation Records ({profileImmunisations.length})</span>
+                <span>{ui.immunisationRecordsTitle} ({profileImmunisations.length})</span>
               </h3>
               {profileImmunisations.length === 0 ? (
-                <p className="text-xs text-slate-500 italic">No scheduled vaccines tracked.</p>
+                <p className="text-xs text-slate-500 italic">{ui.noScheduledVaccines}</p>
               ) : (
                 <ul className="space-y-2">
                   {profileImmunisations.map((im) => (
@@ -303,7 +323,7 @@ export const BeneficiaryDirectoryView: React.FC<BeneficiaryDirectoryViewProps> =
                         <span className="font-bold text-clinical-text">
                           {im.vaccine_name} (Dose {im.dose_number})
                         </span>
-                        <span className="block text-slate-500 tabular-nums">Due: {im.due_date}</span>
+                        <span className="block text-slate-500 tabular-nums">{ui.dueLabel}: {im.due_date}</span>
                       </div>
                       <span
                         className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
@@ -325,10 +345,10 @@ export const BeneficiaryDirectoryView: React.FC<BeneficiaryDirectoryViewProps> =
             {/* Pending Follow-ups */}
             <section>
               <h3 className="text-sm font-bold text-clinical-text mb-2">
-                Follow-ups ({profileFollowUps.length})
+                {ui.followUpsHeading} ({profileFollowUps.length})
               </h3>
               {profileFollowUps.length === 0 ? (
-                <p className="text-xs text-slate-500 italic">No follow-ups recorded.</p>
+                <p className="text-xs text-slate-500 italic">{ui.noFollowUpsRecorded}</p>
               ) : (
                 <ul className="space-y-2">
                   {profileFollowUps.map((f) => (
@@ -338,7 +358,7 @@ export const BeneficiaryDirectoryView: React.FC<BeneficiaryDirectoryViewProps> =
                     >
                       <div>
                         <p className="font-bold text-clinical-text">{f.task_type}</p>
-                        <p className="text-slate-500 tabular-nums">Due: {f.due_date}</p>
+                        <p className="text-slate-500 tabular-nums">{ui.dueLabel}: {f.due_date}</p>
                       </div>
                       <span className="font-bold text-[11px]">{f.status}</span>
                     </li>
@@ -357,10 +377,18 @@ export const BeneficiaryDirectoryView: React.FC<BeneficiaryDirectoryViewProps> =
               className="w-full py-3.5 rounded-xl bg-clinical-primary hover:bg-clinical-primary-dark text-white font-bold text-sm flex items-center justify-center gap-2"
             >
               <Mic className="h-4 w-4" aria-hidden="true" />
-              <span>Start Voice Visit for {selectedProfile.full_name}</span>
+              <span>{ui.startVoiceVisit} · {selectedProfile.full_name}</span>
             </button>
           </div>
         </div>
+      )}
+      {onAddBeneficiary && (
+        <AddPatientModal
+          open={showAddModal}
+          defaultLanguage={currentLanguage}
+          onClose={() => setShowAddModal(false)}
+          onSave={onAddBeneficiary}
+        />
       )}
     </div>
   );

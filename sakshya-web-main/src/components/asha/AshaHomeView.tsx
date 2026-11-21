@@ -92,7 +92,7 @@ export const AshaHomeView: React.FC<AshaHomeViewProps> = ({
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
             <span className="text-xs font-bold text-red-800 uppercase tracking-wider">
-              Active Danger Alerts ({activeAlerts.length})
+              {ui.activeDangerAlertsLabel} ({activeAlerts.length})
             </span>
             {onClearAlerts && (
               <button
@@ -100,7 +100,7 @@ export const AshaHomeView: React.FC<AshaHomeViewProps> = ({
                 onClick={onClearAlerts}
                 className="text-xs font-semibold text-red-700 hover:text-red-900 bg-red-100 hover:bg-red-200 border border-red-300 px-2.5 py-1 rounded-lg transition-colors"
               >
-                Clear all alerts
+                {ui.clearAllAlerts}
               </button>
             )}
           </div>
@@ -213,7 +213,7 @@ export const AshaHomeView: React.FC<AshaHomeViewProps> = ({
                   onClick={onClearVisits}
                   className="text-xs text-red-600 hover:text-red-700 hover:underline font-medium"
                 >
-                  Clear all
+                  {ui.clearAll}
                 </button>
               )}
               <button

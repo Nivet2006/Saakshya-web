@@ -303,6 +303,9 @@ class HealthcareSessionPipeline:
         self.session_id = session_id
         self.worker_id = worker_id
         self.language = normalize_language(language)
+        self._preferred_language: str | None = (
+            None if str(language).strip().lower() in ("auto", "indic-auto") else self.language
+        )
         self._directory = directory or SyntheticBeneficiaryDirectory()
         self._extractor = VisitFieldExtractor(beneficiary_directory=self._directory)
         self._reference_date = reference_date
@@ -347,6 +350,18 @@ class HealthcareSessionPipeline:
 
     def set_secondary_recognizer(self, recognizer: SecondarySpeechRecognizer | None) -> None:
         self._secondary_recognizer = recognizer
+
+    def set_preferred_language(self, language_code: str, *, fallback: str = "hi-IN") -> None:
+        """Lock or unlock response language based on explicit worker UI selection."""
+        cleaned = (language_code or "").strip()
+        if not cleaned or cleaned.lower() in ("auto", "indic-auto"):
+            self._preferred_language = None
+            eff = normalize_language(fallback)
+        else:
+            eff = normalize_language(cleaned)
+            self._preferred_language = eff
+        self.language = eff
+        self.sm.set_language(eff)
 
     async def _reconnect_stt_safely(self, stt: Any) -> None:
         try:
@@ -525,8 +540,23 @@ class HealthcareSessionPipeline:
             return "ठीक है, कृपया सही मान दोबारा बोलें।"
         return f"Okay, please repeat the {field_name}."
 
+    def build_llm_visit_context(self) -> str:
+        """Concise live visit context so the LLM understands the active patient and draft."""
+        v = self.sm.visit
+        missing = self._missing_required_fields()
+        parts = [
+            f"Current visit draft context: beneficiary={v.beneficiary_name or 'unselected'} ({v.beneficiary_id or 'none'})",
+            f"visit_type={v.visit_type.value if v.visit_type else 'unknown'}",
+            f"weight_kg={v.weight_kg if v.weight_kg is not None else 'unknown'}",
+            f"next_visit_date={v.next_visit_date or 'unknown'}",
+            f"danger_sign_flagged={v.danger_sign_flagged}",
+            f"missing_fields={','.join(missing) if missing else 'none'}",
+        ]
+        return "; ".join(parts) + ". Respond naturally to what the ASHA worker just said, and if any clinical symptom sounds serious, ask a clarifying question or advise immediate PHC referral without diagnosing or inventing details."
+
     def attach_orchestrator(self, orchestrator: VoiceSessionOrchestrator) -> None:
         self._orchestrator = orchestrator
+        orchestrator._context_provider = self.build_llm_visit_context
 
     def _cancel_silence_timer(self) -> None:
         if self._silence_task is not None and not self._silence_task.done():
@@ -693,8 +723,15 @@ class HealthcareSessionPipeline:
     ) -> bool:
         """Process a final transcript through 1A (Danger) -> 1C (Extraction) -> 1B (State Machine)."""
         self._cancel_silence_timer()
-        raw_lang = event.language_code or orchestrator.active_language or self.language
-        lang = detect_language_from_text(event.text, fallback=raw_lang)
+        fallback_lang = self._preferred_language or event.language_code or orchestrator.active_language or self.language
+        detected = detect_language_from_text(event.text, fallback=fallback_lang)
+        # If the ASHA worker explicitly selected a language (e.g. ta-IN), do not flip
+        # the conversation to English merely because code-mixed ASCII/digits were transcribed.
+        has_indic_script = any(0x0900 <= ord(ch) <= 0x0D7F for ch in (event.text or ""))
+        if self._preferred_language and (not has_indic_script or detected == "en-IN"):
+            lang = self._preferred_language
+        else:
+            lang = detected
         self.sm.set_language(lang)
         self.language = lang
         orchestrator.active_language = lang
@@ -763,23 +800,88 @@ class HealthcareSessionPipeline:
                 await self._dispatch_transition(lookup_trans, orchestrator)
                 return True
 
-            unclear_trans = self.sm.handle_identity_confirmation_response(
-                event.text, language=lang
-            )
-            await self._dispatch_transition(unclear_trans, orchestrator)
-            return True
+            # If a beneficiary is already pre-selected and the worker jumped straight into
+            # speaking visit notes or symptoms (instead of saying "yes"/"no"), confirm the
+            # pre-selected beneficiary and continue processing the utterance normally!
+            if self.sm.visit.beneficiary_id and self.sm.state == ConversationState.IDENTITY_CONFIRMATION:
+                preview_id = self._extractor.extract(
+                    event.text,
+                    reference_date=self._reference_date,
+                    active_language=lang,
+                    existing_draft=self._build_draft_snapshot_for_extractor(),
+                )
+                if (
+                    preview_id.patch
+                    or preview_id.observations
+                    or preview_id.events
+                    or len((event.text or "").split()) >= 4
+                ):
+                    self.sm.handle_identity_confirmation_response("yes", language=lang)
+                    orchestrator.telemetry.steps.beneficiary_identified = True
+                    orchestrator.telemetry.steps.identity_voice_confirmed = True
+                    self._sync_stt_context_from_visit(orchestrator)
+                else:
+                    unclear_trans = self.sm.handle_identity_confirmation_response(
+                        event.text, language=lang
+                    )
+                    await self._dispatch_transition(unclear_trans, orchestrator)
+                    return True
+            else:
+                unclear_trans = self.sm.handle_identity_confirmation_response(
+                    event.text, language=lang
+                )
+                await self._dispatch_transition(unclear_trans, orchestrator)
+                return True
 
         if not danger_fired and self.sm.state in (
             ConversationState.IDENTITY_CORRECTION,
             ConversationState.BENEFICIARY_LOOKUP,
         ):
             matches, _spoken_id = self._directory.resolve_spoken_identity(event.text)
-            lookup_trans = self.sm.apply_beneficiary_lookup_result(
-                [(b.beneficiary_id, b.full_name) for b in matches],
-                language=lang,
+            if matches:
+                lookup_trans = self.sm.apply_beneficiary_lookup_result(
+                    [(b.beneficiary_id, b.full_name) for b in matches],
+                    language=lang,
+                )
+                if len(matches) == 1:
+                    orchestrator.telemetry.steps.beneficiary_identified = True
+                await self._dispatch_transition(lookup_trans, orchestrator)
+                return True
+
+            # Preserve any clinical fields spoken before beneficiary lookup resolved
+            pre_ext = self._extractor.extract(
+                event.text,
+                reference_date=self._reference_date,
+                active_language=lang,
+                existing_draft=self._build_draft_snapshot_for_extractor(),
             )
-            if len(matches) == 1:
-                orchestrator.telemetry.steps.beneficiary_identified = True
+            if pre_ext.patch or pre_ext.observations or pre_ext.events:
+                pre_kwargs: dict[str, Any] = {}
+                pre_fields: set[str] = set()
+                for k in ("visit_type", "weight_kg", "vaccinations_completed", "vaccinations_due", "next_visit_date"):
+                    if k in pre_ext.patch:
+                        pre_kwargs[k] = pre_ext.patch[k]
+                        pre_fields.add(k)
+                if pre_ext.observations:
+                    pre_kwargs["observations"] = [o.model_dump(mode="json") for o in pre_ext.observations]
+                    pre_fields.add("observations")
+                if pre_ext.events:
+                    pre_kwargs["events"] = [e.model_dump(mode="json") for e in pre_ext.events]
+                    pre_fields.add("events")
+                if pre_kwargs:
+                    self.sm._apply_update_fields(
+                        ExtractionUpdate(**pre_kwargs, explicit_fields=pre_fields, detected_language=lang),
+                        is_patch=False,
+                        merge_lists=True,
+                    )
+                    await orchestrator.emit_event(
+                        "visit_draft_updated",
+                        visit_id=self.sm.visit.visit_draft_id,
+                        draft=self.current_visit_contract(),
+                        updated_fields=sorted(pre_fields),
+                        missing_required_fields=self._missing_required_fields(),
+                    )
+            lookup_trans = self.sm.apply_beneficiary_lookup_result([], language=lang)
             await self._dispatch_transition(lookup_trans, orchestrator)
             return True
 
@@ -791,6 +893,34 @@ class HealthcareSessionPipeline:
             active_language=lang,
             existing_draft=existing_draft,
         )
+
+        # If spoken/unitless baby weight < 1.8 kg was extracted (e.g. "baby weight is one point five"),
+        # ensure Layer 1 NB_VLBW urgent referral triggers even without explicit "kg" digits.
+        ext_weight = extraction.patch.get("weight_kg")
+        if (
+            not danger_fired
+            and isinstance(ext_weight, (int, float))
+            and 0.3 <= float(ext_weight) < 1.8
+            and (
+                self._is_baby_context()
+                or extraction.patch.get("visit_type") == "Newborn"
+                or bool(
+                    re.search(
+                        r"baby|newborn|infant|navjat|shishu|बच्च|नवजात|बेबी|குழந்தை|பேபி|ಮಗು|ಬೇಬಿ|బిడ్డ|శిశువు|బేబీ",
+                        event.text or "",
+                        re.IGNORECASE,
+                    )
+                )
+            )
+        ):
+            vlbw_res = self._run_danger_check(
+                f"newborn birth weight {ext_weight} kg", language=lang, is_partial=False
+            )
+            if vlbw_res.danger_sign_flagged and vlbw_res.matches:
+                danger_res = vlbw_res
+                danger_fired = await self._trigger_danger_escalation(
+                    vlbw_res, orchestrator, is_partial=False
+                )
 
         # 2a-bis. If worker rejected a confirmation and repeated a bare value (e.g. "101.2",
         # "120 by 80", "11.4", "2.8"), re-extract with the awaited field cue if needed.
@@ -1225,6 +1355,31 @@ class HealthcareSessionPipeline:
         # Pending confirmation of an ambiguous or uncertain numeric value (Section F)
         if self._pending_numeric_confirmations and not explicit_fields:
             amb_intent = classify_confirmation_intent(event.text)
+            pending_field = next(iter(self._pending_numeric_confirmations))
+            # If the worker repeats the exact same pending value (e.g., "2 kg", "two", "yes 2 kg")
+            # instead of saying bare "yes", treat that as explicit confirmation to prevent loops.
+            if amb_intent != "confirm" and amb_intent != "reject":
+                pending_patch: ExtractionUpdate = self._pending_numeric_confirmations[pending_field]["patch"]
+                pending_cands = [
+                    c for c in extraction.clarifications if c.field_name == pending_field and c.candidates
+                ]
+                if pending_field == "weight_kg" and pending_patch.weight_kg is not None:
+                    if any(
+                        abs(float(cand) - float(pending_patch.weight_kg)) < 1e-3
+                        for c in pending_cands
+                        for cand in c.candidates
+                    ):
+                        amb_intent = "confirm"
+                    else:
+                        from app.extraction.numbers import find_weight_candidates, parse_decimal_phrase
+
+                        w_cands = find_weight_candidates(event.text)
+                        if any(abs(float(wc.value_kg) - float(pending_patch.weight_kg)) < 1e-3 for wc in w_cands):
+                            amb_intent = "confirm"
+                        else:
+                            bare_dec = parse_decimal_phrase((event.text or "").strip())
+                            if bare_dec is not None and abs(float(bare_dec) - float(pending_patch.weight_kg)) < 1e-3:
+                                amb_intent = "confirm"
             if amb_intent == "confirm":
                 pending_field = next(iter(self._pending_numeric_confirmations))
                 entry = self._pending_numeric_confirmations.pop(pending_field)

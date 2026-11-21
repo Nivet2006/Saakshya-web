@@ -8,6 +8,7 @@ import { AudioDiagnosticsPanel } from '@/components/voice/AudioDiagnosticsPanel'
 import { BasicVisitView } from '@/components/voice/BasicVisitView';
 import { ModeSelector } from '@/components/voice/ModeSelector';
 import { useVoiceVisitSession } from '@/hooks/useVoiceVisitSession';
+import { useTranslation } from '@/lib/i18n/LanguageContext';
 import type { AshaExperienceMode, Beneficiary, LanguageCode, UserProfile, VisitDraft } from '@/types';
 
 interface VoiceVisitWorkspaceProps {
@@ -16,6 +17,17 @@ interface VoiceVisitWorkspaceProps {
   recentVisits: VisitDraft[];
   selectedBeneficiary: Beneficiary | null;
   onSelectBeneficiary: (ben: Beneficiary | null) => void;
+  onAddBeneficiary?: (input: {
+    full_name: string;
+    category: Beneficiary['category'];
+    age_years: number;
+    village: string;
+    household_head?: string;
+    phone_number?: string;
+    edd_date?: string;
+    high_risk_status: boolean;
+    preferred_language: LanguageCode;
+  }) => Promise<Beneficiary>;
   language: LanguageCode;
   onChangeLanguage: (lang: LanguageCode) => void;
   onVisitCommitted: (visit: VisitDraft) => void;
@@ -30,11 +42,13 @@ export const VoiceVisitWorkspace: React.FC<VoiceVisitWorkspaceProps> = ({
   recentVisits,
   selectedBeneficiary,
   onSelectBeneficiary,
+  onAddBeneficiary,
   language,
   onChangeLanguage,
   onVisitCommitted,
   onGoHome,
 }) => {
+  const { ui } = useTranslation(language);
   // Default experience MUST be Basic Mode
   const [mode, setMode] = useState<AshaExperienceMode>('basic');
 
@@ -75,11 +89,10 @@ export const VoiceVisitWorkspace: React.FC<VoiceVisitWorkspaceProps> = ({
     <div className="max-w-5xl mx-auto space-y-5">
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-clinical-text">
-          Record Household Voice Visit
+          {ui.recordHouseholdVisitTitle}
         </h1>
         <p className="text-xs sm:text-sm text-clinical-text-secondary mt-0.5">
-          Connected to Agent 1 Voice Pipeline · Switch anytime between Basic and Advanced views
-          without losing visit data.
+          {ui.recordHouseholdVisitSubtitle}
         </p>
       </div>
 
@@ -132,6 +145,7 @@ export const VoiceVisitWorkspace: React.FC<VoiceVisitWorkspaceProps> = ({
           recentBeneficiaryIds={recentIds}
           selectedBeneficiary={selectedBeneficiary}
           onSelectBeneficiary={onSelectBeneficiary}
+          onAddBeneficiary={onAddBeneficiary}
           language={language}
           onChangeLanguage={onChangeLanguage}
           voice={voice}
@@ -143,6 +157,7 @@ export const VoiceVisitWorkspace: React.FC<VoiceVisitWorkspaceProps> = ({
           recentBeneficiaryIds={recentIds}
           selectedBeneficiary={selectedBeneficiary}
           onSelectBeneficiary={onSelectBeneficiary}
+          onAddBeneficiary={onAddBeneficiary}
           language={language}
           onChangeLanguage={onChangeLanguage}
           voice={voice}

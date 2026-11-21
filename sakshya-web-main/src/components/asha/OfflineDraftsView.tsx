@@ -123,9 +123,9 @@ export const OfflineDraftsView: React.FC<OfflineDraftsViewProps> = ({ onSynced }
 
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
-                    Record: {d.status}
+                    {ui.recordStatus}: {d.status}
                   </span>
-                  <SyncPill status={d.sync_status} />
+                  <SyncPill status={d.sync_status} syncedLabel={ui.syncedStatus} />
                 </div>
               </div>
 
@@ -138,7 +138,7 @@ export const OfflineDraftsView: React.FC<OfflineDraftsViewProps> = ({ onSynced }
 
               <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs text-slate-500">
                 <span className="tabular-nums">
-                  Updated {new Date(d.updated_at).toLocaleString()}
+                  {ui.updatedLabel} {new Date(d.updated_at).toLocaleString()}
                 </span>
                 <div className="flex items-center gap-2">
                   {d.sync_status === 'conflict' && (
@@ -147,7 +147,7 @@ export const OfflineDraftsView: React.FC<OfflineDraftsViewProps> = ({ onSynced }
                       onClick={() => handleResolveConflictKeepLocal(d)}
                       className="px-3 py-1.5 rounded-lg bg-amber-600 text-white font-bold text-xs"
                     >
-                      Retry Overwrite Local
+                      {ui.retryOverwrite}
                     </button>
                   )}
                   <button
@@ -156,7 +156,7 @@ export const OfflineDraftsView: React.FC<OfflineDraftsViewProps> = ({ onSynced }
                     className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-red-700 hover:border-red-200 font-semibold"
                   >
                     <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span>Remove Local</span>
+                    <span>{ui.removeLocal}</span>
                   </button>
                 </div>
               </div>
@@ -168,12 +168,15 @@ export const OfflineDraftsView: React.FC<OfflineDraftsViewProps> = ({ onSynced }
   );
 };
 
-const SyncPill: React.FC<{ status: VisitDraft['sync_status'] }> = ({ status }) => {
+const SyncPill: React.FC<{ status: VisitDraft['sync_status']; syncedLabel: string }> = ({
+  status,
+  syncedLabel,
+}) => {
   if (status === 'synced') {
     return (
       <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
         <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-        Synced
+        {syncedLabel}
       </span>
     );
   }

@@ -50,7 +50,7 @@ export const SpokenDescription: React.FC<{
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1 text-xs font-semibold text-clinical-primary">
               <Volume2 className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>{isTtsPaused ? 'Read-back Paused' : 'Timbre Reading Aloud'}</span>
+              <span>{isTtsPaused ? ui.readbackPaused : ui.timbreReadingAloud}</span>
             </span>
             <button
               type="button"
@@ -60,12 +60,12 @@ export const SpokenDescription: React.FC<{
               {isTtsPaused ? (
                 <>
                   <Play className="h-3 w-3" aria-hidden="true" />
-                  <span>Resume</span>
+                  <span>{ui.resumeReadback}</span>
                 </>
               ) : (
                 <>
                   <Pause className="h-3 w-3" aria-hidden="true" />
-                  <span>Pause</span>
+                  <span>{ui.pauseReadback}</span>
                 </>
               )}
             </button>
@@ -78,13 +78,13 @@ export const SpokenDescription: React.FC<{
           &ldquo;{transcriptSummary}&rdquo;
         </p>
       ) : (
-        <p className="text-xs text-slate-500 italic">No spoken description finalized yet.</p>
+        <p className="text-xs text-slate-500 italic">{ui.noSpokenDescriptionYet}</p>
       )}
 
       {readBackSummary && (
         <div className="p-3 rounded-lg bg-teal-50/80 border border-teal-200 text-xs text-teal-950">
           <span className="font-bold block mb-1 text-clinical-primary-dark">
-            Assistant Spoken Summary:
+            {ui.assistantSummaryHeading}:
           </span>
           <p className="leading-relaxed">{readBackSummary}</p>
         </div>
@@ -95,7 +95,7 @@ export const SpokenDescription: React.FC<{
           role="status"
           className="p-2.5 rounded-lg bg-amber-50 border border-amber-300 text-xs text-amber-900 font-semibold"
         >
-          Field updated — assistant will re-read the corrected summary before saving.
+          {ui.fieldUpdatedReread}
         </div>
       )}
     </div>
@@ -107,21 +107,24 @@ export const VoiceCorrectionControl: React.FC<{
   fieldLabel: string;
   isActiveTarget?: boolean;
   onTriggerVoiceCorrection: (fieldKey: string) => void;
-}> = ({ fieldKey, fieldLabel, isActiveTarget, onTriggerVoiceCorrection }) => (
-  <button
-    type="button"
-    onClick={() => onTriggerVoiceCorrection(fieldKey)}
-    aria-label={`Correct ${fieldLabel} by voice`}
-    className={`compact-chip inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${
-      isActiveTarget
-        ? 'bg-indigo-600 text-white border-indigo-700'
-        : 'bg-white text-clinical-secondary border-slate-300 hover:bg-sky-50'
-    }`}
-  >
-    <Mic className="h-3 w-3" aria-hidden="true" />
-    <span>Correct</span>
-  </button>
-);
+}> = ({ fieldKey, fieldLabel, isActiveTarget, onTriggerVoiceCorrection }) => {
+  const { ui } = useTranslation();
+  return (
+    <button
+      type="button"
+      onClick={() => onTriggerVoiceCorrection(fieldKey)}
+      aria-label={`${ui.correctButton} ${fieldLabel}`}
+      className={`compact-chip inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${
+        isActiveTarget
+          ? 'bg-indigo-600 text-white border-indigo-700'
+          : 'bg-white text-clinical-secondary border-slate-300 hover:bg-sky-50'
+      }`}
+    >
+      <Mic className="h-3 w-3" aria-hidden="true" />
+      <span>{ui.correctButton}</span>
+    </button>
+  );
+};
 
 export const CapturedField: React.FC<{
   fieldKey: string;
@@ -146,6 +149,7 @@ export const CapturedField: React.FC<{
   onVisualSave,
   activeCorrectionField,
 }) => {
+  const { ui } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [editDraft, setEditDraft] = useState(rawEditValue ?? '');
   const isMissing = value === null || value === '';
@@ -194,10 +198,10 @@ export const CapturedField: React.FC<{
               isMissing ? 'text-amber-800 italic font-semibold' : 'text-clinical-text'
             }`}
           >
-            {isMissing ? 'Not identified — needs confirmation' : value}
+            {isMissing ? ui.notIdentified : value}
           </p>
           {sourcePhrase && (
-            <p className="text-[11px] text-slate-500 mt-0.5">From speech: &ldquo;{sourcePhrase}&rdquo;</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">{ui.fromSpeechLabel}: &ldquo;{sourcePhrase}&rdquo;</p>
           )}
         </div>
 
@@ -206,11 +210,11 @@ export const CapturedField: React.FC<{
             <button
               type="button"
               onClick={startEdit}
-              aria-label={`Edit ${label}`}
+              aria-label={`${ui.editLabel} ${label}`}
               className="compact-chip inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
             >
               <Edit3 className="h-3 w-3" aria-hidden="true" />
-              <span>Edit</span>
+              <span>{ui.editLabel}</span>
             </button>
           )}
           {onVoiceCorrect && (
@@ -232,7 +236,7 @@ export const CapturedField: React.FC<{
               onChange={(e) => setEditDraft(e.target.value)}
               className="flex-1 min-w-[140px] px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs bg-white"
             >
-              <option value="">Select visit type</option>
+              <option value="">{ui.selectVisitType}</option>
               <option value="ANC">ANC</option>
               <option value="PNC">PNC</option>
               <option value="Newborn">Newborn</option>
@@ -251,14 +255,14 @@ export const CapturedField: React.FC<{
             type="submit"
             className="px-3 py-1.5 rounded-lg bg-clinical-primary text-white text-xs font-bold"
           >
-            Save
+            {ui.saveLabel}
           </button>
           <button
             type="button"
             onClick={() => setEditing(false)}
             className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold"
           >
-            Cancel
+            {ui.cancelLabel}
           </button>
         </form>
       )}
@@ -272,42 +276,45 @@ export const FieldConfirmation: React.FC<{
   currentStatus: FieldConfirmStatus;
   onUpdateStatus: (fieldKey: string, status: FieldConfirmStatus) => void;
   onVoiceCorrect: (fieldKey: string) => void;
-}> = ({ fieldKey, label, currentStatus, onUpdateStatus, onVoiceCorrect }) => (
-  <div className="flex flex-wrap items-center gap-1.5 mt-2 pt-2 border-t border-slate-100">
-    <button
-      type="button"
-      onClick={() => onUpdateStatus(fieldKey, 'confirmed')}
-      className={`compact-chip inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
-        currentStatus === 'confirmed'
-          ? 'bg-emerald-600 text-white border-emerald-700'
-          : 'bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-50'
-      }`}
-    >
-      <Check className="h-3 w-3" aria-hidden="true" />
-      <span>Confirm {label}</span>
-    </button>
-    <button
-      type="button"
-      onClick={() => onVoiceCorrect(fieldKey)}
-      className="compact-chip inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white text-sky-800 border border-sky-300 hover:bg-sky-50"
-    >
-      <Mic className="h-3 w-3" aria-hidden="true" />
-      <span>Correct by Voice</span>
-    </button>
-    <button
-      type="button"
-      onClick={() => onUpdateStatus(fieldKey, 'needs_clarification')}
-      className={`compact-chip inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
-        currentStatus === 'needs_clarification'
-          ? 'bg-amber-600 text-white border-amber-700'
-          : 'bg-white text-amber-800 border-amber-300 hover:bg-amber-50'
-      }`}
-    >
-      <HelpCircle className="h-3 w-3" aria-hidden="true" />
-      <span>Needs Clarification</span>
-    </button>
-  </div>
-);
+}> = ({ fieldKey, label, currentStatus, onUpdateStatus, onVoiceCorrect }) => {
+  const { ui } = useTranslation();
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 mt-2 pt-2 border-t border-slate-100">
+      <button
+        type="button"
+        onClick={() => onUpdateStatus(fieldKey, 'confirmed')}
+        className={`compact-chip inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
+          currentStatus === 'confirmed'
+            ? 'bg-emerald-600 text-white border-emerald-700'
+            : 'bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-50'
+        }`}
+      >
+        <Check className="h-3 w-3" aria-hidden="true" />
+        <span>{ui.confirmField} {label}</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => onVoiceCorrect(fieldKey)}
+        className="compact-chip inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white text-sky-800 border border-sky-300 hover:bg-sky-50"
+      >
+        <Mic className="h-3 w-3" aria-hidden="true" />
+        <span>{ui.correctByVoice}</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => onUpdateStatus(fieldKey, 'needs_clarification')}
+        className={`compact-chip inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
+          currentStatus === 'needs_clarification'
+            ? 'bg-amber-600 text-white border-amber-700'
+            : 'bg-white text-amber-800 border-amber-300 hover:bg-amber-50'
+        }`}
+      >
+        <HelpCircle className="h-3 w-3" aria-hidden="true" />
+        <span>{ui.needsClarification}</span>
+      </button>
+    </div>
+  );
+};
 
 export const VisitSummaryCard: React.FC<{
   draft: VisitDraft;
@@ -338,6 +345,7 @@ export const VisitSummaryCard: React.FC<{
   onRemoveEvent,
   onSpeakToMakeChanges,
 }) => {
+  const { ui } = useTranslation();
   const statuses = draft.field_statuses || {};
   const [addingNote, setAddingNote] = useState(false);
   const [newObsLabel, setNewObsLabel] = useState('');
@@ -388,10 +396,10 @@ export const VisitSummaryCard: React.FC<{
       <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200">
         <div>
           <h2 id="review-card-heading" className="text-base sm:text-lg font-bold text-clinical-text">
-            Here&rsquo;s what I understood from your visit
+            {ui.reviewCardTitle}
           </h2>
           <p className="text-xs text-clinical-text-secondary">
-            Editable until final submission · Speak or tap Edit on any field.
+            {ui.reviewCardSubtitle}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -402,7 +410,7 @@ export const VisitSummaryCard: React.FC<{
               className="compact-chip inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 border border-sky-300 text-sky-900 text-xs font-bold"
             >
               <Mic className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>Speak to make changes</span>
+              <span>{ui.speakToMakeChanges}</span>
             </button>
           )}
           <span
@@ -414,7 +422,7 @@ export const VisitSummaryCard: React.FC<{
                 : 'bg-amber-100 text-amber-900'
             }`}
           >
-            {draft.status === 'draft' ? 'Unsubmitted Draft' : draft.status}
+            {draft.status === 'draft' ? ui.unsubmittedDraft : draft.status}
           </span>
         </div>
       </div>
@@ -462,13 +470,13 @@ export const VisitSummaryCard: React.FC<{
       {/* Section B: Captured Information */}
       <div className="space-y-2.5">
         <span className="text-xs font-bold uppercase tracking-wider text-slate-600 block">
-          B. Captured Information
+          {ui.visitSummaryHeading}
         </span>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
           <CapturedField
             fieldKey="beneficiary_id"
-            label="Beneficiary"
+            label={ui.beneficiaryLabel}
             value={
               draft.beneficiary_name && draft.beneficiary_id
                 ? `${draft.beneficiary_name} (${draft.beneficiary_id})`
@@ -482,7 +490,7 @@ export const VisitSummaryCard: React.FC<{
           />
           <CapturedField
             fieldKey="visit_type"
-            label="Visit Type"
+            label={ui.visitTypeLabel}
             value={draft.visit_type}
             rawEditValue={draft.visit_type || ''}
             editType="visit_type"
@@ -494,7 +502,7 @@ export const VisitSummaryCard: React.FC<{
           {(draft.weight_kg !== null || statuses.weight_kg === 'needs_clarification') && (
             <CapturedField
               fieldKey="weight_kg"
-              label="Weight"
+              label={ui.weightLabel}
               value={draft.weight_kg !== null ? `${draft.weight_kg} kg` : null}
               rawEditValue={draft.weight_kg !== null ? String(draft.weight_kg) : ''}
               editType="number"
@@ -508,7 +516,7 @@ export const VisitSummaryCard: React.FC<{
           {(vaccineText !== null || statuses.vaccinations_due === 'needs_clarification') && !(draft.events && draft.events.length > 0) && (
             <CapturedField
               fieldKey="vaccinations_due"
-              label="Vaccinations / Immunisation"
+              label={ui.vaccinationsDue}
               value={vaccineText}
               rawEditValue={draft.vaccinations_due.join(', ')}
               status={statuses.vaccinations_due || (vaccineText ? 'extracted' : 'missing')}
@@ -520,7 +528,7 @@ export const VisitSummaryCard: React.FC<{
           {(draft.next_visit_date !== null || statuses.next_visit_date === 'needs_clarification') && (
             <CapturedField
               fieldKey="next_visit_date"
-              label="Next Visit Date"
+              label={ui.nextVisitDateLabel}
               value={draft.next_visit_date}
               rawEditValue={draft.next_visit_date || ''}
               editType="date"
@@ -534,7 +542,7 @@ export const VisitSummaryCard: React.FC<{
           {followUpText !== null && (
             <CapturedField
               fieldKey="follow_up_actions"
-              label="Follow-Up Action"
+              label={ui.pendingFollowUps}
               value={followUpText}
               status={statuses.follow_up_actions || (followUpText ? 'extracted' : 'missing')}
               onVoiceCorrect={onVoiceCorrectField}
@@ -656,7 +664,7 @@ export const VisitSummaryCard: React.FC<{
                 className="compact-chip inline-flex items-center gap-1 text-xs font-semibold text-clinical-primary hover:underline"
               >
                 <Edit3 className="h-3 w-3" aria-hidden="true" />
-                <span>+ Add Observation / Note</span>
+                <span>{ui.addObservationNote}</span>
               </button>
             ) : (
               <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200">
@@ -664,14 +672,14 @@ export const VisitSummaryCard: React.FC<{
                   type="text"
                   value={newObsLabel}
                   onChange={(e) => setNewObsLabel(e.target.value)}
-                  placeholder="Label (e.g. Feeding, BP)"
+                  placeholder={ui.obsLabelPlaceholder}
                   className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white flex-1 min-w-[130px]"
                 />
                 <input
                   type="text"
                   value={newObsValue}
                   onChange={(e) => setNewObsValue(e.target.value)}
-                  placeholder="Observed value or note"
+                  placeholder={ui.obsValuePlaceholder}
                   className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white flex-[2] min-w-[160px]"
                 />
                 <button
@@ -697,14 +705,14 @@ export const VisitSummaryCard: React.FC<{
                   }}
                   className="compact-chip px-3 py-1.5 rounded-lg bg-clinical-primary text-white text-xs font-bold"
                 >
-                  Save Note
+                  {ui.saveNote}
                 </button>
                 <button
                   type="button"
                   onClick={() => setAddingNote(false)}
                   className="compact-chip px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs"
                 >
-                  Cancel
+                  {ui.cancelLabel}
                 </button>
               </div>
             )}
@@ -726,10 +734,10 @@ export const VisitSummaryCard: React.FC<{
               <CheckCircle2 className="h-4 w-4 text-clinical-success shrink-0" aria-hidden="true" />
             )}
             <span className="text-xs font-bold">
-              Danger Signs:{' '}
+              {ui.dangerSignsLabel}:{' '}
               {draft.danger_sign_flagged
                 ? draft.danger_signs.join(', ')
-                : 'No danger sign flagged in speech'}
+                : ui.noDangerFlaggedSpeech}
             </span>
           </div>
         </div>
@@ -755,6 +763,7 @@ export const VisitConfirmationActions: React.FC<{
   onRejectAndCorrect,
   onDiscardAndRerecord,
 }) => {
+  const { ui } = useTranslation();
   const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
   const canConfirm = !!draft.beneficiary_id && !hasUnresolvedClarifications;
 
@@ -765,15 +774,13 @@ export const VisitConfirmationActions: React.FC<{
           role="status"
           className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-xs text-amber-950 font-semibold"
         >
-          {!draft.beneficiary_id
-            ? 'Beneficiary identity must be selected or resolved before saving.'
-            : 'Resolve highlighted "Needs Clarification" fields before final save.'}
+          {ui.needsClarification}
         </div>
       )}
 
       {requiresReReadBack && (
         <p className="text-xs text-amber-800 font-medium">
-          A correction was applied — verify the updated value above before tapping Accept &amp; Save.
+          {ui.fieldUpdatedReread}
         </p>
       )}
 
@@ -787,12 +794,12 @@ export const VisitConfirmationActions: React.FC<{
           {isSaving ? (
             <>
               <RefreshCw className="h-5 w-5 animate-spin" aria-hidden="true" />
-              <span>Saving Visit...</span>
+              <span>{ui.savingVisitBtn}</span>
             </>
           ) : (
             <>
               <Check className="h-5 w-5" aria-hidden="true" />
-              <span>✓ ACCEPT &amp; SAVE</span>
+              <span>{ui.acceptAndSaveBtn}</span>
             </>
           )}
         </button>
@@ -804,7 +811,7 @@ export const VisitConfirmationActions: React.FC<{
           className="min-h-[56px] px-6 py-3.5 rounded-xl bg-white hover:bg-amber-50 border-2 border-amber-500 text-amber-950 font-bold text-base transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
         >
           <X className="h-5 w-5 text-amber-700" aria-hidden="true" />
-          <span>✕ REJECT / CORRECT BY VOICE</span>
+          <span>{ui.rejectAndCorrectBtn}</span>
         </button>
       </div>
 
@@ -816,15 +823,15 @@ export const VisitConfirmationActions: React.FC<{
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-red-700 px-3 py-1.5 rounded-lg"
         >
           <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-          <span>Discard Draft &amp; Re-record Entire Visit</span>
+          <span>{ui.discardAndRerecordBtn}</span>
         </button>
       </div>
 
       <NativeConfirmDialog
         open={confirmDiscardOpen}
-        title="Discard current draft and re-record?"
-        description="This clears the current unconfirmed draft fields so you can record a fresh household visit."
-        confirmLabel="Discard & Re-record"
+        title={ui.confirmDiscardTitle}
+        description={ui.confirmDiscardDesc}
+        confirmLabel={ui.discardConfirmBtn}
         destructive
         onCancel={() => setConfirmDiscardOpen(false)}
         onConfirm={() => {
@@ -841,6 +848,7 @@ export const VisitSuccess: React.FC<{
   onStartAnother: () => void;
   onGoHome: () => void;
 }> = ({ savedVisit, onStartAnother, onGoHome }) => {
+  const { ui } = useTranslation();
   const isSynced = savedVisit.status === 'committed' && savedVisit.sync_status === 'synced';
   return (
     <section
@@ -853,30 +861,30 @@ export const VisitSuccess: React.FC<{
 
       <div>
         <span className="text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-emerald-100 text-emerald-900">
-          {isSynced ? 'Visit Committed & Synced' : 'Confirmed — Queued Offline for Sync'}
+          {isSynced ? ui.visitCommittedSynced : ui.confirmedQueuedOffline}
         </span>
         <h2 className="text-xl sm:text-2xl font-bold text-clinical-text mt-3">
-          Visit Saved for {savedVisit.beneficiary_name || savedVisit.beneficiary_id}
+          {ui.visitSavedFor} {savedVisit.beneficiary_name || savedVisit.beneficiary_id}
         </h2>
         <p className="text-xs sm:text-sm text-clinical-text-secondary mt-1">
           {isSynced
-            ? `Persistence Reference: ${savedVisit.persistence_record_id || savedVisit.visit_id}`
-            : 'Your confirmed visit is safely stored in IndexedDB and will sync automatically when online.'}
+            ? `${ui.persistenceRef}: ${savedVisit.persistence_record_id || savedVisit.visit_id}`
+            : ui.offlinePolicyDesc}
         </p>
       </div>
 
       <div className="max-w-md mx-auto bg-slate-50 rounded-xl p-4 border border-slate-200 text-left text-xs space-y-2">
         <div className="flex justify-between">
-          <span className="text-slate-500">Visit ID:</span>
+          <span className="text-slate-500">{ui.visitIdLabel}:</span>
           <span className="font-mono font-bold text-clinical-text">{savedVisit.visit_id}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-slate-500">Visit Type:</span>
-          <span className="font-bold text-clinical-text">{savedVisit.visit_type || 'General'}</span>
+          <span className="text-slate-500">{ui.visitTypeLabel}:</span>
+          <span className="font-bold text-clinical-text">{savedVisit.visit_type || ui.generalLabel}</span>
         </div>
         {savedVisit.weight_kg !== null && (
           <div className="flex justify-between">
-            <span className="text-slate-500">Weight:</span>
+            <span className="text-slate-500">{ui.weightLabel}:</span>
             <span className="font-bold tabular-nums text-clinical-text">
               {savedVisit.weight_kg} kg
             </span>
@@ -886,7 +894,7 @@ export const VisitSuccess: React.FC<{
           <div className="flex justify-between items-center pt-1 border-t border-slate-200">
             <span className="text-slate-600 inline-flex items-center gap-1">
               <Calendar className="h-3.5 w-3.5 text-clinical-primary" aria-hidden="true" />
-              Next Follow-up:
+              {ui.nextVisitDateLabel}:
             </span>
             <span className="font-bold tabular-nums text-clinical-primary">
               {savedVisit.next_visit_date}
@@ -901,14 +909,14 @@ export const VisitSuccess: React.FC<{
           onClick={onStartAnother}
           className="px-6 py-3 rounded-xl bg-clinical-primary hover:bg-clinical-primary-dark text-white font-bold text-sm"
         >
-          Start Another Voice Visit
+          {ui.startAnotherVoiceVisit}
         </button>
         <button
           type="button"
           onClick={onGoHome}
           className="px-6 py-3 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 font-semibold text-sm"
         >
-          Return to ASHA Home
+          {ui.returnToAshaHome}
         </button>
       </div>
     </section>

@@ -291,3 +291,179 @@ def test_rest_health_and_synthetic_beneficiaries() -> None:
     assert r_sess.status_code == 200
     assert r_sess.json()["websocket_path"].startswith("/ws/voice/")
 
+
+def test_all_ten_indic_languages_supported_without_fallback_or_keyerror() -> None:
+    from app.conversation.models import SUPPORTED_LANGUAGES, normalize_language
+    from app.conversation.state_machine import generate_beneficiary_greeting_text
+    from app.danger_signs.detector import get_referral_message
+
+    expected = {"hi-IN", "en-IN", "kn-IN", "ta-IN", "te-IN", "ml-IN", "bn-IN", "mr-IN", "gu-IN", "pa-IN"}
+    assert expected.issubset(set(SUPPORTED_LANGUAGES))
+    for lang in expected:
+        assert normalize_language(lang) == lang
+        assert normalize_language(lang.split("-")[0]) == lang
+        greeting = generate_beneficiary_greeting_text("Lakshmi Devi", "BEN-1042", lang)
+        referral = get_referral_message(lang)
+        assert isinstance(greeting, str) and len(greeting) > 5
+        assert isinstance(referral, str) and len(referral) > 5
+
+
+@pytest.mark.asyncio
+async def test_language_lock_preserves_selected_tamil_on_english_codemix() -> None:
+    from app.healthcare.pipeline import HealthcareSessionPipeline
+
+    emitted: list[dict[str, Any]] = []
+
+    async def emit(ev: dict[str, Any]) -> None:
+        emitted.append(ev)
+
+    stt = _MockSTT()
+    tts = _MockSlowTTS()
+    llm = _MockLLM()
+    vad = _TriggerOnCommandVAD()
+
+    pipeline = HealthcareSessionPipeline(session_id="lang_lock_1", language="ta-IN", beneficiary_id="BEN-1042")
+    pipeline.set_preferred_language("ta-IN", fallback="ta-IN")
+
+    orch = VoiceSessionOrchestrator(
+        session_id="lang_lock_1",
+        stt=stt,
+        tts=tts,
+        llm=llm,
+        vad=vad,
+        emit=emit,
+        default_language="ta-IN",
+        language_locked=True,
+        on_partial_hook=pipeline.on_partial_transcript,
+        on_final_hook=pipeline.on_final_transcript,
+    )
+    pipeline.attach_orchestrator(orch)
+    orch._turn_debounce_s = 0.02
+    await orch.start()
+
+    # Code-mixed English numbers/phrases when user explicitly selected Tamil
+    await stt.queue.put(
+        TranscriptEvent(
+            event_type="final",
+            text="Baby weight 2.8 kg next visit 28 November",
+            is_final=True,
+            language_code="en-IN",
+        )
+    )
+    for _ in range(50):
+        await asyncio.sleep(0.02)
+        if any(e.get("type") in {"final_transcript", "assistant_response", "visit_draft_updated"} for e in emitted):
+            break
+
+    assert orch.active_language == "ta-IN"
+    assert pipeline.sm.active_language == "ta-IN"
+    finals = [e for e in emitted if e.get("type") == "final_transcript"]
+    assert finals and finals[0]["language"] == "ta-IN"
+    await orch.close()
+
+
+def test_create_beneficiary_endpoint_and_partial_danger_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.core.config import get_settings
+
+    monkeypatch.setenv("DANGER_SIGN_PARTIAL_MATCHING", "false")
+    get_settings.cache_clear()
+    try:
+        assert get_settings().danger_sign_partial_matching is False
+        client = TestClient(app)
+        r = client.post(
+            "/api/v1/beneficiaries",
+            json={
+                "full_name": "Priya Murugan",
+                "category": "PREGNANT_WOMAN",
+                "village": "Kaveri Demo Ward 4",
+                "preferred_language": "ta-IN",
+                "age_years": 24,
+                "high_risk_status": True,
+            },
+        )
+        assert r.status_code == 200
+        created = r.json()["beneficiary"]
+        assert created["full_name"] == "Priya Murugan"
+        assert created["beneficiary_id"].startswith("BEN-")
+
+        r_list = client.get("/api/v1/beneficiaries?q=Priya%20Murugan")
+        assert r_list.status_code == 200
+        assert any(b["beneficiary_id"] == created["beneficiary_id"] for b in r_list.json()["beneficiaries"])
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_preselected_beneficiary_understands_clinical_notes_without_explicit_yes() -> None:
+    from app.conversation.models import ConversationState
+    from app.healthcare.pipeline import HealthcareSessionPipeline
+
+    emitted: list[dict[str, Any]] = []
+
+    async def emit(ev: dict[str, Any]) -> None:
+        emitted.append(ev)
+
+    stt = _MockSTT()
+    tts = _MockSlowTTS()
+    llm = _MockLLM()
+    vad = _TriggerOnCommandVAD()
+
+    pipeline = HealthcareSessionPipeline(session_id="clin_skip_yes", language="en-IN", beneficiary_id="BEN-1042")
+    pipeline.set_preferred_language("en-IN", fallback="en-IN")
+    orch = VoiceSessionOrchestrator(
+        session_id="clin_skip_yes",
+        stt=stt,
+        tts=tts,
+        llm=llm,
+        vad=vad,
+        emit=emit,
+        default_language="en-IN",
+        language_locked=True,
+        on_partial_hook=pipeline.on_partial_transcript,
+        on_final_hook=pipeline.on_final_transcript,
+    )
+    pipeline.attach_orchestrator(orch)
+    await orch.start()
+    await pipeline.start_session_greeting(orch)
+    assert pipeline.sm.state == ConversationState.IDENTITY_CONFIRMATION
+
+    await stt.queue.put(
+        TranscriptEvent(
+            event_type="final",
+            text="ANC visit completed, weight is 53 kilo, next visit 28 November.",
+            is_final=True,
+            language_code="en-IN",
+        )
+    )
+    for _ in range(50):
+        await asyncio.sleep(0.02)
+        if pipeline.sm.visit.weight_kg == 53.0:
+            break
+
+    assert pipeline.sm.identity_verified is True
+    assert pipeline.sm.visit.weight_kg == 53.0
+    assert pipeline.sm.visit.next_visit_date == "2026-11-28"
+    await orch.close()
+
+
+def test_codemixed_indic_english_baby_weight_and_vlbw() -> None:
+    from datetime import date
+    from app.extraction.extractor import VisitFieldExtractor
+    from app.extraction.models import VisitDraft
+
+    ext = VisitFieldExtractor()
+    draft = VisitDraft(visit_id="v_mix", beneficiary_id="BEN-1042")
+
+    # Tamil-English, Telugu-English, and English "baby's weight is two" on ANC mother profile
+    for phrase in (
+        "the baby's weight is two",
+        "குழந்தையின் எடை வந்து two",
+        "బేబీ వెయిట్ వచ్చేసి two",
+        "बच्चे का वजन दो",
+    ):
+        res = ext.extract(phrase, reference_date=date(2026, 11, 21), existing_draft=draft)
+        assert res.patch.get("weight_kg") == 2.0, f"Failed for {phrase!r}: {res}"
+        assert not any(c.field_name == "weight_kg" for c in res.clarifications)
+

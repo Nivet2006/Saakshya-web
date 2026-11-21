@@ -111,8 +111,8 @@ export const FollowUpQueueView: React.FC<FollowUpQueueViewProps> = ({
       {tab === 'vaccines' ? (
         pendingVaccines.length === 0 ? (
           <EmptyState
-            title="No pending vaccinations"
-            description="All scheduled doses matching your search are up to date."
+            title={ui.noPendingVaccines}
+            description={ui.noPendingVaccinesDesc}
             icon={<Syringe className="h-5 w-5" />}
           />
         ) : (
@@ -131,7 +131,7 @@ export const FollowUpQueueView: React.FC<FollowUpQueueViewProps> = ({
                   <p className="text-xs text-slate-600 mt-0.5">
                     {v.beneficiary_name || v.beneficiary_id} ({v.beneficiary_id})
                   </p>
-                  <p className="text-xs text-slate-500 mt-1 tabular-nums">Due Date: {v.due_date}</p>
+                  <p className="text-xs text-slate-500 mt-1 tabular-nums">{ui.dueDateLabel}: {v.due_date}</p>
                 </div>
                 <span
                   className={`px-2.5 py-1 rounded-full text-xs font-bold ${
@@ -148,8 +148,8 @@ export const FollowUpQueueView: React.FC<FollowUpQueueViewProps> = ({
         )
       ) : filteredTasks.length === 0 ? (
         <EmptyState
-          title="No tasks in this queue"
-          description="Tasks generated from confirmed voice visits will appear here automatically."
+          title={ui.noTasksInQueue}
+          description={ui.noTasksInQueueDesc}
           icon={<CalendarClock className="h-5 w-5" />}
         />
       ) : (
@@ -202,7 +202,7 @@ export const FollowUpQueueView: React.FC<FollowUpQueueViewProps> = ({
                   </span>
                 </div>
                 <p className="text-xs text-slate-600 mt-1">
-                  Beneficiary: <strong>{task.beneficiary_name || task.beneficiary_id}</strong> · Due{' '}
+                  {ui.beneficiaryLabel}: <strong>{task.beneficiary_name || task.beneficiary_id}</strong> · {ui.dueLabel}{' '}
                   <span className="tabular-nums font-semibold">{task.due_date}</span>
                 </p>
                 {task.notes && <p className="text-xs text-slate-500 mt-1">{task.notes}</p>}

@@ -61,10 +61,12 @@ class VoiceSessionOrchestrator:
         vad: VADDetector | None,
         emit: EmitCallback,
         default_language: str = "hi-IN",
+        language_locked: bool = False,
         tts_voice: str = "Shivani",
         system_prompt: str = MILESTONE1_SYSTEM_PROMPT,
         on_partial_hook: TranscriptHook | None = None,
         on_final_hook: TranscriptHook | None = None,
+        context_provider: Callable[[], str] | None = None,
     ) -> None:
         self.session_id = session_id or f"sess_{uuid.uuid4().hex[:12]}"
         self._stt = stt
@@ -73,10 +75,12 @@ class VoiceSessionOrchestrator:
         self._vad = vad
         self._emit = emit
         self.active_language = default_language
+        self.language_locked = language_locked
         self.tts_voice = tts_voice
         self._system_prompt = system_prompt
         self._on_partial_hook = on_partial_hook
         self._on_final_hook = on_final_hook
+        self._context_provider = context_provider
 
         self.history: list[ChatMessage] = []
         self.active_turn_id: int = 0
@@ -455,15 +459,23 @@ class VoiceSessionOrchestrator:
             )
             return
 
-        if event.language_code and event.language_code not in ("auto", "indic-auto"):
-            self.active_language = event.language_code
-        if event.text:
-            detected = detect_language_from_text(
-                event.text,
-                fallback=event.language_code or self.active_language,
-            )
-            if detected:
-                self.active_language = detected
+        if self.language_locked:
+            # Keep the worker's explicitly selected response language across English/ASCII code-mix.
+            # Only switch if the utterance contains a distinct Indic Unicode script.
+            if event.text and any(0x0900 <= ord(ch) <= 0x0D7F for ch in event.text):
+                detected = detect_language_from_text(event.text, fallback=self.active_language)
+                if detected and detected != "en-IN":
+                    self.active_language = detected
+        else:
+            if event.language_code and event.language_code not in ("auto", "indic-auto"):
+                self.active_language = event.language_code
+            if event.text:
+                detected = detect_language_from_text(
+                    event.text,
+                    fallback=event.language_code or self.active_language,
+                )
+                if detected:
+                    self.active_language = detected
 
         if event.event_type == "partial":
             self.telemetry.mark_speech_start()
@@ -477,7 +489,11 @@ class VoiceSessionOrchestrator:
                 text=event.text,
                 stable_text=event.metadata.get("stable_text", ""),
                 volatile_text=event.metadata.get("volatile_text", ""),
-                language=event.language_code or self.active_language,
+                language=(
+                    self.active_language
+                    if self.language_locked
+                    else (event.language_code or self.active_language)
+                ),
                 utterance_id=event.utterance_id,
                 seq=event.seq,
                 is_final=False,
@@ -522,7 +538,11 @@ class VoiceSessionOrchestrator:
             await self.emit_event(
                 "final_transcript",
                 text=event.text,
-                language=event.language_code or self.active_language,
+                language=(
+                    self.active_language
+                    if self.language_locked
+                    else (event.language_code or self.active_language)
+                ),
                 utterance_id=event.utterance_id,
                 segment_id=event.segment_id,
                 latency_ms=event.latency_ms,
@@ -576,9 +596,14 @@ class VoiceSessionOrchestrator:
     async def _run_llm_and_tts_turn(self, *, turn_id: int, language: str) -> None:
         try:
             await self._set_state("processing")
+            prompt = self._system_prompt
+            if callable(self._context_provider):
+                extra_ctx = (self._context_provider() or "").strip()
+                if extra_ctx:
+                    prompt = f"{self._system_prompt}\n\n{extra_ctx}"
             reply_text = await self._llm.generate_reply(
                 list(self.history),
-                system_prompt=self._system_prompt,
+                system_prompt=prompt,
                 active_language=language,
             )
             if turn_id != self.active_turn_id or self._closed:

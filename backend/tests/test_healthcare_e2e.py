@@ -191,51 +191,61 @@ async def test_full_anc_visit_readback_correction_confirmation_and_schema_parity
 
 
 @pytest.mark.asyncio
-async def test_partial_transcript_danger_sign_interrupts_immediately_and_persists() -> None:
-    """Layer 1 danger sign on a PARTIAL transcript interrupts immediately and never gets lost."""
-    emitted: list[dict[str, Any]] = []
+async def test_partial_transcript_danger_sign_interrupts_immediately_and_persists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Layer 1 danger sign on a PARTIAL transcript interrupts immediately when enabled."""
+    from app.core.config import get_settings
 
-    async def emit(ev: dict[str, Any]) -> None:
-        emitted.append(ev)
+    monkeypatch.setenv("DANGER_SIGN_PARTIAL_MATCHING", "true")
+    get_settings.cache_clear()
+    try:
+        emitted: list[dict[str, Any]] = []
 
-    stt = _DummySTT()
-    tts = _DummyTTS()
-    pipeline = HealthcareSessionPipeline(
-        session_id="sess_e2e_danger",
-        worker_id="ASHA-DEMO-01",
-        language="hi-IN",
-        beneficiary_id="BEN-1044",
-        reference_date=date(2026, 11, 21),
-    )
-    orch = VoiceSessionOrchestrator(
-        session_id="sess_e2e_danger",
-        stt=stt,
-        tts=tts,
-        llm=_DummyLLM(),
-        vad=None,
-        emit=emit,
-        default_language="hi-IN",
-        on_partial_hook=pipeline.on_partial_transcript,
-        on_final_hook=pipeline.on_final_transcript,
-    )
-    pipeline.attach_orchestrator(orch)
-    await orch.start()
+        async def emit(ev: dict[str, Any]) -> None:
+            emitted.append(ev)
 
-    # Partial transcript arrives with Newborn chest indrawing
-    await stt.q.put(
-        TranscriptEvent(
-            event_type="partial",
-            text="Baby ka chest indrawing ho raha hai",
-            is_final=False,
-            language_code="hi-IN",
-            utterance_id="u_danger",
-            seq=1,
+        stt = _DummySTT()
+        tts = _DummyTTS()
+        pipeline = HealthcareSessionPipeline(
+            session_id="sess_e2e_danger",
+            worker_id="ASHA-DEMO-01",
+            language="hi-IN",
+            beneficiary_id="BEN-1044",
+            reference_date=date(2026, 11, 21),
         )
-    )
-    await asyncio.sleep(0.08)
+        orch = VoiceSessionOrchestrator(
+            session_id="sess_e2e_danger",
+            stt=stt,
+            tts=tts,
+            llm=_DummyLLM(),
+            vad=None,
+            emit=emit,
+            default_language="hi-IN",
+            on_partial_hook=pipeline.on_partial_transcript,
+            on_final_hook=pipeline.on_final_transcript,
+        )
+        pipeline.attach_orchestrator(orch)
+        await orch.start()
 
-    danger_events = [e for e in emitted if e["type"] == "danger_alert"]
-    assert len(danger_events) >= 1
+        # Partial transcript arrives with Newborn chest indrawing
+        await stt.q.put(
+            TranscriptEvent(
+                event_type="partial",
+                text="Baby ka chest indrawing ho raha hai",
+                is_final=False,
+                language_code="hi-IN",
+                utterance_id="u_danger",
+                seq=1,
+            )
+        )
+        await asyncio.sleep(0.08)
+
+        danger_events = [e for e in emitted if e["type"] == "danger_alert"]
+        assert len(danger_events) >= 1
+    finally:
+        monkeypatch.delenv("DANGER_SIGN_PARTIAL_MATCHING", raising=False)
+        get_settings.cache_clear()
     alert = danger_events[0]["alert"]
     assert validate_schema(alert, ALERT_SCHEMA) == []
     assert alert["danger_sign_flagged"] is True

@@ -46,65 +46,18 @@ interface VoiceRecorderProps {
   onSendTextUtterance?: (text: string) => void;
 }
 
-const STATE_BADGE: Record<
-  VoiceInteractionState,
-  { label: string; badgeClass: string; helper: string }
-> = {
-  idle: {
-    label: 'Idle — Ready to Record',
-    badgeClass: 'bg-slate-100 text-slate-700 border-slate-300',
-    helper: 'Tap Start Recording and speak naturally about today’s visit.',
-  },
-  connecting: {
-    label: 'Connecting to Voice Backend...',
-    badgeClass: 'bg-sky-50 text-sky-800 border-sky-300',
-    helper: 'Opening secure 16kHz PCM audio stream to Agent 1 backend...',
-  },
-  listening: {
-    label: 'Listening (Gnani Prisma Live)',
-    badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-300',
-    helper: 'Microphone active. Speak naturally in your chosen language.',
-  },
-  transcribing: {
-    label: 'Transcribing Speech...',
-    badgeClass: 'bg-teal-50 text-teal-800 border-teal-300',
-    helper: 'Receiving live streaming transcription from Gnani Prisma v3.0.',
-  },
-  processing: {
-    label: 'Processing Visit Extraction...',
-    badgeClass: 'bg-amber-50 text-amber-800 border-amber-300',
-    helper: 'Extracting visit fields and screening NHM danger signs...',
-  },
-  responding: {
-    label: 'Preparing Spoken Response...',
-    badgeClass: 'bg-sky-50 text-sky-800 border-sky-300',
-    helper: 'Generating contextual response and structured summary...',
-  },
-  speaking: {
-    label: 'Assistant Speaking (Timbre TTS)',
-    badgeClass: 'bg-indigo-50 text-indigo-800 border-indigo-300',
-    helper: 'You can speak anytime or tap Interrupt to barge in.',
-  },
-  interrupted: {
-    label: 'Interrupted (Barge-In)',
-    badgeClass: 'bg-amber-100 text-amber-900 border-amber-400',
-    helper: 'Playback stopped immediately. Capturing your interrupting utterance...',
-  },
-  reconnecting: {
-    label: 'Reconnecting...',
-    badgeClass: 'bg-amber-50 text-amber-800 border-amber-300',
-    helper: 'Network interrupted. Attempting to restore session...',
-  },
-  error: {
-    label: 'Session Error',
-    badgeClass: 'bg-red-50 text-red-800 border-red-300',
-    helper: 'Check error details above and retry or continue via local draft.',
-  },
-  completed: {
-    label: 'Session Completed',
-    badgeClass: 'bg-emerald-100 text-emerald-900 border-emerald-300',
-    helper: 'Visit session finished.',
-  },
+const STATE_BADGE_CLASS: Record<VoiceInteractionState, string> = {
+  idle: 'bg-slate-100 text-slate-700 border-slate-300',
+  connecting: 'bg-sky-50 text-sky-800 border-sky-300',
+  listening: 'bg-emerald-50 text-emerald-800 border-emerald-300',
+  transcribing: 'bg-teal-50 text-teal-800 border-teal-300',
+  processing: 'bg-amber-50 text-amber-800 border-amber-300',
+  responding: 'bg-sky-50 text-sky-800 border-sky-300',
+  speaking: 'bg-indigo-50 text-indigo-800 border-indigo-300',
+  interrupted: 'bg-amber-100 text-amber-900 border-amber-400',
+  reconnecting: 'bg-amber-50 text-amber-800 border-amber-300',
+  error: 'bg-red-50 text-red-800 border-red-300',
+  completed: 'bg-emerald-100 text-emerald-900 border-emerald-300',
 };
 
 export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
@@ -147,13 +100,28 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     completed: ui.stateCompleted,
   };
 
+  const stateHelpers: Record<VoiceInteractionState, string> = {
+    idle: ui.helperIdle,
+    connecting: ui.helperConnecting,
+    listening: ui.helperListening,
+    transcribing: ui.helperTranscribing,
+    processing: ui.helperProcessing,
+    responding: ui.helperResponding,
+    speaking: ui.helperSpeaking,
+    interrupted: ui.helperInterrupted,
+    reconnecting: ui.helperReconnecting,
+    error: ui.helperError,
+    completed: ui.helperCompleted,
+  };
+
   const isSessionActive =
     isConnected ||
     ['connecting', 'listening', 'transcribing', 'processing', 'responding', 'speaking', 'interrupted'].includes(
       interactionState
     );
 
-  const badge = STATE_BADGE[interactionState];
+  const badgeClass = STATE_BADGE_CLASS[interactionState];
+  const helperText = stateHelpers[interactionState];
   const mins = String(Math.floor(durationSeconds / 60)).padStart(2, '0');
   const secs = String(durationSeconds % 60).padStart(2, '0');
 
@@ -208,8 +176,8 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
         >
           <Mic className="h-4 w-4 text-indigo-700 shrink-0" aria-hidden="true" />
           <span>
-            Voice Correction Active{targetCorrectionField ? ` for ${targetCorrectionField}` : ''}:
-            Speak the updated value clearly (e.g., &ldquo;No, weight is 2.8 kilo&rdquo;).
+            {ui.voiceCorrectionActive}
+            {targetCorrectionField ? ` (${targetCorrectionField})` : ''}: {ui.voiceCorrectionHint}
           </span>
         </div>
       )}
@@ -218,7 +186,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
       <div className="py-5 flex flex-col items-center text-center">
         {/* Status Pill */}
         <span
-          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border mb-4 ${badge.badgeClass}`}
+          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border mb-4 ${badgeClass}`}
         >
           {interactionState === 'connecting' || interactionState === 'processing' ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
@@ -316,7 +284,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
                     ) : (
                       <MicOff className="h-7 w-7 mb-1" aria-hidden="true" />
                     )}
-                    <span>{pttPressed ? 'Speaking' : 'Hold to Talk'}</span>
+                    <span>{pttPressed ? (ui.speakingShortLabel || 'Speaking') : (ui.holdToSpeak || 'Hold to Talk')}</span>
                   </button>
                 </div>
               )}
@@ -329,7 +297,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
                   className="px-4 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-sm shadow-md flex items-center gap-2 active:scale-95 transition-all"
                 >
                   <FastForward className="h-4 w-4" aria-hidden="true" />
-                  <span>Interrupt / Speak Now</span>
+                  <span>{ui.bargeInInterrupt}</span>
                 </button>
               )}
 
@@ -340,7 +308,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
                 className="px-4 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 font-bold text-sm flex items-center gap-2 active:scale-95 transition-all"
               >
                 <Square className="h-4 w-4 fill-current" aria-hidden="true" />
-                <span>Stop Recording</span>
+                <span>{ui.stopRecording}</span>
               </button>
             </div>
 
@@ -405,13 +373,13 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
           </div>
         )}
 
-        <p className="text-xs text-clinical-text-secondary mt-3 max-w-md">{badge.helper}</p>
+        <p className="text-xs text-clinical-text-secondary mt-3 max-w-md">{helperText}</p>
       </div>
 
       {/* Mode & Mic Hardware Controls */}
       <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-slate-600">Mic Mode:</span>
+          <span className="font-semibold text-slate-600">{ui.micModeLabel}:</span>
           <div className="inline-flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
             <button
               type="button"
@@ -420,7 +388,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
                 handsFree ? 'bg-white text-clinical-primary shadow-sm' : 'text-slate-600'
               }`}
             >
-              Hands-Free
+              {ui.handsFreeLabel}
             </button>
             <button
               type="button"
@@ -429,7 +397,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
                 !handsFree ? 'bg-white text-clinical-primary shadow-sm' : 'text-slate-600'
               }`}
             >
-              Push-to-Talk
+              {ui.pushToTalkLabel}
             </button>
           </div>
         </div>
@@ -447,7 +415,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
                 disabled={isSessionActive}
                 className="px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-700 max-w-[180px]"
               >
-                <option value="default">Default Microphone</option>
+                <option value="default">{ui.defaultMicrophone}</option>
                 {inputDevices.map((d) => (
                   <option key={d.deviceId} value={d.deviceId}>
                     {d.label}
@@ -464,7 +432,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
               className="compact-chip inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 font-semibold"
             >
               <Keyboard className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>Type to Backend</span>
+              <span>{ui.typeToBackend}</span>
             </button>
           )}
         </div>
@@ -474,7 +442,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
       {showTextFallback && onSendTextUtterance && (
         <form onSubmit={handleTextSubmit} className="mt-3 pt-3 border-t border-slate-100 flex gap-2">
           <label htmlFor="ws-text-utterance" className="sr-only">
-            Send text utterance to voice backend
+            {ui.typeToBackend}
           </label>
           <input
             id="ws-text-utterance"
@@ -483,9 +451,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
             onChange={(e) => setTypedUtterance(e.target.value)}
             disabled={!isConnected}
             placeholder={
-              isConnected
-                ? 'Type utterance to send through Agent 1 pipeline...'
-                : 'Start session first to send text utterance through live backend'
+              isConnected ? ui.typeUtterancePlaceholder : ui.startSessionToTypePlaceholder
             }
             className="flex-1 px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white disabled:bg-slate-100"
           />
@@ -495,7 +461,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
             className="px-3.5 py-2 rounded-xl bg-clinical-primary text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-40"
           >
             <Send className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>Send</span>
+            <span>{ui.sendText}</span>
           </button>
         </form>
       )}
@@ -509,6 +475,7 @@ export const LiveTranscript: React.FC<{
   partialVolatile: string;
   language: string;
 }> = ({ history, partialStable, partialVolatile, language }) => {
+  const { ui } = useTranslation(language);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -522,11 +489,11 @@ export const LiveTranscript: React.FC<{
 
   return (
     <section
-      aria-label="Live Transcription History"
+      aria-label={ui.liveTranscriptHeading}
       className="bg-white border border-clinical-border-subtle rounded-2xl p-4 shadow-sm"
     >
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-bold text-clinical-text">Live Conversation &amp; Transcript</h3>
+        <h3 className="text-sm font-bold text-clinical-text">{ui.liveTranscriptHeading}</h3>
         <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-semibold">
           {language}
         </span>
@@ -539,7 +506,7 @@ export const LiveTranscript: React.FC<{
       >
         {history.length === 0 && !partialStable && !partialVolatile && (
           <p className="text-xs text-slate-500 italic py-4 text-center">
-            Start recording to see real-time ASHA speech and assistant responses here.
+            {ui.liveTranscriptPlaceholder}
           </p>
         )}
 
@@ -559,7 +526,11 @@ export const LiveTranscript: React.FC<{
             >
               <div className="flex items-center justify-between gap-2 text-[11px] font-bold mb-1">
                 <span className={isDanger ? 'text-red-800' : isAsha ? 'text-slate-600' : 'text-clinical-primary-dark'}>
-                  {isDanger ? 'Urgent Referral Speech' : isAsha ? 'ASHA Worker' : 'Sakshya Assistant'}
+                  {isDanger
+                    ? ui.urgentReferralSpeechLabel
+                    : isAsha
+                    ? ui.ashaWorkerLabel
+                    : ui.sakshyaAssistantLabel}
                 </span>
                 {line.latency_ms !== undefined && line.latency_ms !== null && (
                   <span className="text-slate-400 font-mono">{Math.round(line.latency_ms)}ms</span>
@@ -574,7 +545,7 @@ export const LiveTranscript: React.FC<{
         {(partialStable || partialVolatile) && (
           <div className="p-3 rounded-xl border border-dashed border-clinical-secondary bg-sky-50/50 text-sm">
             <span className="block text-[10px] font-bold uppercase tracking-wider text-clinical-secondary mb-1">
-              Listening Live...
+              {ui.listeningLiveLabel}
             </span>
             <p className="text-clinical-text">
               <span>{partialStable}</span>
@@ -594,8 +565,9 @@ export const LiveTranscript: React.FC<{
 
 export const ProcessingIndicator: React.FC<{ active: boolean; message?: string }> = ({
   active,
-  message = 'AI is extracting structured fields and checking official danger signs...',
+  message,
 }) => {
+  const { ui } = useTranslation();
   if (!active) return null;
   return (
     <div
@@ -605,8 +577,8 @@ export const ProcessingIndicator: React.FC<{ active: boolean; message?: string }
     >
       <RefreshCw className="h-5 w-5 text-clinical-primary animate-spin shrink-0" aria-hidden="true" />
       <div>
-        <p className="text-sm font-bold">Processing Visit Notes</p>
-        <p className="text-xs text-teal-800">{message}</p>
+        <p className="text-sm font-bold">{ui.processingVisitNotesTitle}</p>
+        <p className="text-xs text-teal-800">{message || ui.processingVisitNotesDesc}</p>
       </div>
     </div>
   );

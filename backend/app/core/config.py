@@ -176,7 +176,7 @@ class Settings(BaseSettings):
     # Safety & Synthetic Guardrails
     synthetic_data_only: bool = Field(default=True, alias="SYNTHETIC_DATA_ONLY")
     danger_sign_partial_matching: bool = Field(
-        default=True, alias="DANGER_SIGN_PARTIAL_MATCHING"
+        default=False, alias="DANGER_SIGN_PARTIAL_MATCHING"
     )
 
     # Optional Persistence (Agent 3 owns Supabase schema; we only read optional URL if syncing)

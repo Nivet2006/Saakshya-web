@@ -1,7 +1,7 @@
 // Off-main-thread AudioWorkletProcessor for Sakshya ASHA Voice Field Register.
-// Performs DC-offset / 85 Hz 1st-order high-pass filtering, linear resampling to
-// 16,000 Hz mono, exact 512-sample (32 ms) Int16 PCM framing, and per-frame RMS /
-// clipping diagnostics without blocking the React main thread.
+// Performs DC-offset / 85 Hz 1st-order high-pass filtering, phase-continuous
+// linear resampling to 16,000 Hz mono, exact 512-sample (32 ms) Int16 PCM
+// framing, and per-frame RMS / clipping diagnostics off the React main thread.
 
 class SakshyaCaptureProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -18,7 +18,14 @@ class SakshyaCaptureProcessor extends AudioWorkletProcessor {
     this.hpPrevX = 0.0;
     this.hpPrevY = 0.0;
 
+    // Phase-continuous linear resampler state across 128-sample Web Audio quanta
+    this.step = this.inputRate / this.targetSampleRate;
+    this.srcPos = 0.0;
+    this.prevSample = 0.0;
+    this.hasPrev = false;
+
     this.pending = [];
+    this.pendingClipped = 0;
     this.active = true;
 
     this.port.onmessage = (ev) => {
@@ -26,6 +33,9 @@ class SakshyaCaptureProcessor extends AudioWorkletProcessor {
         this.active = Boolean(ev.data.active);
         if (!this.active) {
           this.pending = [];
+          this.pendingClipped = 0;
+          this.srcPos = 0.0;
+          this.hasPrev = false;
         }
       }
     };
@@ -64,45 +74,55 @@ class SakshyaCaptureProcessor extends AudioWorkletProcessor {
     }
     this.hpPrevX = px;
     this.hpPrevY = py;
+    this.pendingClipped += clipped;
 
-    // Resample to 16,000 Hz
+    // Resample to 16,000 Hz without dropping samples across quanta
     if (this.inputRate === this.targetSampleRate) {
       for (let i = 0; i < len; i++) {
         const clamped = Math.max(-1, Math.min(1, filtered[i]));
         this.pending.push(clamped < 0 ? Math.round(clamped * 0x8000) : Math.round(clamped * 0x7fff));
       }
     } else {
-      const ratio = this.inputRate / this.targetSampleRate;
-      const outLen = Math.floor(len / ratio);
-      for (let i = 0; i < outLen; i++) {
-        const srcIdx = i * ratio;
-        const low = Math.floor(srcIdx);
-        const high = Math.min(low + 1, len - 1);
-        const frac = srcIdx - low;
-        const val = filtered[low] * (1 - frac) + filtered[high] * frac;
+      if (!this.hasPrev) {
+        this.prevSample = filtered[0];
+        this.hasPrev = true;
+      }
+      // Virtual buffer: index -1 maps to this.prevSample, 0..len-1 map to filtered[0..len-1]
+      let pos = this.srcPos;
+      while (pos < len - 1) {
+        const idx0 = Math.floor(pos);
+        const frac = pos - idx0;
+        const s0 = idx0 < 0 ? this.prevSample : filtered[idx0];
+        const s1 = filtered[idx0 + 1];
+        const val = s0 + (s1 - s0) * frac;
         const clamped = Math.max(-1, Math.min(1, val));
         this.pending.push(clamped < 0 ? Math.round(clamped * 0x8000) : Math.round(clamped * 0x7fff));
+        pos += this.step;
       }
+      this.srcPos = pos - len;
+      this.prevSample = filtered[len - 1];
     }
 
     const rms = Math.sqrt(sumSq / len);
 
     while (this.pending.length >= this.frameSamples) {
       const frame = new Int16Array(this.pending.splice(0, this.frameSamples));
+      const frameClipped = this.pendingClipped;
+      this.pendingClipped = 0;
+      const buf = frame.buffer;
       this.port.postMessage(
         {
           type: 'pcm_frame',
-          buffer: frame.buffer,
-          pcmBuffer: frame.buffer,
+          buffer: buf,
+          pcmBuffer: buf,
           rms,
           peak,
-          clipped,
-          clippedSamples: clipped,
+          clipped: frameClipped,
+          clippedSamples: frameClipped,
           inputRate: this.inputRate,
         },
-        [frame.buffer]
+        [buf]
       );
-      clipped = 0;
     }
 
     return true;
@@ -110,4 +130,3 @@ class SakshyaCaptureProcessor extends AudioWorkletProcessor {
 }
 
 registerProcessor('sakshya-capture-processor', SakshyaCaptureProcessor);
-

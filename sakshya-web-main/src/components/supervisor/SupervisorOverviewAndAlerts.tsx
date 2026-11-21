@@ -92,41 +92,41 @@ export const SupervisorOverviewView: React.FC<SupervisorOverviewViewProps> = ({
           icon={<CheckCircle2 className="h-4 w-4 text-clinical-success" />}
         />
         <KpiCard
-          label="Visits Completed Today"
+          label={ui.totalVisits}
           value={stats.visitsCompletedToday}
-          sub={`${stats.totalCommittedVisits} total committed`}
+          sub={`${stats.totalCommittedVisits} ${ui.totalLogged}`}
           icon={<ClipboardList className="h-4 w-4 text-clinical-secondary" />}
         />
         <KpiCard
-          label="Pending Unconfirmed Drafts"
+          label={ui.navOfflineDrafts}
           value={stats.pendingDraftVisits}
-          sub="Awaiting worker review"
+          sub={ui.unsubmittedDraft}
           icon={<CalendarClock className="h-4 w-4 text-slate-500" />}
         />
         <KpiCard
-          label="Overdue Follow-Ups"
+          label={ui.overdueTab}
           value={stats.overdueFollowUps}
-          sub={`${stats.followUpCompletionPct}% completion rate`}
+          sub={`${stats.followUpCompletionPct}%`}
           icon={<CalendarClock className="h-4 w-4 text-clinical-warning" />}
           highlight={stats.overdueFollowUps > 0 ? 'warning' : undefined}
         />
         <KpiCard
-          label="Upcoming Immunisations"
+          label={ui.pendingVaccinesTab}
           value={stats.upcomingImmunisations}
-          sub={`${stats.immunisationCoveragePct}% doses given`}
+          sub={`${stats.immunisationCoveragePct}%`}
           icon={<Syringe className="h-4 w-4 text-clinical-secondary" />}
         />
         <KpiCard
-          label="Active Danger Alerts"
+          label={ui.activeDangerSigns}
           value={stats.activeDangerAlerts}
-          sub="Needs immediate review"
+          sub={ui.urgentDangerSign}
           icon={<AlertTriangle className="h-4 w-4 text-clinical-danger" />}
           highlight={stats.activeDangerAlerts > 0 ? 'danger' : undefined}
         />
         <KpiCard
-          label="Active Referrals"
+          label={ui.urgentPhcReferral}
           value={stats.referredOrAcknowledgedAlerts}
-          sub="Acknowledged / En route"
+          sub={ui.acknowledgedBy}
           icon={<ShieldCheck className="h-4 w-4 text-clinical-primary" />}
         />
       </section>
@@ -136,14 +136,14 @@ export const SupervisorOverviewView: React.FC<SupervisorOverviewViewProps> = ({
         <div className="flex items-center justify-between">
           <h2 className="text-base font-bold text-clinical-text flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-clinical-danger" aria-hidden="true" />
-            <span>Unacknowledged Critical Danger Alerts</span>
+            <span>{ui.unacknowledgedAlertsTitle}</span>
           </h2>
           <button
             type="button"
             onClick={() => onNavigateSection('alerts')}
             className="text-xs font-bold text-clinical-primary hover:underline flex items-center gap-1"
           >
-            <span>Open Alert Command</span>
+            <span>{ui.openAlertCommand}</span>
             <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         </div>
@@ -162,7 +162,7 @@ export const SupervisorOverviewView: React.FC<SupervisorOverviewViewProps> = ({
         ) : (
           <div className="p-5 bg-white border border-clinical-border-subtle rounded-xl text-xs text-slate-600 flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-clinical-success" aria-hidden="true" />
-            <span>All current danger alerts have been acknowledged or resolved.</span>
+            <span>{ui.noActiveAlerts}</span>
           </div>
         )}
       </section>
@@ -170,13 +170,13 @@ export const SupervisorOverviewView: React.FC<SupervisorOverviewViewProps> = ({
       {/* Recent Register Preview */}
       <section className="bg-white border border-clinical-border-subtle rounded-2xl p-4 sm:p-5 shadow-sm">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-          <h2 className="text-sm font-bold text-clinical-text">Recent Live Visit Activity</h2>
+          <h2 className="text-sm font-bold text-clinical-text">{ui.recentLiveVisitActivity}</h2>
           <button
             type="button"
             onClick={() => onNavigateSection('register')}
             className="text-xs font-bold text-clinical-primary hover:underline flex items-center gap-1"
           >
-            <span>Full Register</span>
+            <span>{ui.fullRegister}</span>
             <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         </div>

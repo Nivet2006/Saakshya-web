@@ -15,6 +15,7 @@ import {
   ProcessingIndicator,
   VoiceRecorder,
 } from '@/components/voice/VoiceRecorderAndTranscript';
+import { useTranslation } from '@/lib/i18n/LanguageContext';
 import type { useVoiceVisitSession } from '@/hooks/useVoiceVisitSession';
 import type { Beneficiary, LanguageCode } from '@/types';
 import {
@@ -33,6 +34,17 @@ interface AdvancedVisitViewProps {
   recentBeneficiaryIds: string[];
   selectedBeneficiary: Beneficiary | null;
   onSelectBeneficiary: (ben: Beneficiary | null) => void;
+  onAddBeneficiary?: (input: {
+    full_name: string;
+    category: Beneficiary['category'];
+    age_years: number;
+    village: string;
+    household_head?: string;
+    phone_number?: string;
+    edd_date?: string;
+    high_risk_status: boolean;
+    preferred_language: LanguageCode;
+  }) => Promise<Beneficiary>;
   language: LanguageCode;
   onChangeLanguage: (lang: LanguageCode) => void;
   voice: ReturnType<typeof useVoiceVisitSession>;
@@ -45,12 +57,14 @@ export const AdvancedVisitView: React.FC<AdvancedVisitViewProps> = ({
   recentBeneficiaryIds,
   selectedBeneficiary,
   onSelectBeneficiary,
+  onAddBeneficiary,
   language,
   onChangeLanguage,
   voice,
   onSwitchToBasic,
   onGoHome,
 }) => {
+  const { ui } = useTranslation(language);
   if (voice.committedResult) {
     return (
       <VisitSuccess
@@ -87,6 +101,8 @@ export const AdvancedVisitView: React.FC<AdvancedVisitViewProps> = ({
             selectedBeneficiary={selectedBeneficiary}
             recentBeneficiaryIds={recentBeneficiaryIds}
             onSelect={onSelectBeneficiary}
+            onAddBeneficiary={onAddBeneficiary}
+            currentLanguage={language}
             ambiguousCandidates={
               voice.clarification?.reason === 'ambiguous_beneficiary'
                 ? voice.clarification.candidates
@@ -98,7 +114,6 @@ export const AdvancedVisitView: React.FC<AdvancedVisitViewProps> = ({
           <LanguageSelector
             selectedLanguage={language}
             onChange={onChangeLanguage}
-            disabled={voice.isConnected}
           />
         </div>
 
@@ -142,7 +157,7 @@ export const AdvancedVisitView: React.FC<AdvancedVisitViewProps> = ({
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <h2 className="text-lg font-bold text-clinical-text">
-              Detailed Healthcare Record &amp; Field Confirmation
+              {ui.reviewCardTitle}
             </h2>
             <button
               type="button"
@@ -150,7 +165,7 @@ export const AdvancedVisitView: React.FC<AdvancedVisitViewProps> = ({
               className="inline-flex items-center gap-1.5 text-xs font-bold text-clinical-primary hover:underline"
             >
               <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>Return to Basic Mode</span>
+              <span>{ui.basicModeTitle}</span>
             </button>
           </div>
 
@@ -160,31 +175,31 @@ export const AdvancedVisitView: React.FC<AdvancedVisitViewProps> = ({
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-bold text-clinical-text flex items-center gap-2">
                   <Activity className="h-4 w-4 text-clinical-primary" aria-hidden="true" />
-                  <span>Section 1 · Beneficiary &amp; Visit Info</span>
+                  <span>{ui.beneficiaryLabel} &amp; {ui.visitTypeLabel}</span>
                 </h3>
                 <FieldStatusPill status={statuses.beneficiary_id || 'extracted'} compact />
               </div>
               <dl className="grid grid-cols-2 gap-y-2 text-xs">
-                <dt className="text-slate-500">Beneficiary ID</dt>
+                <dt className="text-slate-500">{ui.beneficiaryLabel}</dt>
                 <dd className="font-mono font-bold text-clinical-text">
-                  {draft.beneficiary_id || 'Unresolved'}
+                  {draft.beneficiary_id || ui.unlinkedLabel}
                 </dd>
-                <dt className="text-slate-500">Beneficiary Name</dt>
+                <dt className="text-slate-500">{ui.colBeneficiary}</dt>
                 <dd className="font-bold text-clinical-text">
-                  {draft.beneficiary_name || 'Not identified'}
+                  {draft.beneficiary_name || ui.notIdentified}
                 </dd>
-                <dt className="text-slate-500">Visit Date</dt>
+                <dt className="text-slate-500">{ui.colDate}</dt>
                 <dd className="tabular-nums text-clinical-text">
                   {new Date(draft.visit_date).toLocaleDateString()}
                 </dd>
-                <dt className="text-slate-500">Visit Type</dt>
+                <dt className="text-slate-500">{ui.visitTypeLabel}</dt>
                 <dd className="font-bold text-clinical-text">
-                  {draft.visit_type || 'Needs Clarification'}
+                  {draft.visit_type || ui.needsClarification}
                 </dd>
               </dl>
               <FieldConfirmation
                 fieldKey="visit_type"
-                label="Visit Type"
+                label={ui.visitTypeLabel}
                 currentStatus={statuses.visit_type || 'extracted'}
                 onUpdateStatus={voice.patchFieldStatus}
                 onVoiceCorrect={(k) => voice.startVoiceCorrection(k)}
@@ -197,22 +212,22 @@ export const AdvancedVisitView: React.FC<AdvancedVisitViewProps> = ({
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-bold text-clinical-text flex items-center gap-2">
                     <ShieldCheck className="h-4 w-4 text-clinical-primary" aria-hidden="true" />
-                    <span>Section 2 · Maternal / ANC-PNC Info</span>
+                    <span>{ui.ancFilter} / {ui.pncFilter}</span>
                   </h3>
                   <FieldStatusPill status={statuses.weight_kg || 'extracted'} compact />
                 </div>
                 <dl className="grid grid-cols-2 gap-y-2 text-xs">
-                  <dt className="text-slate-500">Classification</dt>
-                  <dd className="font-bold text-clinical-text">{draft.visit_type || 'Pending'}</dd>
-                  <dt className="text-slate-500">Measured Weight</dt>
+                  <dt className="text-slate-500">{ui.visitTypeLabel}</dt>
+                  <dd className="font-bold text-clinical-text">{draft.visit_type || ui.pendingSync}</dd>
+                  <dt className="text-slate-500">{ui.weightLabel}</dt>
                   <dd className="font-bold tabular-nums text-clinical-text">
-                    {draft.weight_kg !== null ? `${draft.weight_kg} kg` : 'Not recorded'}
+                    {draft.weight_kg !== null ? `${draft.weight_kg} kg` : ui.notIdentified}
                   </dd>
-                  <dt className="text-slate-500">Spoken Phrase</dt>
+                  <dt className="text-slate-500">{ui.fromSpeechLabel}</dt>
                   <dd className="text-slate-600">{draft.weight_source_text || '—'}</dd>
                   {selectedBeneficiary?.edd_date && (
                     <>
-                      <dt className="text-slate-500">Directory EDD</dt>
+                      <dt className="text-slate-500">{ui.eddLabel}</dt>
                       <dd className="tabular-nums font-semibold text-clinical-text">
                         {selectedBeneficiary.edd_date}
                       </dd>
@@ -221,7 +236,7 @@ export const AdvancedVisitView: React.FC<AdvancedVisitViewProps> = ({
                 </dl>
                 <FieldConfirmation
                   fieldKey="weight_kg"
-                  label="Weight"
+                  label={ui.weightLabel}
                   currentStatus={statuses.weight_kg || 'extracted'}
                   onUpdateStatus={voice.patchFieldStatus}
                   onVoiceCorrect={(k) => voice.startVoiceCorrection(k)}
@@ -234,29 +249,29 @@ export const AdvancedVisitView: React.FC<AdvancedVisitViewProps> = ({
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-bold text-clinical-text flex items-center gap-2">
                     <Baby className="h-4 w-4 text-clinical-secondary" aria-hidden="true" />
-                    <span>Section 3 · Newborn / HBNC Details</span>
+                    <span>{ui.infantFilter}</span>
                   </h3>
                   <FieldStatusPill status={statuses.weight_kg || 'extracted'} compact />
                 </div>
                 <dl className="grid grid-cols-2 gap-y-2 text-xs">
-                  <dt className="text-slate-500">Newborn Weight</dt>
+                  <dt className="text-slate-500">{ui.weightLabel}</dt>
                   <dd className="font-bold tabular-nums text-clinical-text">
-                    {draft.weight_kg !== null ? `${draft.weight_kg} kg` : 'Not recorded'}
+                    {draft.weight_kg !== null ? `${draft.weight_kg} kg` : ui.notIdentified}
                   </dd>
-                  <dt className="text-slate-500">Source Speech</dt>
+                  <dt className="text-slate-500">{ui.fromSpeechLabel}</dt>
                   <dd className="text-slate-600">{draft.weight_source_text || '—'}</dd>
-                  <dt className="text-slate-500">Danger Flagged</dt>
+                  <dt className="text-slate-500">{ui.dangerSignsLabel}</dt>
                   <dd
                     className={`font-bold ${
                       draft.danger_sign_flagged ? 'text-clinical-danger' : 'text-emerald-700'
                     }`}
                   >
-                    {draft.danger_sign_flagged ? 'Yes — Urgent PHC Referral' : 'None flagged'}
+                    {draft.danger_sign_flagged ? ui.flaggedStatus : ui.clearStatus}
                   </dd>
                 </dl>
                 <FieldConfirmation
                   fieldKey="weight_kg"
-                  label="Newborn Weight"
+                  label={ui.weightLabel}
                   currentStatus={statuses.weight_kg || 'extracted'}
                   onUpdateStatus={voice.patchFieldStatus}
                   onVoiceCorrect={(k) => voice.startVoiceCorrection(k)}
@@ -269,13 +284,13 @@ export const AdvancedVisitView: React.FC<AdvancedVisitViewProps> = ({
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-bold text-clinical-text flex items-center gap-2">
                   <Syringe className="h-4 w-4 text-clinical-primary" aria-hidden="true" />
-                  <span>Section 4 · Immunisation Ledger</span>
+                  <span>{ui.vaccinesDue}</span>
                 </h3>
                 <FieldStatusPill status={statuses.vaccinations_due || 'extracted'} compact />
               </div>
               <div className="space-y-2 text-xs">
                 <div>
-                  <span className="font-semibold text-slate-500 block">Vaccinations Completed:</span>
+                  <span className="font-semibold text-slate-500 block">{ui.vaccinationsCompleted}:</span>
                   {draft.vaccinations_completed.length > 0 ? (
                     <div className="mt-1 flex flex-wrap gap-1.5">
                       {draft.vaccinations_completed.map((v) => (
@@ -288,11 +303,11 @@ export const AdvancedVisitView: React.FC<AdvancedVisitViewProps> = ({
                       ))}
                     </div>
                   ) : (
-                    <span className="text-slate-500 italic">None reported as completed</span>
+                    <span className="text-slate-500 italic">{ui.noPendingVaccines}</span>
                   )}
                 </div>
                 <div>
-                  <span className="font-semibold text-slate-500 block">Vaccinations Due / Pending:</span>
+                  <span className="font-semibold text-slate-500 block">{ui.vaccinationsDue}:</span>
                   {draft.vaccinations_due.length > 0 ? (
                     <div className="mt-1 flex flex-wrap gap-1.5">
                       {draft.vaccinations_due.map((v) => (
@@ -305,13 +320,13 @@ export const AdvancedVisitView: React.FC<AdvancedVisitViewProps> = ({
                       ))}
                     </div>
                   ) : (
-                    <span className="text-slate-500 italic">None identified</span>
+                    <span className="text-slate-500 italic">{ui.noScheduledVaccines}</span>
                   )}
                 </div>
               </div>
               <FieldConfirmation
                 fieldKey="vaccinations_due"
-                label="Vaccinations"
+                label={ui.vaccinationsDue}
                 currentStatus={statuses.vaccinations_due || 'extracted'}
                 onUpdateStatus={voice.patchFieldStatus}
                 onVoiceCorrect={(k) => voice.startVoiceCorrection(k)}
@@ -328,7 +343,7 @@ export const AdvancedVisitView: React.FC<AdvancedVisitViewProps> = ({
                     }`}
                     aria-hidden="true"
                   />
-                  <span>Section 5 · Deterministic Danger Screening</span>
+                  <span>{ui.dangerSignsLabel}</span>
                 </h3>
                 <span
                   className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
@@ -337,12 +352,11 @@ export const AdvancedVisitView: React.FC<AdvancedVisitViewProps> = ({
                       : 'bg-emerald-50 text-emerald-800'
                   }`}
                 >
-                  {draft.danger_sign_flagged ? 'FLAGGED' : 'Clear in speech'}
+                  {draft.danger_sign_flagged ? ui.flaggedStatus : ui.clearStatus}
                 </span>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Evaluated exclusively by Agent 1&rsquo;s NHM/MoHFW deterministic clinical engine.
-                Frontend never overrides or hides safety alerts.
+                {draft.danger_sign_flagged ? ui.urgentPhcReferral : ui.noDangerFlaggedSpeech}
               </p>
               {draft.danger_signs.length > 0 && (
                 <ul className="mt-2 space-y-1 text-xs font-bold text-red-900">
@@ -358,10 +372,10 @@ export const AdvancedVisitView: React.FC<AdvancedVisitViewProps> = ({
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-bold text-clinical-text flex items-center gap-2">
                   <CalendarCheck className="h-4 w-4 text-clinical-primary" aria-hidden="true" />
-                  <span>Section 6 · Follow-Up Actions &amp; Next Visit</span>
+                  <span>{ui.pendingFollowUps}</span>
                 </h3>
                 <span className="text-xs font-bold tabular-nums text-clinical-primary">
-                  Next Visit: {draft.next_visit_date || 'Not scheduled'}
+                  {ui.nextVisitLabel}: {draft.next_visit_date || ui.notIdentified}
                 </span>
               </div>
               {draft.follow_up_actions.length > 0 ? (
@@ -375,13 +389,13 @@ export const AdvancedVisitView: React.FC<AdvancedVisitViewProps> = ({
                         <span className="font-bold text-clinical-text">{act.description}</span>
                         {act.source_phrase && (
                           <span className="block text-[11px] text-slate-500">
-                            Trigger: &ldquo;{act.source_phrase}&rdquo;
+                            {ui.fromSpeechLabel}: &ldquo;{act.source_phrase}&rdquo;
                           </span>
                         )}
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-[11px] text-slate-600">
-                          {act.due_date || 'Immediate'}
+                          {act.due_date || ui.dueLabel}
                         </span>
                         <span
                           className={`uppercase text-[10px] font-bold px-2 py-0.5 rounded ${
@@ -399,11 +413,11 @@ export const AdvancedVisitView: React.FC<AdvancedVisitViewProps> = ({
                   ))}
                 </ul>
               ) : (
-                <p className="text-xs text-slate-500 italic">No structured follow-up actions yet.</p>
+                <p className="text-xs text-slate-500 italic">{ui.noPendingTasks}</p>
               )}
               <FieldConfirmation
                 fieldKey="next_visit_date"
-                label="Next Visit Date"
+                label={ui.nextVisitDateLabel}
                 currentStatus={statuses.next_visit_date || 'extracted'}
                 onUpdateStatus={voice.patchFieldStatus}
                 onVoiceCorrect={(k) => voice.startVoiceCorrection(k)}
@@ -415,7 +429,7 @@ export const AdvancedVisitView: React.FC<AdvancedVisitViewProps> = ({
           <section className="bg-white border border-clinical-border-subtle rounded-xl p-4 shadow-sm space-y-3">
             <h3 className="text-sm font-bold text-clinical-text flex items-center gap-2">
               <FileText className="h-4 w-4 text-clinical-primary" aria-hidden="true" />
-              <span>Section 7 · Read-Back &amp; Voice Correction Audit</span>
+              <span>{ui.spokenDescriptionHeading}</span>
             </h3>
             <SpokenDescription
               transcriptSummary={draft.raw_transcript_summary}
@@ -428,7 +442,7 @@ export const AdvancedVisitView: React.FC<AdvancedVisitViewProps> = ({
             />
             {voice.correctionHistory.length > 0 && (
               <div className="p-3 rounded-lg bg-indigo-50/70 border border-indigo-200 text-xs space-y-1.5">
-                <p className="font-bold text-indigo-950">Applied Voice Corrections (Other Fields Preserved):</p>
+                <p className="font-bold text-indigo-950">{ui.appliedVoiceCorrections}</p>
                 {voice.correctionHistory.map((c, idx) => (
                   <p key={idx} className="text-indigo-900">
                     Updated <strong>{c.corrected_fields.join(', ')}</strong>:{' '}

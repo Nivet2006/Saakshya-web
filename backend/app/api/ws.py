@@ -127,6 +127,7 @@ async def voice_session_ws(
         else None
     )
     if pipeline is not None:
+        pipeline.set_preferred_language(stt_lang, fallback=tts_default_lang)
         if secondary_recognizer is not None:
             pipeline.set_secondary_recognizer(secondary_recognizer)
         pipeline.confirm_important_numbers = settings.mandatory_numeric_confirmation
@@ -139,6 +140,7 @@ async def voice_session_ws(
         vad=vad,
         emit=safe_emit,
         default_language=tts_default_lang,
+        language_locked=(stt_lang != "indic-auto"),
         tts_voice=settings.gnani_tts_voice,
         on_partial_hook=pipeline.on_partial_transcript if pipeline else None,
         on_final_hook=pipeline.on_final_transcript if pipeline else None,
@@ -202,9 +204,16 @@ async def voice_session_ws(
             elif ev_type == "set_language":
                 new_lang = str(data.get("language", "")).strip()
                 if new_lang:
-                    orchestrator.active_language = new_lang
+                    is_auto = new_lang == "indic-auto"
+                    eff_lang = settings.default_language if is_auto else new_lang
+                    orchestrator.active_language = eff_lang
+                    orchestrator.language_locked = not is_auto
                     if pipeline is not None:
-                        pipeline.sm.set_language(new_lang)
+                        pipeline.set_preferred_language(new_lang, fallback=eff_lang)
+                    try:
+                        await stt.update_stream_settings(language_code=new_lang)
+                    except Exception as exc:
+                        logger.warning("stt_set_language_failed err=%s", exc)
             elif ev_type == "confirm_visit" and pipeline is not None:
                 await pipeline.handle_explicit_confirm_command(
                     bool(data.get("confirmed", False)), orchestrator

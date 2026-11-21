@@ -103,6 +103,38 @@ export const fastApiClient = {
     });
   },
 
+  createBeneficiary(payload: {
+    full_name: string;
+    category: string;
+    village: string;
+    preferred_language: string;
+    age_years: number;
+    household_head?: string;
+    phone_number?: string;
+    edd_date?: string;
+    high_risk_status?: boolean;
+  }): Promise<{
+    schema_version: 'v1';
+    synthetic_data_only: boolean;
+    beneficiary: {
+      beneficiary_id: string;
+      full_name: string;
+      category: string;
+      village: string;
+      preferred_language: string;
+      age_years?: number;
+      household_head?: string | null;
+      phone_number?: string | null;
+      edd_date?: string | null;
+      high_risk_status?: boolean;
+    };
+  }> {
+    return requestJson('/api/v1/beneficiaries', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
   getSessionVisit(sessionId: string): Promise<SessionVisitResponseV1> {
     return requestJson<SessionVisitResponseV1>(
       `/api/v1/sessions/${encodeURIComponent(sessionId)}/visit`,

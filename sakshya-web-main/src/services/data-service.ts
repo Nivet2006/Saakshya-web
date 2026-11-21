@@ -30,6 +30,7 @@ const STORAGE_VISITS_KEY = 'sakshya_visits_v3';
 const STORAGE_ALERTS_KEY = 'sakshya_alerts_v3';
 const STORAGE_FOLLOWUPS_KEY = 'sakshya_followups_v2';
 const STORAGE_AUDIT_KEY = 'sakshya_audit_v2';
+const STORAGE_CUSTOM_BENEFICIARIES_KEY = 'sakshya_custom_beneficiaries_v1';
 
 class DataService {
   private beneficiaries: Beneficiary[] = [...SYNTHETIC_BENEFICIARIES];
@@ -57,6 +58,20 @@ class DataService {
       if (f) this.followUps = JSON.parse(f);
       const aud = localStorage.getItem(STORAGE_AUDIT_KEY);
       if (aud) this.auditLogs = JSON.parse(aud);
+      const customBensRaw = localStorage.getItem(STORAGE_CUSTOM_BENEFICIARIES_KEY);
+      if (customBensRaw) {
+        const customBens = JSON.parse(customBensRaw) as Beneficiary[];
+        for (const cb of customBens) {
+          if (
+            cb?.beneficiary_id &&
+            !this.beneficiaries.some(
+              (b) => b.beneficiary_id.toUpperCase() === cb.beneficiary_id.toUpperCase()
+            )
+          ) {
+            this.beneficiaries.push(cb);
+          }
+        }
+      }
     } catch {
       // ignore storage errors
     }
@@ -142,8 +157,13 @@ class DataService {
             updated_at: new Date().toISOString(),
           };
         });
-        this.beneficiaries = merged;
-        await cacheBeneficiariesLocally(merged);
+        // Preserve any locally-added custom beneficiaries not yet in backend restart
+        const mergedIds = new Set(merged.map((m) => m.beneficiary_id.toUpperCase()));
+        const localExtras = this.beneficiaries.filter(
+          (b) => !mergedIds.has(b.beneficiary_id.toUpperCase())
+        );
+        this.beneficiaries = [...merged, ...localExtras];
+        await cacheBeneficiariesLocally(this.beneficiaries);
       }
     } catch {
       const cached = await getCachedBeneficiariesLocally();
@@ -173,6 +193,79 @@ class DataService {
       if (phcId && b.phc_id !== phcId) return false;
       return true;
     });
+  }
+
+  async addBeneficiary(input: {
+    full_name: string;
+    category: BeneficiaryCategory;
+    age_years: number;
+    village: string;
+    household_head?: string;
+    phone_number?: string;
+    edd_date?: string;
+    high_risk_status: boolean;
+    preferred_language: string;
+    assigned_asha_id?: string;
+    phc_id?: string;
+  }): Promise<Beneficiary> {
+    this.hydrateFromLocalStorage();
+    let backendId: string | null = null;
+    try {
+      const res = await fastApiClient.createBeneficiary({
+        full_name: input.full_name,
+        category: input.category,
+        village: input.village,
+        preferred_language: input.preferred_language,
+        age_years: input.age_years,
+        household_head: input.household_head,
+        phone_number: input.phone_number,
+        edd_date: input.edd_date,
+        high_risk_status: input.high_risk_status,
+      });
+      backendId = res.beneficiary?.beneficiary_id || null;
+    } catch {
+      // Offline / backend unreachable — still register locally
+    }
+
+    let maxNum = 1056;
+    for (const b of this.beneficiaries) {
+      const m = /^BEN-(\d+)$/i.exec(b.beneficiary_id);
+      if (m) maxNum = Math.max(maxNum, Number.parseInt(m[1], 10));
+    }
+    const benId = backendId || `BEN-${maxNum + 1}`;
+    const now = new Date().toISOString();
+    const created: Beneficiary = {
+      id: `c0000000-0000-0000-0000-${benId.replace('BEN-', '').padStart(12, '0')}`,
+      beneficiary_id: benId,
+      full_name: input.full_name.trim(),
+      age_years: input.age_years,
+      gender: 'FEMALE',
+      category: input.category,
+      village: input.village,
+      household_head: input.household_head,
+      phone_number: input.phone_number,
+      edd_date: input.edd_date,
+      high_risk_status: input.high_risk_status,
+      high_risk_reasons: input.high_risk_status ? ['Marked High Risk'] : [],
+      assigned_asha_id: input.assigned_asha_id || 'b0000000-0000-0000-0000-000000000001',
+      phc_id: input.phc_id || 'a0000000-0000-0000-0000-000000000001',
+      preferred_language: input.preferred_language,
+      created_at: now,
+      updated_at: now,
+    };
+
+    this.beneficiaries = [created, ...this.beneficiaries];
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(STORAGE_CUSTOM_BENEFICIARIES_KEY);
+        const prev = raw ? (JSON.parse(raw) as Beneficiary[]) : [];
+        localStorage.setItem(STORAGE_CUSTOM_BENEFICIARIES_KEY, JSON.stringify([created, ...prev]));
+      } catch {
+        // ignore
+      }
+    }
+    await cacheBeneficiariesLocally(this.beneficiaries).catch(() => {});
+    return created;
   }
 
   getProfiles(phcId?: string): UserProfile[] {
