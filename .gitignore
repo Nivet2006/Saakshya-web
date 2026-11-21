@@ -1,0 +1,63 @@
+# Environment secrets — keep .env.example shareable
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+credentials/
+
+# Python
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+dist/
+build/
+.turbo/
+
+# Logs and runtime data
+*.log
+logs/
+tmp/
+temp/
+.cache/
+
+# Audio recordings and generated media (synthetic test fixtures may be explicitly unignored)
+recordings/
+audio-recordings/
+*.wav
+*.mp3
+*.m4a
+*.ogg
+*.flac
+
+# Local databases / state
+*.sqlite
+*.sqlite3
+*.db
+
+# IDE / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test and generated artifacts
+coverage/
+playwright-report/
+test-results/
+artifacts/
