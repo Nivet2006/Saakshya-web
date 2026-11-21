@@ -23,6 +23,17 @@ interface BasicVisitViewProps {
   recentBeneficiaryIds: string[];
   selectedBeneficiary: Beneficiary | null;
   onSelectBeneficiary: (ben: Beneficiary | null) => void;
+  onAddBeneficiary?: (input: {
+    full_name: string;
+    category: Beneficiary['category'];
+    age_years: number;
+    village: string;
+    household_head?: string;
+    phone_number?: string;
+    edd_date?: string;
+    high_risk_status: boolean;
+    preferred_language: LanguageCode;
+  }) => Promise<Beneficiary>;
   language: LanguageCode;
   onChangeLanguage: (lang: LanguageCode) => void;
   voice: ReturnType<typeof useVoiceVisitSession>;
@@ -34,6 +45,7 @@ export const BasicVisitView: React.FC<BasicVisitViewProps> = ({
   recentBeneficiaryIds,
   selectedBeneficiary,
   onSelectBeneficiary,
+  onAddBeneficiary,
   language,
   onChangeLanguage,
   voice,
@@ -61,6 +73,8 @@ export const BasicVisitView: React.FC<BasicVisitViewProps> = ({
         selectedBeneficiary={selectedBeneficiary}
         recentBeneficiaryIds={recentBeneficiaryIds}
         onSelect={onSelectBeneficiary}
+        onAddBeneficiary={onAddBeneficiary}
+        currentLanguage={language}
         ambiguousCandidates={
           voice.clarification?.reason === 'ambiguous_beneficiary'
             ? voice.clarification.candidates

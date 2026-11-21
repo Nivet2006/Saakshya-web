@@ -170,6 +170,26 @@ export default function HomePage() {
     refreshAllData();
   };
 
+  const handleAddBeneficiary = async (input: {
+    full_name: string;
+    category: Beneficiary['category'];
+    age_years: number;
+    village: string;
+    household_head?: string;
+    phone_number?: string;
+    edd_date?: string;
+    high_risk_status: boolean;
+    preferred_language: LanguageCode;
+  }): Promise<Beneficiary> => {
+    const created = await dataService.addBeneficiary({
+      ...input,
+      assigned_asha_id: currentProfile?.id,
+      phc_id: currentProfile?.phc_id,
+    });
+    refreshAllData();
+    return created;
+  };
+
   const handleClearVisits = async () => {
     await dataService.clearAllVisits();
     refreshAllData();
@@ -270,6 +290,7 @@ export default function HomePage() {
               recentVisits={visits}
               selectedBeneficiary={selectedBeneficiaryForVoice}
               onSelectBeneficiary={setSelectedBeneficiaryForVoice}
+              onAddBeneficiary={handleAddBeneficiary}
               language={currentLanguage}
               onChangeLanguage={handleLanguageChange}
               onVisitCommitted={() => {
@@ -286,6 +307,8 @@ export default function HomePage() {
               followUps={followUps}
               immunisations={immunisations}
               onStartVoiceVisit={handleStartVoiceVisit}
+              onAddBeneficiary={handleAddBeneficiary}
+              currentLanguage={currentLanguage}
             />
           )}
 

@@ -112,6 +112,11 @@ class SyntheticBeneficiary:
     category: str  # "pregnant_woman" | "postnatal_mother" | "newborn" | "infant"
     village: str
     preferred_language: str
+    age_years: int = 25
+    household_head: str | None = None
+    phone_number: str | None = None
+    edd_date: str | None = None
+    high_risk_status: bool = False
     synthetic: bool = True
 
 
@@ -199,18 +204,93 @@ def extract_spoken_beneficiary_id(text: str) -> str | None:
     return selected_id
 
 
+_RUNTIME_CUSTOM_BENEFICIARIES: list[SyntheticBeneficiary] = []
+
+
 class SyntheticBeneficiaryDirectory:
     """Lookup interface resolving spoken names/IDs ONLY against synthetic fixtures."""
 
     def __init__(self, items: tuple[SyntheticBeneficiary, ...] = SYNTHETIC_BENEFICIARIES) -> None:
-        self._items = items
-        self._by_id = {b.beneficiary_id.upper(): b for b in items}
+        self._base_items = items
+        self._sync_index()
+
+    def _sync_index(self) -> None:
+        merged = list(self._base_items)
+        seen = {b.beneficiary_id.upper() for b in merged}
+        for custom in _RUNTIME_CUSTOM_BENEFICIARIES:
+            if custom.beneficiary_id.upper() not in seen:
+                merged.append(custom)
+                seen.add(custom.beneficiary_id.upper())
+        self._items = tuple(merged)
+        self._by_id = {b.beneficiary_id.upper(): b for b in self._items}
 
     def list_all(self) -> list[SyntheticBeneficiary]:
+        self._sync_index()
         return list(self._items)
 
     def get_by_id(self, beneficiary_id: str) -> SyntheticBeneficiary | None:
+        self._sync_index()
         return self._by_id.get(beneficiary_id.strip().upper())
+
+    def add_beneficiary(
+        self,
+        *,
+        full_name: str,
+        category: str = "pregnant_woman",
+        village: str = "Rampur Demo Ward 1",
+        preferred_language: str = "hi-IN",
+        age_years: int = 25,
+        household_head: str | None = None,
+        phone_number: str | None = None,
+        edd_date: str | None = None,
+        high_risk_status: bool = False,
+        beneficiary_id: str | None = None,
+    ) -> SyntheticBeneficiary:
+        """Register a new synthetic/demo beneficiary in the runtime directory."""
+        self._sync_index()
+        clean_name = " ".join(full_name.strip().split())
+        if not clean_name:
+            raise ValueError("full_name is required")
+
+        if beneficiary_id and beneficiary_id.strip():
+            bid = beneficiary_id.strip().upper()
+        else:
+            max_num = 1056
+            for b in self._items:
+                m = re.match(r"BEN-(\d+)$", b.beneficiary_id.upper())
+                if m:
+                    max_num = max(max_num, int(m.group(1)))
+            bid = f"BEN-{max_num + 1}"
+
+        name_lower = clean_name.lower()
+        parts = [p for p in re.split(r"\s+", name_lower) if len(p) >= 2]
+        aliases = tuple(dict.fromkeys([name_lower, *parts]))
+
+        cat_map = {
+            "PREGNANT_WOMAN": "pregnant_woman",
+            "LACTATING_MOTHER": "postnatal_mother",
+            "INFANT": "infant",
+            "CHILD": "infant",
+        }
+        norm_cat = cat_map.get(category.strip().upper(), category.strip().lower() or "pregnant_woman")
+
+        ben = SyntheticBeneficiary(
+            beneficiary_id=bid,
+            full_name=clean_name,
+            aliases=aliases,
+            category=norm_cat,
+            village=village.strip() or "Rampur Demo Ward 1",
+            preferred_language=preferred_language.strip() or "hi-IN",
+            age_years=max(0, int(age_years)),
+            household_head=household_head.strip() if household_head else None,
+            phone_number=phone_number.strip() if phone_number else None,
+            edd_date=edd_date.strip() if edd_date else None,
+            high_risk_status=bool(high_risk_status),
+            synthetic=True,
+        )
+        _RUNTIME_CUSTOM_BENEFICIARIES.append(ben)
+        self._sync_index()
+        return ben
 
     def search_by_name(self, query: str) -> list[SyntheticBeneficiary]:
         """Return all matching synthetic beneficiaries (caller asks if >1 match)."""

@@ -540,8 +540,23 @@ class HealthcareSessionPipeline:
             return "ठीक है, कृपया सही मान दोबारा बोलें।"
         return f"Okay, please repeat the {field_name}."
 
+    def build_llm_visit_context(self) -> str:
+        """Concise live visit context so the LLM understands the active patient and draft."""
+        v = self.sm.visit
+        missing = self._missing_required_fields()
+        parts = [
+            f"Current visit draft context: beneficiary={v.beneficiary_name or 'unselected'} ({v.beneficiary_id or 'none'})",
+            f"visit_type={v.visit_type.value if v.visit_type else 'unknown'}",
+            f"weight_kg={v.weight_kg if v.weight_kg is not None else 'unknown'}",
+            f"next_visit_date={v.next_visit_date or 'unknown'}",
+            f"danger_sign_flagged={v.danger_sign_flagged}",
+            f"missing_fields={','.join(missing) if missing else 'none'}",
+        ]
+        return "; ".join(parts) + ". Respond naturally to what the ASHA worker just said, and if any clinical symptom sounds serious, ask a clarifying question or advise immediate PHC referral without diagnosing or inventing details."
+
     def attach_orchestrator(self, orchestrator: VoiceSessionOrchestrator) -> None:
         self._orchestrator = orchestrator
+        orchestrator._context_provider = self.build_llm_visit_context
 
     def _cancel_silence_timer(self) -> None:
         if self._silence_task is not None and not self._silence_task.done():
@@ -785,23 +800,88 @@ class HealthcareSessionPipeline:
                 await self._dispatch_transition(lookup_trans, orchestrator)
                 return True
 
-            unclear_trans = self.sm.handle_identity_confirmation_response(
-                event.text, language=lang
-            )
-            await self._dispatch_transition(unclear_trans, orchestrator)
-            return True
+            # If a beneficiary is already pre-selected and the worker jumped straight into
+            # speaking visit notes or symptoms (instead of saying "yes"/"no"), confirm the
+            # pre-selected beneficiary and continue processing the utterance normally!
+            if self.sm.visit.beneficiary_id and self.sm.state == ConversationState.IDENTITY_CONFIRMATION:
+                preview_id = self._extractor.extract(
+                    event.text,
+                    reference_date=self._reference_date,
+                    active_language=lang,
+                    existing_draft=self._build_draft_snapshot_for_extractor(),
+                )
+                if (
+                    preview_id.patch
+                    or preview_id.observations
+                    or preview_id.events
+                    or len((event.text or "").split()) >= 4
+                ):
+                    self.sm.handle_identity_confirmation_response("yes", language=lang)
+                    orchestrator.telemetry.steps.beneficiary_identified = True
+                    orchestrator.telemetry.steps.identity_voice_confirmed = True
+                    self._sync_stt_context_from_visit(orchestrator)
+                else:
+                    unclear_trans = self.sm.handle_identity_confirmation_response(
+                        event.text, language=lang
+                    )
+                    await self._dispatch_transition(unclear_trans, orchestrator)
+                    return True
+            else:
+                unclear_trans = self.sm.handle_identity_confirmation_response(
+                    event.text, language=lang
+                )
+                await self._dispatch_transition(unclear_trans, orchestrator)
+                return True
 
         if not danger_fired and self.sm.state in (
             ConversationState.IDENTITY_CORRECTION,
             ConversationState.BENEFICIARY_LOOKUP,
         ):
             matches, _spoken_id = self._directory.resolve_spoken_identity(event.text)
-            lookup_trans = self.sm.apply_beneficiary_lookup_result(
-                [(b.beneficiary_id, b.full_name) for b in matches],
-                language=lang,
+            if matches:
+                lookup_trans = self.sm.apply_beneficiary_lookup_result(
+                    [(b.beneficiary_id, b.full_name) for b in matches],
+                    language=lang,
+                )
+                if len(matches) == 1:
+                    orchestrator.telemetry.steps.beneficiary_identified = True
+                await self._dispatch_transition(lookup_trans, orchestrator)
+                return True
+
+            # Preserve any clinical fields spoken before beneficiary lookup resolved
+            pre_ext = self._extractor.extract(
+                event.text,
+                reference_date=self._reference_date,
+                active_language=lang,
+                existing_draft=self._build_draft_snapshot_for_extractor(),
             )
-            if len(matches) == 1:
-                orchestrator.telemetry.steps.beneficiary_identified = True
+            if pre_ext.patch or pre_ext.observations or pre_ext.events:
+                pre_kwargs: dict[str, Any] = {}
+                pre_fields: set[str] = set()
+                for k in ("visit_type", "weight_kg", "vaccinations_completed", "vaccinations_due", "next_visit_date"):
+                    if k in pre_ext.patch:
+                        pre_kwargs[k] = pre_ext.patch[k]
+                        pre_fields.add(k)
+                if pre_ext.observations:
+                    pre_kwargs["observations"] = [o.model_dump(mode="json") for o in pre_ext.observations]
+                    pre_fields.add("observations")
+                if pre_ext.events:
+                    pre_kwargs["events"] = [e.model_dump(mode="json") for e in pre_ext.events]
+                    pre_fields.add("events")
+                if pre_kwargs:
+                    self.sm._apply_update_fields(
+                        ExtractionUpdate(**pre_kwargs, explicit_fields=pre_fields, detected_language=lang),
+                        is_patch=False,
+                        merge_lists=True,
+                    )
+                    await orchestrator.emit_event(
+                        "visit_draft_updated",
+                        visit_id=self.sm.visit.visit_draft_id,
+                        draft=self.current_visit_contract(),
+                        updated_fields=sorted(pre_fields),
+                        missing_required_fields=self._missing_required_fields(),
+                    )
+            lookup_trans = self.sm.apply_beneficiary_lookup_result([], language=lang)
             await self._dispatch_transition(lookup_trans, orchestrator)
             return True
 

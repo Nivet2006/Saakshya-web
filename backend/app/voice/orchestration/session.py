@@ -66,6 +66,7 @@ class VoiceSessionOrchestrator:
         system_prompt: str = MILESTONE1_SYSTEM_PROMPT,
         on_partial_hook: TranscriptHook | None = None,
         on_final_hook: TranscriptHook | None = None,
+        context_provider: Callable[[], str] | None = None,
     ) -> None:
         self.session_id = session_id or f"sess_{uuid.uuid4().hex[:12]}"
         self._stt = stt
@@ -79,6 +80,7 @@ class VoiceSessionOrchestrator:
         self._system_prompt = system_prompt
         self._on_partial_hook = on_partial_hook
         self._on_final_hook = on_final_hook
+        self._context_provider = context_provider
 
         self.history: list[ChatMessage] = []
         self.active_turn_id: int = 0
@@ -573,9 +575,14 @@ class VoiceSessionOrchestrator:
     async def _run_llm_and_tts_turn(self, *, turn_id: int, language: str) -> None:
         try:
             await self._set_state("processing")
+            prompt = self._system_prompt
+            if callable(self._context_provider):
+                extra_ctx = (self._context_provider() or "").strip()
+                if extra_ctx:
+                    prompt = f"{self._system_prompt}\n\n{extra_ctx}"
             reply_text = await self._llm.generate_reply(
                 list(self.history),
-                system_prompt=self._system_prompt,
+                system_prompt=prompt,
                 active_language=language,
             )
             if turn_id != self.active_turn_id or self._closed:

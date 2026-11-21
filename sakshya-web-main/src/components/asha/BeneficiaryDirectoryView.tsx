@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
+import { AddPatientModal, type NewPatientInput } from '@/components/asha/AddPatientModal';
 import { EmptyState } from '@/components/ui/ClinicalUI';
 import { useTranslation } from '@/lib/i18n/LanguageContext';
 import type {
   Beneficiary,
   FollowUpTask,
   ImmunisationScheduleItem,
+  LanguageCode,
   VisitDraft,
 } from '@/types';
 import {
@@ -18,6 +20,7 @@ import {
   Search,
   Syringe,
   User,
+  UserPlus,
   X,
 } from 'lucide-react';
 
@@ -27,6 +30,8 @@ interface BeneficiaryDirectoryViewProps {
   followUps: FollowUpTask[];
   immunisations: ImmunisationScheduleItem[];
   onStartVoiceVisit: (beneficiary: Beneficiary) => void;
+  onAddBeneficiary?: (input: NewPatientInput) => Promise<Beneficiary>;
+  currentLanguage?: LanguageCode;
 }
 
 export const BeneficiaryDirectoryView: React.FC<BeneficiaryDirectoryViewProps> = ({
@@ -35,11 +40,14 @@ export const BeneficiaryDirectoryView: React.FC<BeneficiaryDirectoryViewProps> =
   followUps,
   immunisations,
   onStartVoiceVisit,
+  onAddBeneficiary,
+  currentLanguage = 'hi-IN',
 }) => {
   const { ui } = useTranslation();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [selectedProfile, setSelectedProfile] = useState<Beneficiary | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -95,22 +103,34 @@ export const BeneficiaryDirectoryView: React.FC<BeneficiaryDirectoryViewProps> =
           </p>
         </div>
 
-        <div className="relative w-full sm:w-72">
-          <Search
-            className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
-            aria-hidden="true"
-          />
-          <label htmlFor="directory-search" className="sr-only">
-            {ui.searchBeneficiariesPlaceholder}
-          </label>
-          <input
-            id="directory-search"
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={ui.searchBeneficiariesPlaceholder}
-            className="w-full pl-9 pr-3 py-2 rounded-xl border border-clinical-border bg-white text-sm"
-          />
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto">
+          <div className="relative w-full sm:w-72">
+            <Search
+              className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+              aria-hidden="true"
+            />
+            <label htmlFor="directory-search" className="sr-only">
+              {ui.searchBeneficiariesPlaceholder}
+            </label>
+            <input
+              id="directory-search"
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={ui.searchBeneficiariesPlaceholder}
+              className="w-full pl-9 pr-3 py-2 rounded-xl border border-clinical-border bg-white text-sm"
+            />
+          </div>
+          {onAddBeneficiary && (
+            <button
+              type="button"
+              onClick={() => setShowAddModal(true)}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-clinical-primary hover:bg-clinical-primary-dark text-white text-xs font-bold shadow-sm whitespace-nowrap"
+            >
+              <UserPlus className="h-4 w-4" aria-hidden="true" />
+              <span>{ui.addNewPatientBtn}</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -361,6 +381,14 @@ export const BeneficiaryDirectoryView: React.FC<BeneficiaryDirectoryViewProps> =
             </button>
           </div>
         </div>
+      )}
+      {onAddBeneficiary && (
+        <AddPatientModal
+          open={showAddModal}
+          defaultLanguage={currentLanguage}
+          onClose={() => setShowAddModal(false)}
+          onSave={onAddBeneficiary}
+        />
       )}
     </div>
   );

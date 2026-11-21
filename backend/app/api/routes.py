@@ -134,22 +134,62 @@ async def create_session(req: CreateSessionRequest) -> Any:
     )
 
 
+class CreateBeneficiaryRequest(BaseModel):
+    full_name: str
+    category: str = "PREGNANT_WOMAN"
+    village: str = "Rampur Demo Ward 1"
+    preferred_language: str = "hi-IN"
+    age_years: int = 25
+    household_head: str | None = None
+    phone_number: str | None = None
+    edd_date: str | None = None
+    high_risk_status: bool = False
+
+
+def _serialize_beneficiary(b: Any) -> dict[str, Any]:
+    return {
+        "beneficiary_id": b.beneficiary_id,
+        "full_name": b.full_name,
+        "category": b.category,
+        "village": b.village,
+        "preferred_language": b.preferred_language,
+    }
+
+
 @router.get("/api/v1/beneficiaries")
 async def list_beneficiaries(q: str | None = None) -> dict[str, Any]:
     items = _directory.search_by_name(q) if q else _directory.list_all()
     return {
         "schema_version": "v1",
         "synthetic_data_only": True,
-        "beneficiaries": [
-            {
-                "beneficiary_id": b.beneficiary_id,
-                "full_name": b.full_name,
-                "category": b.category,
-                "village": b.village,
-                "preferred_language": b.preferred_language,
-            }
-            for b in items
-        ],
+        "beneficiaries": [_serialize_beneficiary(b) for b in items],
+    }
+
+
+@router.post("/api/v1/beneficiaries")
+async def create_beneficiary(req: CreateBeneficiaryRequest) -> Any:
+    if not req.full_name.strip():
+        return _error_response(
+            422,
+            "INVALID_BENEFICIARY",
+            "Patient full name is required.",
+            retryable=False,
+        )
+    ben = _directory.add_beneficiary(
+        full_name=req.full_name,
+        category=req.category,
+        village=req.village,
+        preferred_language=req.preferred_language,
+        age_years=req.age_years,
+        household_head=req.household_head,
+        phone_number=req.phone_number,
+        edd_date=req.edd_date,
+        high_risk_status=req.high_risk_status,
+    )
+    return {
+        "schema_version": "v1",
+        "synthetic_data_only": True,
+        "beneficiary": _serialize_beneficiary(ben),
     }
 
 

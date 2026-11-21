@@ -16,6 +16,17 @@ interface VoiceVisitWorkspaceProps {
   recentVisits: VisitDraft[];
   selectedBeneficiary: Beneficiary | null;
   onSelectBeneficiary: (ben: Beneficiary | null) => void;
+  onAddBeneficiary?: (input: {
+    full_name: string;
+    category: Beneficiary['category'];
+    age_years: number;
+    village: string;
+    household_head?: string;
+    phone_number?: string;
+    edd_date?: string;
+    high_risk_status: boolean;
+    preferred_language: LanguageCode;
+  }) => Promise<Beneficiary>;
   language: LanguageCode;
   onChangeLanguage: (lang: LanguageCode) => void;
   onVisitCommitted: (visit: VisitDraft) => void;
@@ -30,6 +41,7 @@ export const VoiceVisitWorkspace: React.FC<VoiceVisitWorkspaceProps> = ({
   recentVisits,
   selectedBeneficiary,
   onSelectBeneficiary,
+  onAddBeneficiary,
   language,
   onChangeLanguage,
   onVisitCommitted,
@@ -118,6 +130,7 @@ export const VoiceVisitWorkspace: React.FC<VoiceVisitWorkspaceProps> = ({
           recentBeneficiaryIds={recentIds}
           selectedBeneficiary={selectedBeneficiary}
           onSelectBeneficiary={onSelectBeneficiary}
+          onAddBeneficiary={onAddBeneficiary}
           language={language}
           onChangeLanguage={onChangeLanguage}
           voice={voice}
@@ -129,6 +142,7 @@ export const VoiceVisitWorkspace: React.FC<VoiceVisitWorkspaceProps> = ({
           recentBeneficiaryIds={recentIds}
           selectedBeneficiary={selectedBeneficiary}
           onSelectBeneficiary={onSelectBeneficiary}
+          onAddBeneficiary={onAddBeneficiary}
           language={language}
           onChangeLanguage={onChangeLanguage}
           voice={voice}

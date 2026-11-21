@@ -353,6 +353,15 @@ export interface UiStrings {
   dangerSignVisitsLabel: string;
   routineSafeLabel: string;
   systemAuditTrailTitle: string;
+  addNewPatientBtn: string;
+  addNewPatientTitle: string;
+  patientNameLabel: string;
+  patientCategoryLabel: string;
+  patientAgeLabel: string;
+  villageWardLabel: string;
+  phoneOptionalLabel: string;
+  highRiskPatientLabel: string;
+  savePatientBtn: string;
 }
 
 export const EN_UI: UiStrings = {
@@ -687,6 +696,15 @@ export const EN_UI: UiStrings = {
   dangerSignVisitsLabel: 'Danger Sign Visits',
   routineSafeLabel: 'Routine / Safe',
   systemAuditTrailTitle: 'System Audit Trail',
+  addNewPatientBtn: 'Add Patient',
+  addNewPatientTitle: 'Add New Patient / Beneficiary',
+  patientNameLabel: 'Full Name',
+  patientCategoryLabel: 'Category',
+  patientAgeLabel: 'Age (years)',
+  villageWardLabel: 'Village / Ward',
+  phoneOptionalLabel: 'Phone (optional)',
+  highRiskPatientLabel: 'Mark as High-Risk Watch',
+  savePatientBtn: 'Save Patient',
 };
 
 const HI_UI: UiStrings = {
@@ -1021,6 +1039,15 @@ const HI_UI: UiStrings = {
   dangerSignVisitsLabel: 'खतरे के संकेत वाली विज़िट',
   routineSafeLabel: 'सामान्य / सुरक्षित',
   systemAuditTrailTitle: 'सिस्टम ऑडिट लॉग',
+  addNewPatientBtn: 'नया मरीज़ जोड़ें',
+  addNewPatientTitle: 'नया मरीज़ / लाभार्थी जोड़ें',
+  patientNameLabel: 'पूरा नाम',
+  patientCategoryLabel: 'श्रेणी',
+  patientAgeLabel: 'आयु (वर्ष)',
+  villageWardLabel: 'गाँव / वार्ड',
+  phoneOptionalLabel: 'फ़ोन (वैकल्पिक)',
+  highRiskPatientLabel: 'उच्च जोखिम श्रेणी में रखें',
+  savePatientBtn: 'मरीज़ सहेजें',
 };
 
 const TA_UI: UiStrings = {
@@ -1355,6 +1382,15 @@ const TA_UI: UiStrings = {
   dangerSignVisitsLabel: 'அபாய அறிகுறி வருகைகள்',
   routineSafeLabel: 'சாதாரணம் / பாதுகாப்பானது',
   systemAuditTrailTitle: 'கணினி தணிக்கை பதிவு',
+  addNewPatientBtn: 'புதிய நோயாளி சேர்',
+  addNewPatientTitle: 'புதிய நோயாளி / பயனாளி சேர்',
+  patientNameLabel: 'முழுப் பெயர்',
+  patientCategoryLabel: 'பிரிவு',
+  patientAgeLabel: 'வயது (ஆண்டுகள்)',
+  villageWardLabel: 'கிராமம் / வார்டு',
+  phoneOptionalLabel: 'தொலைபேசி (விருப்பம்)',
+  highRiskPatientLabel: 'அதிக ஆபத்து கண்காணிப்பு',
+  savePatientBtn: 'நோயாளியைச் சேமி',
 };
 
 const KN_UI: UiStrings = {
@@ -1689,6 +1725,15 @@ const KN_UI: UiStrings = {
   dangerSignVisitsLabel: 'ಅಪಾಯ ಲಕ್ಷಣದ ಭೇಟಿಗಳು',
   routineSafeLabel: 'ಸಾಮಾನ್ಯ / ಸುರಕ್ಷಿತ',
   systemAuditTrailTitle: 'ಸಿಸ್ಟಮ್ ಆಡಿಟ್ ಲಾಗ್',
+  addNewPatientBtn: 'ಹೊಸ ರೋಗಿ ಸೇರಿಸಿ',
+  addNewPatientTitle: 'ಹೊಸ ರೋಗಿ / ಫಲಾನುಭವಿ ಸೇರಿಸಿ',
+  patientNameLabel: 'ಪೂರ್ಣ ಹೆಸರು',
+  patientCategoryLabel: 'ವರ್ಗ',
+  patientAgeLabel: 'ವಯಸ್ಸು (ವರ್ಷ)',
+  villageWardLabel: 'ಗ್ರಾಮ / ವಾರ್ಡ್',
+  phoneOptionalLabel: 'ಫೋನ್ (ಐಚ್ಛಿಕ)',
+  highRiskPatientLabel: 'ಅಧಿಕ ಅಪಾಯ ಎಂದು ಗುರುತಿಸಿ',
+  savePatientBtn: 'ರೋಗಿಯನ್ನು ಉಳಿಸಿ',
 };
 
 const TE_UI: UiStrings = {
@@ -2023,6 +2068,15 @@ const TE_UI: UiStrings = {
   dangerSignVisitsLabel: 'ప్రమాద సంకేత విజిట్లు',
   routineSafeLabel: 'సాధారణ / సురక్షిత',
   systemAuditTrailTitle: 'సిస్టమ్ ఆడిట్ లాగ్',
+  addNewPatientBtn: 'కొత్త రోగిని జోడించండి',
+  addNewPatientTitle: 'కొత్త రోగి / లబ్ధిదారుని జోడించండి',
+  patientNameLabel: 'పూర్తి పేరు',
+  patientCategoryLabel: 'వర్గం',
+  patientAgeLabel: 'వయస్సు (సం.)',
+  villageWardLabel: 'గ్రామం / వార్డు',
+  phoneOptionalLabel: 'ఫోన్ (ఐచ్ఛికం)',
+  highRiskPatientLabel: 'అధిక ప్రమాద జాబితాలో ఉంచండి',
+  savePatientBtn: 'రోగిని సేవ్ చేయండి',
 };
 
 const ML_UI: UiStrings = {
@@ -2357,6 +2411,15 @@ const ML_UI: UiStrings = {
   dangerSignVisitsLabel: 'അപകട ലക്ഷണ സന്ദർശനങ്ങൾ',
   routineSafeLabel: 'സാധാരണം / സുരക്ഷിതം',
   systemAuditTrailTitle: 'സിസ്റ്റം ഓഡിറ്റ് ലോഗ്',
+  addNewPatientBtn: 'പുതിയ രോഗിയെ ചേർക്കുക',
+  addNewPatientTitle: 'പുതിയ രോഗി / ഗുണഭോക്താവ്',
+  patientNameLabel: 'മുഴുവൻ പേര്',
+  patientCategoryLabel: 'വിഭാഗം',
+  patientAgeLabel: 'വയസ്സ്',
+  villageWardLabel: 'ഗ്രാമം / വാർഡ്',
+  phoneOptionalLabel: 'ഫോൺ (നിർബന്ധമില്ല)',
+  highRiskPatientLabel: 'ഉയർന്ന അപകടസാധ്യത അടയാളപ്പെടുത്തുക',
+  savePatientBtn: 'സേവ് ചെയ്യുക',
 };
 
 const BN_UI: UiStrings = {
@@ -2691,6 +2754,15 @@ const BN_UI: UiStrings = {
   dangerSignVisitsLabel: 'বিপদ চিহ্নিত ভিজিট',
   routineSafeLabel: 'স্বাভাবিক / নিরাপদ',
   systemAuditTrailTitle: 'সিস্টেম অডিট লগ',
+  addNewPatientBtn: 'নতুন রোগী যোগ করুন',
+  addNewPatientTitle: 'নতুন রোগী / সুবিধাভোগী যোগ করুন',
+  patientNameLabel: 'পূর্ণ নাম',
+  patientCategoryLabel: 'শ্রেণী',
+  patientAgeLabel: 'বয়স (বছর)',
+  villageWardLabel: 'গ্রাম / ওয়ার্ড',
+  phoneOptionalLabel: 'ফোন (ঐচ্ছিক)',
+  highRiskPatientLabel: 'উচ্চ ঝুঁকি হিসাবে চিহ্নিত করুন',
+  savePatientBtn: 'রোগী সংরক্ষণ করুন',
 };
 
 const MR_UI: UiStrings = {
@@ -3025,6 +3097,15 @@ const MR_UI: UiStrings = {
   dangerSignVisitsLabel: 'धोक्याचे लक्षण असलेल्या भेटी',
   routineSafeLabel: 'सामान्य / सुरक्षित',
   systemAuditTrailTitle: 'सिस्टम ऑडिट लॉग',
+  addNewPatientBtn: 'नवीन रुग्ण जोडा',
+  addNewPatientTitle: 'नवीन रुग्ण / लाभार्थी जोडा',
+  patientNameLabel: 'पूर्ण नाव',
+  patientCategoryLabel: 'प्रवर्ग',
+  patientAgeLabel: 'वय (वर्षे)',
+  villageWardLabel: 'गाव / प्रभाग',
+  phoneOptionalLabel: 'फोन (ऐच्छिक)',
+  highRiskPatientLabel: 'अतिजोखमीचे म्हणून चिन्हांकित करा',
+  savePatientBtn: 'रुग्ण जतन करा',
 };
 
 const GU_UI: UiStrings = {
@@ -3359,6 +3440,15 @@ const GU_UI: UiStrings = {
   dangerSignVisitsLabel: 'જોખમ ચિહ્ન મુલાકાતો',
   routineSafeLabel: 'સામાન્ય / સુરક્ષિત',
   systemAuditTrailTitle: 'સિસ્ટમ ઓડિટ લોગ',
+  addNewPatientBtn: 'નવો દર્દી ઉમેરો',
+  addNewPatientTitle: 'નવો દર્દી / લાભાર્થી ઉમેરો',
+  patientNameLabel: 'પૂરું નામ',
+  patientCategoryLabel: 'શ્રેણી',
+  patientAgeLabel: 'ઉંਮર (વર્ષ)',
+  villageWardLabel: 'ગામ / વોર્ડ',
+  phoneOptionalLabel: 'ફોન (વૈકલ્પિક)',
+  highRiskPatientLabel: 'ઉચ્ચ જોખમ તરીકે ચિહ્નિત કરો',
+  savePatientBtn: 'દર્દી સાચવો',
 };
 
 const PA_UI: UiStrings = {
@@ -3693,6 +3783,15 @@ const PA_UI: UiStrings = {
   dangerSignVisitsLabel: 'ਖ਼ਤਰੇ ਵਾਲੇ ਦੌਰੇ',
   routineSafeLabel: 'ਆਮ / ਸੁਰੱਖਿਅਤ',
   systemAuditTrailTitle: 'ਸਿਸਟਮ ਆਡਿਟ ਲੌਗ',
+  addNewPatientBtn: 'ਨਵਾਂ ਮਰੀਜ਼ ਸ਼ਾਮਲ ਕਰੋ',
+  addNewPatientTitle: 'ਨਵਾਂ ਮਰੀਜ਼ / ਲਾਭਪਾਤਰੀ ਸ਼ਾਮਲ ਕਰੋ',
+  patientNameLabel: 'ਪੂਰਾ ਨਾਮ',
+  patientCategoryLabel: 'ਸ਼੍ਰੇਣੀ',
+  patientAgeLabel: 'ਉਮਰ (ਸਾਲ)',
+  villageWardLabel: 'ਪਿੰਡ / ਵਾਰਡ',
+  phoneOptionalLabel: 'ਫੋਨ (ਵਿਕਲਪਿਕ)',
+  highRiskPatientLabel: 'ਵੱਧ ਖ਼ਤਰੇ ਵਜੋਂ ਮਾਰਕ ਕਰੋ',
+  savePatientBtn: 'ਮਰੀਜ਼ ਸੇਵ ਕਰੋ',
 };
 
 export const UI_TRANSLATIONS: Record<string, UiStrings> = {
