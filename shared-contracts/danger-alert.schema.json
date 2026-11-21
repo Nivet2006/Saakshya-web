@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DangerAlertSchema",
+  "description": "Standardized schema for high-priority clinical danger alerts across Web and Android",
+  "type": "object",
+  "properties": {
+    "alert_id": { "type": "string" },
+    "session_id": { "type": "string" },
+    "beneficiary_id": { "type": "string" },
+    "beneficiary_name": { "type": "string" },
+    "phc_id": { "type": "string" },
+    "asha_worker_id": { "type": "string" },
+    "severity": { "type": "string", "enum": ["CRITICAL", "HIGH", "MODERATE"] },
+    "category": {
+      "type": "string",
+      "enum": [
+        "severe_pre_eclampsia_eclampsia",
+        "antepartum_hemorrhage",
+        "postpartum_hemorrhage",
+        "neonatal_hypothermia_sepsis",
+        "severe_acute_malnutrition",
+        "respiratory_distress",
+        "severe_anemia",
+        "prolonged_obstructed_labor",
+        "other_medical_emergency"
+      ]
+    },
+    "symptom_evidence": { "type": "string" },
+    "referral_instruction": { "type": "string" },
+    "referral_facility_type": { "type": "string", "enum": ["PHC", "CHC", "DH", "FRU"] },
+    "referral_status": {
+      "type": "string",
+      "enum": ["PENDING_TRANSPORT", "EN_ROUTE", "ARRIVED_AT_FACILITY", "RESOLVED", "FOLLOW_UP_SCHEDULED"]
+    },
+    "supervisor_acknowledged": { "type": "boolean" },
+    "acknowledged_by": { "type": ["string", "null"] },
+    "acknowledged_at": { "type": ["string", "null"], "format": "date-time" },
+    "detected_at": { "type": "string", "format": "date-time" }
+  },
+  "required": [
+    "alert_id",
+    "severity",
+    "category",
+    "symptom_evidence",
+    "referral_instruction",
+    "supervisor_acknowledged",
+    "detected_at"
+  ]
+}

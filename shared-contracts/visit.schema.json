@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "VisitRecord",
+  "description": "Standardized Visit Record Schema for ASHA Voice Field Register across Web, Android, and FastAPI backend",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "client_draft_id": { "type": "string" },
+    "idempotency_key": { "type": "string" },
+    "asha_worker_id": { "type": "string" },
+    "beneficiary_id": { "type": "string", "pattern": "^BEN-[0-9]{4,}$" },
+    "phc_id": { "type": "string" },
+    "visit_date": { "type": "string", "format": "date-time" },
+    "visit_type": {
+      "type": "string",
+      "enum": ["ANC_1", "ANC_2", "ANC_3", "ANC_4", "PNC_DAY_1", "PNC_DAY_3", "PNC_DAY_7", "PNC_DAY_14", "PNC_DAY_28", "IMMUNISATION", "CHILD_GROWTH", "GENERAL_CHECKUP"]
+    },
+    "language": { "type": "string", "enum": ["hi-IN", "kn-IN", "ta-IN", "en-IN"] },
+    "vitals": {
+      "type": "object",
+      "properties": {
+        "weight_kg": { "type": ["number", "null"], "minimum": 0, "maximum": 200 },
+        "blood_pressure_sys": { "type": ["integer", "null"], "minimum": 40, "maximum": 250 },
+        "blood_pressure_dia": { "type": ["integer", "null"], "minimum": 30, "maximum": 150 },
+        "temperature_f": { "type": ["number", "null"], "minimum": 90, "maximum": 110 },
+        "hemoglobin_g_dl": { "type": ["number", "null"], "minimum": 2, "maximum": 20 },
+        "fetal_heart_rate_bpm": { "type": ["integer", "null"], "minimum": 50, "maximum": 220 }
+      }
+    },
+    "immunisations_administered": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "ifa_tablets_distributed": { "type": ["integer", "null"], "minimum": 0 },
+    "danger_sign_flagged": { "type": "boolean" },
+    "danger_alerts": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/DangerAlertSummary" }
+    },
+    "follow_up_required": { "type": "boolean" },
+    "follow_up_date": { "type": ["string", "null"], "format": "date" },
+    "follow_up_reason": { "type": ["string", "null"] },
+    "raw_transcript_summary": { "type": "string" },
+    "notes": { "type": ["string", "null"] },
+    "read_back_confirmed": { "type": "boolean" },
+    "sync_status": { "type": "string", "enum": ["draft", "pending", "synced", "failed"] },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "required": [
+    "client_draft_id",
+    "asha_worker_id",
+    "beneficiary_id",
+    "visit_type",
+    "visit_date",
+    "danger_sign_flagged",
+    "read_back_confirmed"
+  ],
+  "definitions": {
+    "DangerAlertSummary": {
+      "type": "object",
+      "properties": {
+        "alert_id": { "type": "string" },
+        "category": { "type": "string" },
+        "severity": { "type": "string", "enum": ["CRITICAL", "HIGH", "MODERATE"] },
+        "instruction": { "type": "string" }
+      },
+      "required": ["alert_id", "category", "severity", "instruction"]
+    }
+  }
+}
