@@ -13,6 +13,7 @@ import {
   ChevronDown,
   AlertCircle,
   WifiOff,
+  Database,
 } from 'lucide-react';
 import { AmbientBackground } from '@/components/animations/AmbientBackground';
 import { HealthWave } from '@/components/animations/HealthWave';
@@ -475,8 +476,8 @@ export const HomePage: React.FC<HomePageProps> = ({
               className="mt-6 flex flex-wrap items-center gap-4 text-xs font-semibold text-slate-500"
             >
               <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Works 100% Offline</span>
+                <Database className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Local DB Storage</span>
               </div>
               <span>•</span>
               <div className="flex items-center gap-1.5">
