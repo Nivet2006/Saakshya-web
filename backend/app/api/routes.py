@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from app.conversation.state_machine import InvalidTransitionError
 from app.core.config import get_settings
+from app.core.telemetry import telemetry_registry
 from app.danger_signs.detector import detect_danger_signs, get_referral_message
 from app.healthcare.pipeline import format_danger_alert_contract, session_registry
 from app.services.beneficiaries import SyntheticBeneficiaryDirectory
@@ -242,6 +243,49 @@ async def check_danger_signs(req: DangerSignCheckRequest) -> dict[str, Any]:
         "alerts": alerts,
         "suppressed_matches": list(res.suppressed_context_matches),
     }
+
+
+class ClientPlaybackMetricRequest(BaseModel):
+    schema_version: str = "v1"
+    turn_id: int
+    client_ttfa_ms: float | None = None
+    audio_first_played_epoch_ms: float | None = None
+
+
+@router.get("/api/v1/sessions/{session_id}/metrics")
+async def get_session_metrics(session_id: str) -> Any:
+    tracker = telemetry_registry.get(session_id)
+    if tracker is None:
+        return _error_response(
+            404,
+            "INVALID_STATE_TRANSITION",
+            f"Telemetry for session '{session_id}' not found.",
+            retryable=False,
+        )
+    return tracker.summary()
+
+
+@router.post("/api/v1/sessions/{session_id}/metrics/client-playback")
+async def record_client_playback_metric(
+    session_id: str, req: ClientPlaybackMetricRequest
+) -> dict[str, Any]:
+    tracker = telemetry_registry.get_or_create(session_id)
+    ts = (
+        req.audio_first_played_epoch_ms / 1000.0
+        if req.audio_first_played_epoch_ms is not None
+        else None
+    )
+    tracker.mark_audio_first_played(
+        req.turn_id,
+        ts=ts,
+        client_ttfa_ms=req.client_ttfa_ms,
+    )
+    return tracker.summary()
+
+
+@router.get("/api/v1/metrics/summary")
+async def get_aggregate_metrics_summary() -> dict[str, Any]:
+    return telemetry_registry.aggregate_summary()
 
 
 def get_session_metadata(session_id: str) -> dict[str, Any] | None:

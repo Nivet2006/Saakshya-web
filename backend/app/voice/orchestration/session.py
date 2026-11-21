@@ -27,6 +27,7 @@ from typing import Any
 
 from app.conversation.models import detect_language_from_text
 from app.core.logging import log_event, safe_text_preview
+from app.core.telemetry import SessionTelemetryTracker, telemetry_registry
 from app.voice.interfaces import (
     ChatMessage,
     LLMAdapter,
@@ -88,7 +89,8 @@ class VoiceSessionOrchestrator:
         self._closed = False
         self._pending_utterance_parts: list[str] = []
         self._debounce_task: asyncio.Task[None] | None = None
-        self._turn_debounce_s: float = 0.25
+        self._turn_debounce_s: float = 0.06
+        self.telemetry: SessionTelemetryTracker = telemetry_registry.get_or_create(self.session_id)
 
     def _envelope(self, event_type: str, **payload: Any) -> dict[str, Any]:
         return {
@@ -175,7 +177,9 @@ class VoiceSessionOrchestrator:
             is_final=True,
             language_code=detected_lang,
             utterance_id=f"txt_{uuid.uuid4().hex[:8]}",
+            latency_ms=0.0,
         )
+        self.telemetry.mark_transcript_finalized(stt_latency_ms=0.0)
         await self.emit_event(
             "final_transcript",
             text=ev.text,
@@ -209,6 +213,7 @@ class VoiceSessionOrchestrator:
         await self._tts.cancel_active()
 
         if was_active or trigger in ("client", "vad", "danger_sign"):
+            self.telemetry.barge_in_count += 1
             log_event(
                 logger,
                 "barge_in",
@@ -237,6 +242,8 @@ class VoiceSessionOrchestrator:
         """Interrupt any current speech and immediately speak a high-priority message."""
         turn_id = await self.interrupt(trigger="danger_sign")
         lang = language or self.active_language
+        self.telemetry.start_turn(turn_id, is_greeting=False)
+        self.telemetry.mark_llm_first_token(turn_id)
         await self._set_state("danger_escalation")
         self._response_task = asyncio.create_task(
             self._speak_text_turn(
@@ -248,13 +255,21 @@ class VoiceSessionOrchestrator:
             name=f"urgent-tts-{self.session_id}-{turn_id}",
         )
 
-    async def speak_direct(self, text: str, *, language: str | None = None) -> None:
+    async def speak_direct(
+        self,
+        text: str,
+        *,
+        language: str | None = None,
+        is_greeting: bool = False,
+    ) -> None:
         """Speak a pre-generated assistant reply (used by Phase 2 state machine)."""
         if self._response_task is not None and not self._response_task.done():
             await self.interrupt(trigger="supersede")
         self.active_turn_id += 1
         turn_id = self.active_turn_id
         lang = language or self.active_language
+        self.telemetry.start_turn(turn_id, is_greeting=is_greeting)
+        self.telemetry.mark_llm_first_token(turn_id)
         self.history.append(ChatMessage(role="assistant", content=text))
         self._response_task = asyncio.create_task(
             self._speak_text_turn(
@@ -312,10 +327,12 @@ class VoiceSessionOrchestrator:
             return
 
         if event.event_type == "speech_start":
+            self.telemetry.mark_speech_start()
             await self.emit_event("speech_start", utterance_id=event.utterance_id)
             return
 
         if event.event_type == "speech_end":
+            self.telemetry.mark_speech_end()
             await self.emit_event("speech_end", utterance_id=event.utterance_id)
             return
 
@@ -339,6 +356,7 @@ class VoiceSessionOrchestrator:
                 self.active_language = detected
 
         if event.event_type == "partial":
+            self.telemetry.mark_speech_start()
             # If user is clearly speaking words while TTS is playing (even if local VAD missed it),
             # trigger barge-in when partial text has >= 2 words.
             if self.assistant_speaking and len(event.text.split()) >= 2:
@@ -359,6 +377,7 @@ class VoiceSessionOrchestrator:
             return
 
         if event.event_type == "final":
+            self.telemetry.mark_transcript_finalized(stt_latency_ms=event.latency_ms)
             await self.emit_event(
                 "final_transcript",
                 text=event.text,
@@ -402,6 +421,7 @@ class VoiceSessionOrchestrator:
 
         self.active_turn_id += 1
         turn_id = self.active_turn_id
+        self.telemetry.start_turn(turn_id, is_greeting=False)
         self.history.append(ChatMessage(role="user", content=combined))
         # Keep conversation window bounded for low-latency LLM turns
         if len(self.history) > 16:
@@ -423,6 +443,7 @@ class VoiceSessionOrchestrator:
             if turn_id != self.active_turn_id or self._closed:
                 return
 
+            self.telemetry.mark_llm_first_token(turn_id)
             self.history.append(ChatMessage(role="assistant", content=reply_text))
             await self._speak_text_turn(
                 turn_id=turn_id,
@@ -484,6 +505,8 @@ class VoiceSessionOrchestrator:
                 if turn_id != self.active_turn_id or self._closed:
                     break
                 seq += 1
+                if seq == 1:
+                    self.telemetry.mark_tts_first_chunk(turn_id)
                 total_bytes += len(pcm_chunk)
                 await self.emit_event(
                     "tts_audio_chunk",

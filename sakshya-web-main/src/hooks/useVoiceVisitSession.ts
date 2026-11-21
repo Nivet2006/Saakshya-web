@@ -12,6 +12,7 @@ import {
   BrowserVoiceClient,
   listAudioInputDevices,
   type AudioInputDeviceInfo,
+  type VoiceLatencyMetrics,
 } from '@/lib/voice/voice-client';
 import { dataService } from '@/services/data-service';
 import {
@@ -121,13 +122,29 @@ export function mergeVisitV1IntoDraft(
   };
 }
 
+export type IdentityVerificationStatus =
+  | 'idle'
+  | 'awaiting_confirmation'
+  | 'correcting'
+  | 'candidate_confirmation'
+  | 'verified';
+
 export function useVoiceVisitSession(params: {
   worker: UserProfile;
   language: LanguageCode;
   selectedBeneficiary: Beneficiary | null;
+  beneficiaries?: Beneficiary[];
+  onSelectBeneficiary?: (ben: Beneficiary | null) => void;
   onDataCommitted: (savedVisit: VisitDraft) => void;
 }) {
-  const { worker, language, selectedBeneficiary, onDataCommitted } = params;
+  const {
+    worker,
+    language,
+    selectedBeneficiary,
+    beneficiaries = [],
+    onSelectBeneficiary,
+    onDataCommitted,
+  } = params;
 
   const [interactionState, setInteractionState] = useState<VoiceInteractionState>('idle');
   const [isConnected, setIsConnected] = useState(false);
@@ -160,12 +177,23 @@ export function useVoiceVisitSession(params: {
   const [error, setError] = useState<VoiceSessionError | null>(null);
   const [committedResult, setCommittedResult] = useState<VisitDraft | null>(null);
   const [isPersistencePending, setIsPersistencePending] = useState(false);
+  const [identityVerificationStatus, setIdentityVerificationStatus] =
+    useState<IdentityVerificationStatus>('idle');
+  const [verificationPrompt, setVerificationPrompt] = useState<string | null>(null);
+  const [latencyMetrics, setLatencyMetrics] = useState<VoiceLatencyMetrics | null>(null);
 
   const clientRef = useRef<BrowserVoiceClient | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const draftRef = useRef<VisitDraft | null>(null);
   const alertsRef = useRef<DangerAlert[]>([]);
   const finalLinesRef = useRef<string[]>([]);
+  const beneficiariesRef = useRef<Beneficiary[]>(beneficiaries);
+  const onSelectBeneficiaryRef = useRef(onSelectBeneficiary);
+
+  useEffect(() => {
+    beneficiariesRef.current = beneficiaries;
+    onSelectBeneficiaryRef.current = onSelectBeneficiary;
+  }, [beneficiaries, onSelectBeneficiary]);
 
   useEffect(() => {
     draftRef.current = visitDraft;
@@ -219,6 +247,9 @@ export function useVoiceVisitSession(params: {
     setError(null);
     setCommittedResult(null);
     setIsPersistencePending(false);
+    setIdentityVerificationStatus('idle');
+    setVerificationPrompt(null);
+    setLatencyMetrics(null);
     finalLinesRef.current = [];
   }, []);
 
@@ -226,6 +257,11 @@ export function useVoiceVisitSession(params: {
     setError(null);
     setCommittedResult(null);
     setClarification(null);
+    setIdentityVerificationStatus(
+      selectedBeneficiary ? 'awaiting_confirmation' : 'correcting'
+    );
+    setVerificationPrompt(null);
+    setLatencyMetrics(null);
     finalLinesRef.current = [];
     setTranscriptHistory([]);
     setPartialStable('');
@@ -358,18 +394,63 @@ export function useVoiceVisitSession(params: {
         setIsTtsPaused(false);
       },
       onVisitDraftUpdated: (ev) => {
-        setClarification(null);
-        const merged = mergeVisitV1IntoDraft(draftRef.current, ev.draft, selectedBeneficiary, worker, {
-          missingRequiredFields: ev.missing_required_fields,
-          updatedFields: ev.updated_fields,
-          transcriptSummary: finalLinesRef.current.join(' '),
-          attachedAlerts: alertsRef.current,
-        });
+        const benMissing = ev.missing_required_fields.includes('beneficiary_id');
+        let matchedBeneficiary = selectedBeneficiary;
+        if (ev.draft.beneficiary_id) {
+          const found = beneficiariesRef.current.find(
+            (b) => b.beneficiary_id === ev.draft.beneficiary_id
+          );
+          if (found) {
+            matchedBeneficiary = found;
+            onSelectBeneficiaryRef.current?.(found);
+          }
+          if (!benMissing) {
+            setIdentityVerificationStatus('verified');
+            setVerificationPrompt(null);
+            setClarification(null);
+          } else {
+            setIdentityVerificationStatus((prev) =>
+              prev === 'correcting' || prev === 'candidate_confirmation'
+                ? 'candidate_confirmation'
+                : 'awaiting_confirmation'
+            );
+          }
+        } else if (benMissing) {
+          setIdentityVerificationStatus('correcting');
+        }
+
+        const merged = mergeVisitV1IntoDraft(
+          draftRef.current,
+          ev.draft,
+          matchedBeneficiary,
+          worker,
+          {
+            missingRequiredFields: ev.missing_required_fields,
+            updatedFields: ev.updated_fields,
+            transcriptSummary: finalLinesRef.current.join(' '),
+            attachedAlerts: alertsRef.current,
+          }
+        );
         setVisitDraft(merged);
         saveDraftLocally(merged).catch(() => {});
       },
       onClarificationRequired: (ev) => {
         setClarification(ev);
+        if (ev.field === 'beneficiary_id') {
+          setVerificationPrompt(ev.prompt_text);
+          if (ev.reason === 'missing_required' || (ev.candidates && ev.candidates.length > 1)) {
+            setIdentityVerificationStatus('correcting');
+          } else if (ev.candidates && ev.candidates.length === 1) {
+            setIdentityVerificationStatus((prev) =>
+              prev === 'correcting' || prev === 'candidate_confirmation'
+                ? 'candidate_confirmation'
+                : 'awaiting_confirmation'
+            );
+          }
+        }
+      },
+      onLatencyUpdate: (metrics) => {
+        setLatencyMetrics(metrics);
       },
       onReadBackStarted: (ev) => {
         setRequiresReReadBack(false);
@@ -674,6 +755,9 @@ export function useVoiceVisitSession(params: {
     setError,
     committedResult,
     isPersistencePending,
+    identityVerificationStatus,
+    verificationPrompt,
+    latencyMetrics,
     startVoiceSession,
     stopRecordingSession,
     resetSessionState,

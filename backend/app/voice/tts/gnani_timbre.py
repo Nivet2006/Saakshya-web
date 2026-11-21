@@ -124,6 +124,7 @@ class GnaniTimbreTTSAdapter:
         self._ws: Any = None
         self._ws_lock = asyncio.Lock()
         self._generation = 0
+        self._closed = False
 
     @classmethod
     def from_settings(cls, settings: Settings) -> GnaniTimbreTTSAdapter:
@@ -175,7 +176,7 @@ class GnaniTimbreTTSAdapter:
         log_event(logger, "tts_connected", request_id=request_id, model=self._model)
         return ws
 
-    async def cancel_active(self) -> None:
+    async def cancel_active(self, *, warm_reconnect: bool = True) -> None:
         """Abort any in-flight synthesis immediately by closing the WebSocket."""
         self._generation += 1
         ws = self._ws
@@ -184,9 +185,17 @@ class GnaniTimbreTTSAdapter:
             with contextlib.suppress(Exception):
                 await ws.close()
         log_event(logger, "tts_cancelled_upstream", generation=self._generation)
+        if warm_reconnect and not self._closed:
+            asyncio.create_task(self._warm_reconnect_background())
+
+    async def _warm_reconnect_background(self) -> None:
+        with contextlib.suppress(Exception):
+            if not self._closed:
+                await self.connect()
 
     async def close(self) -> None:
-        await self.cancel_active()
+        self._closed = True
+        await self.cancel_active(warm_reconnect=False)
 
     def _normalize_language(self, language: str | None) -> str:
         lang = (language or self._default_language or "hi-IN").strip()
@@ -282,7 +291,10 @@ class GnaniTimbreTTSAdapter:
                                     ttfb_ms = int((time.perf_counter() - t0) * 1000)
                                 total_bytes += len(pcm)
                                 yield pcm
+                        with contextlib.suppress(Exception):
+                            await asyncio.wait_for(ws.recv(), timeout=0.08)
                         break
+                    break
 
                 elif msg_type == "error":
                     err_msg = data.get("message", "Unknown Gnani TTS error")

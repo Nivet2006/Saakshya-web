@@ -236,6 +236,27 @@ export const SYNTHETIC_BENEFICIARIES: Beneficiary[] = [
     created_at: '2026-10-01T08:00:00Z',
     updated_at: '2026-11-16T09:00:00Z',
   },
+  {
+    id: 'c0000000-0000-0000-0000-000000001056',
+    beneficiary_id: 'BEN-1056',
+    full_name: 'Anitha Sharma',
+    age_years: 24,
+    gender: 'FEMALE',
+    category: 'PREGNANT_WOMAN',
+    village: 'Rampur Demo Ward 1',
+    household_head: 'Vikram Sharma',
+    phone_number: '+91 90000 01056',
+    rch_id: 'RCH-SYNTH-1056',
+    lmp_date: '2026-04-20',
+    edd_date: '2027-01-25',
+    high_risk_status: false,
+    high_risk_reasons: [],
+    assigned_asha_id: 'b0000000-0000-0000-0000-000000000001',
+    phc_id: 'a0000000-0000-0000-0000-000000000001',
+    preferred_language: 'hi-IN',
+    created_at: '2026-09-18T08:00:00Z',
+    updated_at: '2026-11-20T09:00:00Z',
+  },
 ];
 
 export const SYNTHETIC_DANGER_ALERTS: DangerAlert[] = [
