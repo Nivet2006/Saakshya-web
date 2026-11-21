@@ -18,7 +18,19 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import onnxruntime as ort
+
+try:
+    import onnxruntime as ort
+except ImportError as exc:
+    import sys as _sys
+
+    if _sys.platform == "win32":
+        raise ImportError(
+            "Failed to load onnxruntime on Windows. Install the Microsoft Visual C++ "
+            "Redistributable (x64): https://aka.ms/vs/17/release/vc_redist.x64.exe "
+            f"(original error: {exc})"
+        ) from exc
+    raise
 
 from app.voice.interfaces import VADDecision
 

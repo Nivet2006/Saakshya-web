@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import sys
 from typing import Any
@@ -9,8 +10,18 @@ from typing import Any
 from app.core.config import get_settings
 
 
+def ensure_utf8_stdio() -> None:
+    """Reconfigure stdout/stderr to UTF-8 on Windows to prevent cp1252 Indic crashes."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            with contextlib.suppress(Exception):
+                reconfigure(encoding="utf-8", errors="replace")
+
+
 def configure_logging(level: str | None = None) -> None:
     """Configure root Python logging with a clean structured format."""
+    ensure_utf8_stdio()
     settings = get_settings()
     resolved_level = (level or settings.log_level or "INFO").upper()
     logging.basicConfig(
