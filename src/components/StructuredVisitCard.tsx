@@ -1,20 +1,24 @@
 'use client';
 
 import React from 'react';
-import { VisitDraft } from '@/types';
+import { LanguageCode, VisitDraft } from '@/types';
+import { TRANSLATIONS } from '@/lib/translations';
 import { Activity, Heart, Thermometer, ShieldAlert, Calendar, CheckCircle2, Edit3 } from 'lucide-react';
 
 interface StructuredVisitCardProps {
   draft: Partial<VisitDraft>;
   onVoiceCorrectField?: (fieldName: string) => void;
   activeCorrectionField?: string | null;
+  language?: LanguageCode;
 }
 
 export const StructuredVisitCard: React.FC<StructuredVisitCardProps> = ({
   draft,
   onVoiceCorrectField,
   activeCorrectionField,
+  language = 'hi-IN',
 }) => {
+  const t = TRANSLATIONS[language] || TRANSLATIONS['hi-IN'];
   const vitals = draft.vitals || {};
   const hasBP = vitals.blood_pressure_sys && vitals.blood_pressure_dia;
   const isHighBP = hasBP && (vitals.blood_pressure_sys! >= 140 || vitals.blood_pressure_dia! >= 90);
@@ -24,7 +28,7 @@ export const StructuredVisitCard: React.FC<StructuredVisitCardProps> = ({
       <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-3">
         <div className="flex items-center gap-2">
           <Activity className="h-4 w-4 text-brand-600" />
-          <h4 className="font-bold text-slate-800 text-sm">Extracted Visit Card (लाइव ड्राफ्ट)</h4>
+          <h4 className="font-bold text-slate-800 text-sm">{t.extractedVisitCard}</h4>
         </div>
         <span className="font-mono text-[11px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-semibold">
           {draft.visit_type || 'ANC_VISIT'}
@@ -44,13 +48,13 @@ export const StructuredVisitCard: React.FC<StructuredVisitCardProps> = ({
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-slate-500 font-medium">रक्तचाप (BP)</span>
+            <span className="text-slate-500 font-medium">{t.bloodPressure}</span>
             {onVoiceCorrectField && (
               <button
                 type="button"
                 onClick={() => onVoiceCorrectField('blood_pressure')}
                 className="text-slate-400 hover:text-brand-600"
-                title="Correct BP by voice"
+                title={t.correctVoiceTooltip}
               >
                 <Edit3 className="h-3 w-3" />
               </button>
@@ -65,7 +69,7 @@ export const StructuredVisitCard: React.FC<StructuredVisitCardProps> = ({
                 <span className="text-[10px] text-slate-400 font-normal">mmHg</span>
               </>
             ) : (
-              <span className="text-amber-600 italic font-normal">अपेक्षित (Missing)</span>
+              <span className="text-amber-600 italic font-normal">{t.missingField}</span>
             )}
           </div>
         </div>
@@ -79,13 +83,13 @@ export const StructuredVisitCard: React.FC<StructuredVisitCardProps> = ({
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-slate-500 font-medium">वजन (Weight)</span>
+            <span className="text-slate-500 font-medium">{t.weight}</span>
             {onVoiceCorrectField && (
               <button
                 type="button"
                 onClick={() => onVoiceCorrectField('weight_kg')}
                 className="text-slate-400 hover:text-brand-600"
-                title="Correct Weight by voice"
+                title={t.correctVoiceTooltip}
               >
                 <Edit3 className="h-3 w-3" />
               </button>
@@ -105,7 +109,7 @@ export const StructuredVisitCard: React.FC<StructuredVisitCardProps> = ({
         {/* Temperature */}
         <div className="p-2.5 rounded-lg bg-white border border-slate-200">
           <div className="flex items-center justify-between">
-            <span className="text-slate-500 font-medium">तापमान (Temp)</span>
+            <span className="text-slate-500 font-medium">{t.temperature}</span>
           </div>
           <div className="text-sm font-bold mt-1">
             {vitals.temperature_f ? (
@@ -121,7 +125,7 @@ export const StructuredVisitCard: React.FC<StructuredVisitCardProps> = ({
         {/* Fetal Heart Rate */}
         {vitals.fetal_heart_rate_bpm && (
           <div className="p-2.5 rounded-lg bg-white border border-slate-200">
-            <span className="text-slate-500 font-medium">FHR (शिशु धड़कन)</span>
+            <span className="text-slate-500 font-medium">{t.fhr}</span>
             <div className="text-sm font-bold mt-1">
               {vitals.fetal_heart_rate_bpm} <span className="text-[10px] text-slate-400 font-normal">bpm</span>
             </div>
@@ -132,7 +136,7 @@ export const StructuredVisitCard: React.FC<StructuredVisitCardProps> = ({
       {/* Immunisations Status */}
       {draft.immunisations_administered && draft.immunisations_administered.length > 0 && (
         <div className="mt-2 p-2 bg-emerald-50 rounded-lg border border-emerald-200 text-emerald-800">
-          <span className="font-semibold">लगाए गए टीके: </span>
+          <span className="font-semibold">{t.administeredVaccines} </span>
           <span>{draft.immunisations_administered.join(', ')}</span>
         </div>
       )}
@@ -142,7 +146,7 @@ export const StructuredVisitCard: React.FC<StructuredVisitCardProps> = ({
         <div className="mt-2 flex items-center justify-between bg-white p-2 rounded-lg border border-slate-200">
           <div className="flex items-center gap-1.5 text-slate-600">
             <Calendar className="h-3.5 w-3.5 text-brand-600" />
-            <span>अगला फॉलो-अप: <strong className="text-slate-900">{draft.follow_up_date}</strong></span>
+            <span>{t.nextFollowUp} <strong className="text-slate-900">{draft.follow_up_date}</strong></span>
           </div>
           {draft.follow_up_reason && (
             <span className="text-[11px] text-slate-500 truncate max-w-[200px]">{draft.follow_up_reason}</span>
@@ -152,10 +156,10 @@ export const StructuredVisitCard: React.FC<StructuredVisitCardProps> = ({
 
       {/* Read Back State */}
       <div className="mt-3 flex items-center justify-between pt-2 border-t border-slate-200 text-[11px] text-slate-500">
-        <span>रीड-बैक स्थिति (Read-back status):</span>
+        <span>{t.readBackStatus}</span>
         <span className="font-semibold text-emerald-700 flex items-center gap-1">
           <CheckCircle2 className="h-3 w-3" />
-          पुष्टि की गई (Confirmed)
+          {t.confirmed}
         </span>
       </div>
     </div>

@@ -4,6 +4,7 @@ import React from 'react';
 import { UserProfile, LanguageCode } from '@/types';
 import { SYNTHETIC_PROFILES } from '@/lib/mock-data';
 import { OfflineSyncBadge } from '@/components/OfflineSyncBadge';
+import { TRANSLATIONS } from '@/lib/translations';
 import { Globe, UserCheck, ShieldAlert, HeartPulse } from 'lucide-react';
 
 interface NavbarProps {
@@ -25,6 +26,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onTabChange,
   unresolvedAlertCount,
 }) => {
+  const t = TRANSLATIONS[currentLanguage] || TRANSLATIONS['hi-IN'];
+
   return (
     <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -37,14 +40,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-slate-900 tracking-tight text-lg">
-                  साक्ष्या ASHA
+                  {t.appName}
                 </span>
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-brand-100 text-brand-800 hidden sm:inline-block">
-                  Voice Field Register
+                  {t.appSubtitle}
                 </span>
               </div>
               <p className="text-xs text-slate-500 hidden sm:block">
-                National Health Mission · {currentProfile.phc_name}
+                {t.portalSubtitle} · {currentProfile.phc_name}
               </p>
             </div>
           </div>
@@ -59,7 +62,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              ASHA Portal
+              {t.ashaPortal}
             </button>
             <button
               onClick={() => onTabChange('supervisor')}
@@ -69,7 +72,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <span>PHC Supervisor</span>
+              <span>{t.supervisorPortal}</span>
               {unresolvedAlertCount > 0 && (
                 <span className="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold bg-emergency-600 text-white rounded-full">
                   {unresolvedAlertCount}
@@ -80,7 +83,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Right Controls: Language Selector, Sync Badge, Profile Switcher */}
           <div className="flex items-center gap-3">
-            <OfflineSyncBadge />
+            <OfflineSyncBadge language={currentLanguage} />
 
             {/* Language Selector */}
             <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">

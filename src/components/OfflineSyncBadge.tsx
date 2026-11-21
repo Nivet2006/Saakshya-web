@@ -3,13 +3,21 @@
 import React, { useEffect, useState } from 'react';
 import { syncManager } from '@/lib/sync/sync-manager';
 import { getAllLocalDrafts } from '@/lib/offline/indexeddb-store';
+import { LanguageCode } from '@/types';
+import { TRANSLATIONS } from '@/lib/translations';
 import { RefreshCw, Wifi, WifiOff, CheckCircle2, AlertCircle } from 'lucide-react';
 
-export const OfflineSyncBadge: React.FC = () => {
+interface OfflineSyncBadgeProps {
+  language?: LanguageCode;
+}
+
+export const OfflineSyncBadge: React.FC<OfflineSyncBadgeProps> = ({ language = 'hi-IN' }) => {
   const [isOnline, setIsOnline] = useState<boolean>(true);
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [lastSyncResult, setLastSyncResult] = useState<string | null>(null);
+
+  const t = TRANSLATIONS[language] || TRANSLATIONS['hi-IN'];
 
   const checkPending = async () => {
     try {
@@ -54,7 +62,7 @@ export const OfflineSyncBadge: React.FC = () => {
     const res = await syncManager.triggerSync();
     setIsSyncing(false);
     if (res.total > 0) {
-      setLastSyncResult(`Synced ${res.synced}/${res.total} visits`);
+      setLastSyncResult(`${res.synced}/${res.total} ${t.syncedVisits}`);
       setTimeout(() => setLastSyncResult(null), 4000);
     }
   };
@@ -66,17 +74,17 @@ export const OfflineSyncBadge: React.FC = () => {
         className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
           isOnline ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
         }`}
-        title={isOnline ? 'Connected to National Health Network' : 'Offline: Visits are stored safely in local IndexedDB'}
+        title={isOnline ? t.online : t.offline}
       >
         {isOnline ? (
           <>
             <Wifi className="h-3.5 w-3.5 text-emerald-600" />
-            <span className="hidden sm:inline">Online</span>
+            <span className="hidden sm:inline">{t.online}</span>
           </>
         ) : (
           <>
             <WifiOff className="h-3.5 w-3.5 text-amber-600" />
-            <span>Offline</span>
+            <span>{t.offline}</span>
           </>
         )}
       </div>
@@ -90,7 +98,7 @@ export const OfflineSyncBadge: React.FC = () => {
           title="Click to sync pending visits"
         >
           <RefreshCw className={`h-3 w-3 ${isSyncing ? 'animate-spin' : ''}`} />
-          <span>{pendingCount} Pending</span>
+          <span>{pendingCount} {t.pendingSync}</span>
         </button>
       ) : lastSyncResult ? (
         <div className="flex items-center gap-1 text-xs text-emerald-700 font-medium">

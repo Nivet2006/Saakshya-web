@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Beneficiary, FollowUpTask, LanguageCode, UserProfile, VisitDraft } from '@/types';
 import { BeneficiaryCard } from '@/components/BeneficiaryCard';
+import { TRANSLATIONS } from '@/lib/translations';
 import {
   Mic,
   Users,
@@ -38,6 +39,8 @@ export const AshaPortal: React.FC<AshaPortalProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
 
+  const t = TRANSLATIONS[currentLanguage] || TRANSLATIONS['hi-IN'];
+
   const highRiskCount = beneficiaries.filter((b) => b.high_risk_status).length;
   const pendingFollowUps = followUps.filter((f) => f.status === 'PENDING');
 
@@ -60,27 +63,27 @@ export const AshaPortal: React.FC<AshaPortalProps> = ({
         <div className="max-w-xl">
           <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-semibold mb-3">
             <ShieldCheck className="h-4 w-4 text-emerald-200" />
-            <span>आशा कार्यकर्ता पोर्टल · {currentProfile.assigned_area}</span>
+            <span>{t.ashaPortal} · {currentProfile.assigned_area}</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-            नमस्ते, {currentProfile.full_name} जी!
+            {t.greeting}, {currentProfile.full_name}!
           </h1>
           <p className="mt-2 text-sm text-emerald-100 leading-relaxed">
-            गृह भेंट का विवरण बिना टाइप किए बोलकर दर्ज करें। केवल माइक दबाएं और सामान्य भाषा में बोलें।
+            {t.bannerDescription}
           </p>
 
           <div className="mt-4 flex items-center gap-4 text-xs font-semibold text-emerald-100 flex-wrap">
             <span className="flex items-center gap-1.5">
               <Users className="h-4 w-4 text-white" />
-              {beneficiaries.length} कुल लाभार्थी
+              {beneficiaries.length} {t.totalBeneficiaries}
             </span>
             <span className="flex items-center gap-1.5">
               <AlertTriangle className="h-4 w-4 text-amber-300" />
-              {highRiskCount} उच्च जोखिम (High Risk)
+              {highRiskCount} {t.highRisk}
             </span>
             <span className="flex items-center gap-1.5">
               <Calendar className="h-4 w-4 text-emerald-200" />
-              {pendingFollowUps.length} देय फॉलो-अप
+              {pendingFollowUps.length} {t.dueFollowUps}
             </span>
           </div>
         </div>
@@ -89,16 +92,16 @@ export const AshaPortal: React.FC<AshaPortalProps> = ({
         <button
           onClick={() => onStartVoiceVisit()}
           className="w-full md:w-auto px-8 py-5 rounded-2xl bg-white hover:bg-emerald-50 text-brand-800 font-extrabold text-lg shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-3 shrink-0 group border-2 border-emerald-100"
-          aria-label="Start Voice Visit"
+          aria-label={t.startVoiceVisit}
         >
           <div className="w-12 h-12 rounded-full bg-emergency-600 group-hover:bg-emergency-500 text-white flex items-center justify-center shadow-lg animate-pulse-mic">
             <Mic className="h-7 w-7" />
           </div>
           <div className="text-left">
             <span className="block text-xs uppercase text-slate-500 font-bold tracking-wider">
-              तत्काल वॉयस विज़िट
+              {t.instantVoiceVisit}
             </span>
-            <span className="text-slate-900 font-black text-xl">Start Voice Visit</span>
+            <span className="text-slate-900 font-black text-xl">{t.startVoiceVisit}</span>
           </div>
         </button>
       </div>
@@ -110,10 +113,10 @@ export const AshaPortal: React.FC<AshaPortalProps> = ({
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-base font-bold text-slate-900">
-                आवंटित लाभार्थी (Assigned Beneficiaries)
+                {t.assignedBeneficiaries}
               </h2>
               <p className="text-xs text-slate-500">
-                विज़िट शुरू करने के लिए किसी भी लाभार्थी को चुनें
+                {t.selectBeneficiaryHelp}
               </p>
             </div>
 
@@ -122,7 +125,7 @@ export const AshaPortal: React.FC<AshaPortalProps> = ({
               <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="नाम, BEN-ID या गांव खोजें..."
+                placeholder={t.searchPlaceholder}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
@@ -133,12 +136,12 @@ export const AshaPortal: React.FC<AshaPortalProps> = ({
           {/* Category Filter Chips */}
           <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
             {[
-              { id: 'ALL', label: 'सभी (All)' },
-              { id: 'HIGH_RISK', label: '⚠️ उच्च जोखिम (High Risk)' },
-              { id: 'PREGNANT_WOMAN', label: 'गर्भवती (ANC)' },
-              { id: 'INFANT', label: 'शिशु (Infant)' },
-              { id: 'CHILD', label: 'बच्चे (Child)' },
-              { id: 'LACTATING_MOTHER', label: 'धात्री माता (PNC)' },
+              { id: 'ALL', label: t.allFilter },
+              { id: 'HIGH_RISK', label: t.highRiskFilter },
+              { id: 'PREGNANT_WOMAN', label: t.ancFilter },
+              { id: 'INFANT', label: t.infantFilter },
+              { id: 'CHILD', label: t.childFilter },
+              { id: 'LACTATING_MOTHER', label: t.pncFilter },
             ].map((chip) => (
               <button
                 key={chip.id}
@@ -160,12 +163,13 @@ export const AshaPortal: React.FC<AshaPortalProps> = ({
               <BeneficiaryCard
                 key={b.id}
                 beneficiary={b}
+                language={currentLanguage}
                 onStartVisit={(ben) => onStartVoiceVisit(ben)}
               />
             ))}
             {filteredBeneficiaries.length === 0 && (
               <div className="col-span-2 text-center py-10 bg-white rounded-2xl border border-dashed border-slate-200 text-slate-400 text-xs">
-                कोई लाभार्थी नहीं मिला।
+                {t.noBeneficiariesFound}
               </div>
             )}
           </div>
@@ -178,7 +182,7 @@ export const AshaPortal: React.FC<AshaPortalProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-brand-600" />
-                <h3 className="font-bold text-slate-900 text-sm">देय कार्य (Due Follow-ups)</h3>
+                <h3 className="font-bold text-slate-900 text-sm">{t.dueTasks}</h3>
               </div>
               <span className="text-xs font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
                 {pendingFollowUps.length}
@@ -217,13 +221,13 @@ export const AshaPortal: React.FC<AshaPortalProps> = ({
                       {task.task_type}
                     </p>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      {task.beneficiary_name} · नियत तिथि: {task.due_date}
+                      {task.beneficiary_name} · {t.nextFollowUp} {task.due_date}
                     </p>
                   </div>
                 </div>
               ))}
               {followUps.length === 0 && (
-                <p className="text-center py-4 text-slate-400 text-xs">कोई लंबित कार्य नहीं।</p>
+                <p className="text-center py-4 text-slate-400 text-xs">{t.noPendingTasks}</p>
               )}
             </div>
           </div>
@@ -232,7 +236,7 @@ export const AshaPortal: React.FC<AshaPortalProps> = ({
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
             <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
               <FileText className="h-4 w-4 text-brand-600" />
-              <h3 className="font-bold text-slate-900 text-sm">हाल की विज़िट (Recent Visits)</h3>
+              <h3 className="font-bold text-slate-900 text-sm">{t.recentVisits}</h3>
             </div>
 
             <div className="mt-3 space-y-2.5">
@@ -245,12 +249,12 @@ export const AshaPortal: React.FC<AshaPortalProps> = ({
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1 line-clamp-2">
-                    {v.notes || v.raw_transcript_summary || 'सफलतापूर्वक सत्यापित और सहेजा गया।'}
+                    {v.notes || v.raw_transcript_summary || t.confirmed}
                   </p>
                 </div>
               ))}
               {recentVisits.length === 0 && (
-                <p className="text-center py-4 text-slate-400 text-xs">अभी तक कोई विज़िट नहीं हुई।</p>
+                <p className="text-center py-4 text-slate-400 text-xs">{t.noVisitsRecorded}</p>
               )}
             </div>
           </div>

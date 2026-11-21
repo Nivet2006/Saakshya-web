@@ -7,6 +7,7 @@ import { saveDraftLocally } from '@/lib/offline/indexeddb-store';
 import { syncManager } from '@/lib/sync/sync-manager';
 import { DangerAlertBanner } from '@/components/DangerAlertBanner';
 import { StructuredVisitCard } from '@/components/StructuredVisitCard';
+import { TRANSLATIONS } from '@/lib/translations';
 import {
   Mic,
   MicOff,
@@ -45,6 +46,7 @@ export const VoiceSessionModal: React.FC<VoiceSessionModalProps> = ({
   const [activeCorrectionField, setActiveCorrectionField] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const t = TRANSLATIONS[language] || TRANSLATIONS['hi-IN'];
   const voiceClientRef = useRef<BrowserVoiceClient | null>(null);
   const sessionIdRef = useRef<string>(`sess-${Date.now()}`);
 
@@ -151,13 +153,13 @@ export const VoiceSessionModal: React.FC<VoiceSessionModalProps> = ({
         <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="font-bold text-slate-900 text-lg">वॉयस विज़िट सत्र (Voice Visit)</h2>
+              <h2 className="font-bold text-slate-900 text-lg">{t.voiceVisitSession}</h2>
               <span className="text-xs bg-brand-100 text-brand-800 font-semibold px-2 py-0.5 rounded-full">
                 {language}
               </span>
             </div>
             <p className="text-xs text-slate-500">
-              लाभार्थी: <strong className="text-slate-800">{beneficiary.full_name}</strong> ({beneficiary.beneficiary_id})
+              {t.beneficiaryLabel} <strong className="text-slate-800">{beneficiary.full_name}</strong> ({beneficiary.beneficiary_id})
             </p>
           </div>
           <button
@@ -183,7 +185,7 @@ export const VoiceSessionModal: React.FC<VoiceSessionModalProps> = ({
           )}
 
           {/* Urgent Danger Alert Banner (Safety-Critical, High Priority) */}
-          {dangerAlert && <DangerAlertBanner alert={dangerAlert} />}
+          {dangerAlert && <DangerAlertBanner alert={dangerAlert} language={language} />}
 
           {/* Central Microphone & Audio Waveform Visualizer */}
           <div className="bg-gradient-to-b from-slate-900 to-slate-800 rounded-2xl p-5 text-white flex flex-col items-center justify-center shadow-inner">
@@ -230,13 +232,13 @@ export const VoiceSessionModal: React.FC<VoiceSessionModalProps> = ({
                     : 'bg-slate-700 text-slate-300'
                 }`}
               >
-                {status === 'listening' && 'सुन रहे हैं (Listening)... बोलें'}
-                {status === 'speaking' && 'सहायक बोल रहा है (Assistant Speaking)'}
-                {status === 'processing' && 'प्रोसेसिंग (Extracting)...'}
-                {status === 'interrupted' && 'इंटरप्ट (Barge-in detected)'}
-                {status === 'connecting' && 'कनेक्ट हो रहा है...'}
-                {status === 'permission_denied' && 'माइक्रोफ़ोन अनुमति नहीं है'}
-                {status === 'idle' && 'सत्र समाप्त'}
+                {status === 'listening' && t.listeningStatus}
+                {status === 'speaking' && t.speakingStatus}
+                {status === 'processing' && t.processingStatus}
+                {status === 'interrupted' && t.interruptedStatus}
+                {status === 'connecting' && t.connectingStatus}
+                {status === 'permission_denied' && t.permissionDeniedStatus}
+                {status === 'idle' && t.sessionEndedStatus}
               </span>
             </div>
 
@@ -248,7 +250,7 @@ export const VoiceSessionModal: React.FC<VoiceSessionModalProps> = ({
                 className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs transition-colors shadow-sm"
               >
                 <FastForward className="h-3.5 w-3.5" />
-                <span>बीच में बोलें (Barge-in / Interrupt)</span>
+                <span>{t.bargeInButton}</span>
               </button>
             )}
           </div>
@@ -256,7 +258,7 @@ export const VoiceSessionModal: React.FC<VoiceSessionModalProps> = ({
           {/* Live Transcript Stream */}
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs">
             <span className="font-bold text-slate-600 block mb-1">
-              लाइव ट्रांसक्रिप्शन (Prisma STT):
+              {t.liveTranscriptionTitle}
             </span>
             <p className="text-slate-800 min-h-[40px] leading-relaxed">
               {finalTranscript && <span>{finalTranscript} </span>}
@@ -265,7 +267,7 @@ export const VoiceSessionModal: React.FC<VoiceSessionModalProps> = ({
               )}
               {!finalTranscript && !partialTranscript && (
                 <span className="text-slate-400 italic">
-                  कृपया मरीज के लक्षण, रक्तचाप, वजन या टीके बोलें...
+                  {t.transcriptPlaceholder}
                 </span>
               )}
             </p>
@@ -276,7 +278,7 @@ export const VoiceSessionModal: React.FC<VoiceSessionModalProps> = ({
             <div className="bg-brand-50 border border-brand-200 rounded-xl p-3 text-xs text-brand-900">
               <span className="font-bold flex items-center gap-1.5 mb-1 text-brand-700">
                 <Volume2 className="h-3.5 w-3.5 text-brand-600" />
-                सहायक रीड-बैक (Timbre Voice):
+                {t.assistantReadBackTitle}
               </span>
               <p className="font-medium">{assistantText}</p>
             </div>
@@ -287,6 +289,7 @@ export const VoiceSessionModal: React.FC<VoiceSessionModalProps> = ({
             draft={extractedDraft}
             onVoiceCorrectField={handleVoiceCorrection}
             activeCorrectionField={activeCorrectionField}
+            language={language}
           />
         </div>
 
@@ -294,7 +297,7 @@ export const VoiceSessionModal: React.FC<VoiceSessionModalProps> = ({
         <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between gap-3">
           <div className="text-[11px] text-slate-500 flex items-center gap-1">
             <Info className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-            <span>रिकॉर्ड बिना टाइप किए सीधे सहेजा जाएगा।</span>
+            <span>{t.autoSaveNotice}</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -305,7 +308,7 @@ export const VoiceSessionModal: React.FC<VoiceSessionModalProps> = ({
               }}
               className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-200 text-xs font-semibold transition-colors"
             >
-              रद्द करें (Cancel)
+              {t.cancelButton}
             </button>
 
             <button
@@ -316,12 +319,12 @@ export const VoiceSessionModal: React.FC<VoiceSessionModalProps> = ({
               {isSaving ? (
                 <>
                   <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                  <span>सहेज रहे हैं...</span>
+                  <span>{t.savingButton}</span>
                 </>
               ) : (
                 <>
                   <CheckCircle2 className="h-4 w-4" />
-                  <span>पुष्टि करें और सहेजें (Confirm & Save)</span>
+                  <span>{t.confirmAndSaveButton}</span>
                 </>
               )}
             </button>

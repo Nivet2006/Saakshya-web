@@ -32,7 +32,20 @@ export default function HomePage() {
 
   useEffect(() => {
     refreshData();
+    if (typeof window !== 'undefined') {
+      const savedLang = localStorage.getItem('asha_selected_language') as LanguageCode | null;
+      if (savedLang && ['hi-IN', 'kn-IN', 'ta-IN', 'en-IN'].includes(savedLang)) {
+        setCurrentLanguage(savedLang);
+      }
+    }
   }, []);
+
+  const handleLanguageChange = (lang: LanguageCode) => {
+    setCurrentLanguage(lang);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('asha_selected_language', lang);
+    }
+  };
 
   const handleStartVoiceVisit = (beneficiary?: Beneficiary) => {
     // If no beneficiary passed, select the first high-risk or first assigned beneficiary
@@ -71,6 +84,9 @@ export default function HomePage() {
         currentProfile={currentProfile}
         onProfileChange={(p) => {
           setCurrentProfile(p);
+          if (p.preferred_language) {
+            handleLanguageChange(p.preferred_language);
+          }
           if (p.role === 'PHC_SUPERVISOR' || p.role === 'ADMIN') {
             setActiveTab('supervisor');
           } else {
@@ -78,7 +94,7 @@ export default function HomePage() {
           }
         }}
         currentLanguage={currentLanguage}
-        onLanguageChange={(lang) => setCurrentLanguage(lang)}
+        onLanguageChange={handleLanguageChange}
         activeTab={activeTab}
         onTabChange={(tab) => setActiveTab(tab)}
         unresolvedAlertCount={unacknowledgedAlertCount}
@@ -101,6 +117,7 @@ export default function HomePage() {
             currentProfile={currentProfile}
             dangerAlerts={dangerAlerts}
             visits={visits}
+            language={currentLanguage}
             onAcknowledgeAlert={handleAcknowledgeAlert}
           />
         )}

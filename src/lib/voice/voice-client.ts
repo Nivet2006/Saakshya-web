@@ -270,22 +270,56 @@ export class BrowserVoiceClient {
   private fallbackToSimulation() {
     this.callbacks.onStatusChange('listening');
 
-    // Simulate speech detection after 3 seconds
+    // Simulate speech detection after 2.5 seconds
     this.simulatedTimer = setTimeout(() => {
       const isSunita = this.beneficiaryId?.includes('1042') || !this.beneficiaryId;
+      const lang = this.language;
 
-      this.callbacks.onPartialTranscript(
-        isSunita
-          ? 'सुनीता बाई का बीपी 160 बटा 100 है...'
-          : 'बच्चे को बीसीजी का टीका लगाया गया है...'
-      );
+      let partialText = '';
+      let finalText = '';
+      let referralInstruction = '';
+      let assistantWarning = '';
+      let assistantConfirm = '';
 
-      setTimeout(() => {
-        const transcript = isSunita
+      if (lang === 'kn-IN') {
+        partialText = isSunita ? 'ಸುನೀತಾ ಬಾಯಿ ಅವರ ರಕ್ತದೊತ್ತಡ 160/100 ಇದೆ...' : 'ಮಗುವಿಗೆ ಬಿಸಿಜಿ ಲಸಿಕೆ ನೀಡಲಾಗಿದೆ...';
+        finalText = isSunita
+          ? 'ಸುನೀತಾ ಬಾಯಿ ಅವರ ರಕ್ತದೊತ್ತಡ 160/100 ಇದೆ, ತೀವ್ರ ತಲೆನೋವು ಮತ್ತು ದೃಷ್ಟಿ ಮಸುಕಾಗಿದೆ. 32 ವಾರಗಳ ಗರ್ಭಧಾರಣೆ.'
+          : 'ಮಗುವಿನ ತೂಕ 3.4 ಕೆಜಿ, ತಾಪಮಾನ 98.2 ಸಾಮಾನ್ಯವಾಗಿದೆ. ಇಂದು 6 ವಾರಗಳ ಪೆಂಟಾವಲೆಂಟ್ ಲಸಿಕೆ ನೀಡಬೇಕಾಗಿದೆ.';
+        referralInstruction = 'ಅಪಾಯದ ಲಕ್ಷಣ: ತಕ್ಷಣ ಹತ್ತಿರದ ಸಿಎಚ್‌ಸಿ/ಎಫ್‌ಆರ್‌ಯು ಗೆ ರೆಫರ್ ಮಾಡಿ ಮತ್ತು 108 ಆಂಬ್ಯುಲೆನ್ಸ್ ಕರೆಯಿರಿ.';
+        assistantWarning = 'ಅಪಾಯದ ಲಕ್ಷಣ ಪತ್ತೆಯಾಗಿದೆ! ಸುನೀತಾ ಬಾಯಿ ಅವರ ರಕ್ತದೊತ್ತಡ 160/100 ತುಂಬಾ ಹೆಚ್ಚಾಗಿದೆ. ತಕ್ಷಣ 108 ಆಂಬ್ಯುಲೆನ್ಸ್ ಕರೆ ಮಾಡಿ ಸಿಎಚ್‌ಸಿ ಗೆ ಕಳುಹಿಸಿ. ವಿವರಗಳನ್ನು ದೃಢೀಕರಿಸುತ್ತೀರಾ?';
+        assistantConfirm = 'ಮಗುವಿನ ತೂಕ 3.4 ಕೆಜಿ, ತಾಪಮಾನ ಸಾಮಾನ್ಯ. 6 ವಾರಗಳ ಲಸಿಕೆ ಬಾಕಿ ಇದೆ. ದೃಢೀಕರಿಸುತ್ತೀರಾ?';
+      } else if (lang === 'ta-IN') {
+        partialText = isSunita ? 'சுனிதா பாய் அவர்களின் ரத்த அழுத்தம் 160/100 ஆக உள்ளது...' : 'குழந்தைக்கு பிசிஜி தடுப்பூசி போடப்பட்டுள்ளது...';
+        finalText = isSunita
+          ? 'சுனிதா பாய் அவர்களின் ரத்த அழுத்தம் 160/100 ஆக உள்ளது, கடுமையான தலைவலி மற்றும் பார்வை மங்கலாக உள்ளது. 32 வார கர்ப்பம்.'
+          : 'குழந்தையின் எடை 3.4 கிலோ, வெப்பநிலை 98.2 சாதாரணமானது. இன்று 6 வார பென்டாவலண்ட் தடுப்பூசி செலுத்த வேண்டும்.';
+        referralInstruction = 'அதிதீவிர ஆபத்து: உடனடியாக அருகிலுள்ள சி.எச்.சி/எஃப்.ஆர்.யு-க்கு பரிந்துரைத்து 108 ஆம்புலன்ஸை அழைக்கவும்.';
+        assistantWarning = 'ஆபத்து அறிகுறி கண்டறியப்பட்டது! சுனிதா பாய் அவர்களின் ரத்த அழுத்தம் 160/100 மிக அதிகமாக உள்ளது. உடனடியாக 108 ஆம்புலன்ஸ் அழைக்கவும். விவரங்களை உறுதிப்படுத்துகிறீர்களா?';
+        assistantConfirm = 'குழந்தையின் எடை 3.4 கிலோ, வெப்பநிலை இயல்பானது. 6 வார தடுப்பூசிகள் நிலுவையில் உள்ளன. உறுதிப்படுத்துகிறீர்களா?';
+      } else if (lang === 'en-IN') {
+        partialText = isSunita ? 'Sunita Bai blood pressure is 160 over 100...' : 'Infant administered BCG vaccine...';
+        finalText = isSunita
+          ? 'Sunita Bai blood pressure is 160 over 100 mmHg, severe frontal headache and blurred vision reported at 32 weeks gestation.'
+          : 'Infant weight is 3.4 kg, temperature 98.2 normal. Due for 6-week Pentavalent-1 vaccination today.';
+        referralInstruction = 'Critical danger sign: Immediate referral to nearby CHC/FRU required and dispatch 108 ambulance.';
+        assistantWarning = 'Critical danger sign detected! Sunita Bai blood pressure is 160/100 mmHg. Please dispatch 108 ambulance and refer to CHC immediately. Do you confirm?';
+        assistantConfirm = 'Infant weight is 3.4 kg, temperature normal. 6-week vaccines due. Do you confirm?';
+      } else {
+        // Hindi default (hi-IN)
+        partialText = isSunita ? 'सुनीता बाई का बीपी 160 बटा 100 है...' : 'बच्चे को बीसीजी का टीका लगाया गया है...';
+        finalText = isSunita
           ? 'सुनीता बाई का बीपी 160 बटा 100 है, सिर में तेज दर्द है और धुंधला दिख रहा है। 32 सप्ताह की गर्भावस्था है।'
           : 'बच्चे का वजन 3.4 किलो है, तापमान 98.2 सामान्य है। आज 6 सप्ताह का पेंटावेलेंट टीका लगना है।';
+        referralInstruction = 'अत्यधिक खतरे का लक्षण: तुरंत नजदीकी सीएचसी/एफआरयू रेफर करें और 108 एम्बुलेंस बुलाएं।';
+        assistantWarning = 'खतरे का संकेत मिला है! सुनीता बाई का रक्तचाप 160/100 बहुत अधिक है। तुरंत 108 एम्बुलेंस बुलाकर सीएचसी रेफर करें। क्या आप विवरण की पुष्टि करते हैं?';
+        assistantConfirm = 'शिशु का वजन 3.4 किलो, तापमान सामान्य है। 6 सप्ताह के टीके देय हैं। क्या आप पुष्टि करते हैं?';
+      }
 
-        this.callbacks.onFinalTranscript(transcript);
+      this.callbacks.onPartialTranscript(partialText);
+
+      setTimeout(() => {
+        this.callbacks.onFinalTranscript(finalText);
         this.callbacks.onStatusChange('processing');
 
         setTimeout(() => {
@@ -301,7 +335,7 @@ export class BrowserVoiceClient {
               severity: 'CRITICAL',
               category: 'severe_pre_eclampsia_eclampsia',
               symptom_evidence: 'BP 160/100, severe frontal headache, visual disturbance at 32 weeks.',
-              referral_instruction: 'अत्यधिक खतरे का लक्षण: तुरंत नजदीकी सीएचसी/एफआरयू रेफर करें और 108 एम्बुलेंस बुलाएं।',
+              referral_instruction: referralInstruction,
               referral_facility_type: 'CHC',
               referral_status: 'EN_ROUTE',
               supervisor_acknowledged: false,
@@ -323,15 +357,12 @@ export class BrowserVoiceClient {
               follow_up_required: true,
               follow_up_date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
               follow_up_reason: 'Emergency pre-eclampsia referral check',
-              notes: 'Severe headache and blurred vision noted. Advised immediate hospitalization.',
+              notes: finalText,
               read_back_confirmed: true,
             });
 
             this.callbacks.onStatusChange('speaking');
-            this.callbacks.onAssistantText(
-              'खतरे का संकेत मिला है! सुनीता बाई का रक्तचाप 160/100 बहुत अधिक है। तुरंत 108 एम्बुलेंस बुलाकर सीएचसी रेफर करें। क्या आप विवरण की पुष्टि करते हैं?',
-              'danger_warning'
-            );
+            this.callbacks.onAssistantText(assistantWarning, 'danger_warning');
           } else {
             this.callbacks.onVisitExtracted({
               visit_type: 'IMMUNISATION',
@@ -349,10 +380,7 @@ export class BrowserVoiceClient {
             });
 
             this.callbacks.onStatusChange('speaking');
-            this.callbacks.onAssistantText(
-              'शिशु का वजन 3.4 किलो, तापमान सामान्य है। 6 सप्ताह के टीके देय हैं। क्या आप पुष्टि करते हैं?',
-              'reading_back'
-            );
+            this.callbacks.onAssistantText(assistantConfirm, 'reading_back');
           }
         }, 1200);
       }, 1500);
