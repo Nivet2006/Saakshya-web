@@ -6,7 +6,7 @@ import { BeneficiaryDirectoryView } from '@/components/asha/BeneficiaryDirectory
 import { FollowUpQueueView } from '@/components/asha/FollowUpQueueView';
 import { OfflineDraftsView } from '@/components/asha/OfflineDraftsView';
 import { VisitHistoryView } from '@/components/asha/VisitHistoryView';
-import { LoginScreen } from '@/components/auth/LoginScreen';
+import { HomePage as LandingHomePage } from '@/components/landing/HomePage';
 import {
   AppShell,
   type AshaNavSection,
@@ -213,7 +213,7 @@ export default function HomePage() {
   if (!currentProfile) {
     return (
       <LanguageProvider language={currentLanguage} onLanguageChange={handleLanguageChange}>
-        <LoginScreen
+        <LandingHomePage
           selectedLanguage={currentLanguage}
           onLanguageChange={handleLanguageChange}
           onAuthenticated={handleAuthenticated}
