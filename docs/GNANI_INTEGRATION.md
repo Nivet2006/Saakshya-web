@@ -109,3 +109,32 @@ When `x-partials: true` is sent, live `wss://api.vachana.ai/stt/v3/stream` emits
 - **Critical Gap Discovered Live:** `pipecat_gnani.stt.GnaniSTTService` (0.6.1) only inspects `msg_type == "transcript"` and does not send `x-partials: true` or handle `partial_transcript` / `final_transcript` events emitted by `prisma-v3.0` when partials are enabled.
 - Therefore, Agent 1 implements clean, direct async WebSocket adapters (`GnaniPrismaSTTAdapter` and `GnaniTimbreTTSAdapter`) based on the verified `gnani-vachana` wire protocol, while reusing `pipecat`'s bundled ONNX `silero_vad.onnx` model for noise-resilient local VAD and barge-in gating.
 
+---
+
+## 5. Numeric, Context & Streaming Accuracy Findings (Verified Live)
+
+### Contextual Headers: WebSocket Handshake vs REST (`/stt/v3`)
+- Live handshake inspection (`wss://api.vachana.ai/stt/v3/stream`) confirmed that `connected.config` echoes `format`, `language_code`, `language_candidates`, and `bias_word_count` (derived from `x-keywords`), while `speaker_names`, `previous_text`, and `topic` are not echoed in `connected.config`.
+- Mid-session `{"type": "update_settings", "format": ..., "language_code": ...}` ignores `keywords`, `speaker_names`, and `previous_text` (`bias_word_count` remains unchanged).
+- Therefore, `GnaniPrismaSTTAdapter.reconnect_with_context()` closes and reopens the WebSocket cleanly whenever active beneficiary identity changes mid-session, and `GnaniRestSecondaryRecognizer` always sends full `keywords`, `speaker_names`, `previous_text`, and `topic` via `/stt/v3`.
+- A/B probe on `B04_compound_kg_grams` (`"Meena Selvam immunisation visit..."`) showed `with_context` improved sentence segmentation and punctuation on both REST and WS compared to `without_context`.
+
+### Expanded 20-Case Live Benchmark (`backend/scripts/benchmark_prisma_numeric.py`)
+Evaluated on synthetic Gnani Timbre v3.0 speech covering clean decimals, grams/kilograms, dates, spoken IDs, regional phrasing (`en-IN`, `hi-IN`, `kn-IN`, `mr-IN`, `ta-IN`), Hinglish (`"do point aath"`, `"10 days baad"`), Marathi (`"अडीच किलो"`), 14 dB broadband noise, 8 dB non-stationary street babble, 9 dB low-gain clipped mic audio (`gain=0.22`), and adversarial ambiguous/conflicting inputs:
+
+- **REST `format="transcribe"` (primary, avg 751.1 ms):**
+  - Numeric exact-match accuracy: **90.0%** (18/20)
+  - Decimal accuracy: **88.2%** (15/17)
+  - Unit recognition accuracy: **88.2%** (15/17)
+  - Date accuracy: **100.0%** (8/8)
+  - Beneficiary ID accuracy: **90.0%** (9/10)
+  - Numeric omission rate: **0.0%** (0/20)
+  - Incorrect numeric confirmation rate: **10.0%** (2/20)
+- **REST `format="codemix"` (avg 690.5 ms):**
+  - Numeric exact-match accuracy: **85.0%** (17/20), Decimal **82.4%** (14/17), Unit **88.2%** (15/17), Date **100.0%** (8/8), Beneficiary ID **90.0%** (9/10), Numeric omission rate **5.0%** (dropped `11.4` from `"HB 11.4"` under 8 dB street babble), Incorrect confirmation **10.0%**.
+- **Streaming WebSocket `format="transcribe"` (avg 6908.9 ms incl. realtime streaming + endpoint silence):**
+  - Numeric exact-match accuracy: **90.0%** (18/20), Decimal **88.2%**, Unit **88.2%**, Date **100.0%**, Beneficiary ID **90.0%**, Numeric omission **5.0%** (`B16_low_gain_babble_9db` dropped below server VAD at `gain=0.22`), Incorrect confirmation **5.0%** (1/20).
+- **Per-language breakdown (REST `transcribe`):** `en-IN` (n=9) 100.0% across all metrics; `kn-IN` (n=3) 100.0%; `mr-IN` (n=1) 100.0%; `hi-IN` (n=6) 80.0% numeric exact-match (failed on `B16_low_gain_babble_9db`); `ta-IN` (n=1) 0.0% numeric weight exact-match due to Gnani Tamil sandhi merging `"எடை ஆறு, புள்ளி ஐந்து"` into `"எடையாறு, புள்ளி 5"`.
+- **Secondary recognition (`GnaniRestSecondaryRecognizer`):** triggered only on the **2/20 (10%)** ambiguous/conflicting adversarial utterances (`B18`, `B19`), with **526.5 ms** and **913.7 ms** added latency and **0 ms** overhead on the remaining 18 utterances.
+
+
