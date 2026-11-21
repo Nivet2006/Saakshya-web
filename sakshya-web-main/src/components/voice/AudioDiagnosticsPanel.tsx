@@ -69,7 +69,13 @@ export const AudioDiagnosticsPanel: React.FC<AudioDiagnosticsPanelProps> = ({
     }
   }, []);
 
-  // Run local 3-second record & playback loopback test
+  // Run local 40-second record & playback loopback test
+  const stopLocalMicTest = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+  };
+
   const startLocalMicTest = async () => {
     try {
       if (localAudioUrl) {
@@ -106,11 +112,11 @@ export const AudioDiagnosticsPanel: React.FC<AudioDiagnosticsPanelProps> = ({
 
       recorder.start();
       setIsTestingLocalMic(true);
-      setLocalTestCountdown(3);
+      setLocalTestCountdown(40);
 
       const interval = setInterval(() => {
         setLocalTestCountdown((prev) => {
-          if (prev <= 1) {
+          if (prev <= 1 || !mediaRecorderRef.current || mediaRecorderRef.current.state !== 'recording') {
             clearInterval(interval);
             if (recorder.state === 'recording') {
               recorder.stop();
@@ -295,29 +301,35 @@ export const AudioDiagnosticsPanel: React.FC<AudioDiagnosticsPanelProps> = ({
                 Local Microphone Loopback Test (Prove Hardware / Capture)
               </h4>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                Records a 3-second audio clip from your mic and plays it back directly into your speakers. Proves your browser audio capture is working independently of Gnani.
+                Records a 40-second audio clip from your mic and plays it back directly into your speakers. Proves your browser audio capture is working independently of Gnani.
               </p>
             </div>
 
-            <div className="flex items-center gap-3 shrink-0">
-              <button
-                type="button"
-                onClick={startLocalMicTest}
-                disabled={isTestingLocalMic}
-                className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 disabled:bg-slate-700 text-white font-bold text-xs flex items-center gap-2 transition-colors shadow-sm"
-              >
-                {isTestingLocalMic ? (
-                  <>
-                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                    <span>Recording ({localTestCountdown}s)... Speak now!</span>
-                  </>
-                ) : (
-                  <>
-                    <Play className="h-3.5 w-3.5" />
-                    <span>Run 3s Mic Test</span>
-                  </>
-                )}
-              </button>
+            <div className="flex items-center gap-3 shrink-0 flex-wrap">
+              {isTestingLocalMic ? (
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-teal-300 font-mono text-xs flex items-center gap-2">
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin text-teal-400" />
+                    Recording: {localTestCountdown}s remaining
+                  </span>
+                  <button
+                    type="button"
+                    onClick={stopLocalMicTest}
+                    className="px-3 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs transition-colors"
+                  >
+                    Stop &amp; Play Now
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={startLocalMicTest}
+                  className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs flex items-center gap-2 transition-colors shadow-sm"
+                >
+                  <Play className="h-3.5 w-3.5" />
+                  <span>Run 40s Mic Test</span>
+                </button>
+              )}
 
               {localAudioUrl && (
                 <div className="flex items-center gap-2">
