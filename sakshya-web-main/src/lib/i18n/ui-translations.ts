@@ -365,7 +365,7 @@ export interface UiStrings {
 }
 
 export const EN_UI: UiStrings = {
-  appName: 'Sakshya ASHA',
+  appName: 'Saakshya ASHA',
   ashaPortal: 'ASHA Portal',
   supervisorPortal: 'PHC Supervisor',
   voiceApiLive: 'Voice API Live',
@@ -570,7 +570,7 @@ export const EN_UI: UiStrings = {
   liveTranscriptHeading: 'Live Conversation & Transcript',
   liveTranscriptPlaceholder: 'Start recording to see real-time ASHA speech and assistant responses here.',
   ashaWorkerLabel: 'ASHA Worker',
-  sakshyaAssistantLabel: 'Sakshya Assistant',
+  sakshyaAssistantLabel: 'Saakshya Assistant',
   urgentReferralSpeechLabel: 'Urgent Referral Speech',
   listeningLiveLabel: 'Listening Live...',
   processingVisitNotesTitle: 'Processing Visit Notes',

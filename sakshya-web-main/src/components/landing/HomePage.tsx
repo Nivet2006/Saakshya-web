@@ -169,7 +169,7 @@ function AshaCommunityIllustration() {
           {/* Signal / Battery / Status */}
           <circle cx="4" cy="4" r="3" fill="#10B981" />
           <text x="12" y="7" fontSize="7" fontWeight="700" fill="#0F172A" fontFamily="sans-serif">
-            Sakshya Register
+            Saakshya Register
           </text>
 
           {/* Local DB Pill */}
@@ -592,23 +592,23 @@ export const HomePage: React.FC<HomePageProps> = ({
 
       const resolved: UserProfile = dbProfile
         ? {
-            id: dbProfile.id,
-            auth_user_id: data.user.id,
-            worker_code: dbProfile.role === 'PHC_SUPERVISOR' ? 'SUP-PHC-01' : 'ASHA-DEMO-01',
-            role: dbProfile.role,
-            full_name: dbProfile.full_name,
-            phone_number: dbProfile.phone_number,
-            phc_id: dbProfile.phc_id,
-            assigned_area: dbProfile.assigned_area,
-            preferred_language: dbProfile.preferred_language || selectedLanguage,
-            is_active: dbProfile.is_active,
-          }
+          id: dbProfile.id,
+          auth_user_id: data.user.id,
+          worker_code: dbProfile.role === 'PHC_SUPERVISOR' ? 'SUP-PHC-01' : 'ASHA-DEMO-01',
+          role: dbProfile.role,
+          full_name: dbProfile.full_name,
+          phone_number: dbProfile.phone_number,
+          phc_id: dbProfile.phc_id,
+          assigned_area: dbProfile.assigned_area,
+          preferred_language: dbProfile.preferred_language || selectedLanguage,
+          is_active: dbProfile.is_active,
+        }
         : {
-            ...ashaProfile,
-            auth_user_id: data.user.id,
-            full_name: data.user.email || 'Authenticated User',
-            preferred_language: selectedLanguage,
-          };
+          ...ashaProfile,
+          auth_user_id: data.user.id,
+          full_name: data.user.email || 'Authenticated User',
+          preferred_language: selectedLanguage,
+        };
 
       onAuthenticated(resolved);
     } catch (err) {
@@ -631,7 +631,7 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-extrabold text-lg tracking-tight text-slate-900">Sakshya</span>
+              <span className="font-extrabold text-lg tracking-tight text-slate-900">Saakshya</span>
             </div>
             <p className="text-xs text-slate-500 font-medium hidden sm:block">
               Voice field register
@@ -855,17 +855,16 @@ export const HomePage: React.FC<HomePageProps> = ({
                       <div className="flex items-center justify-between mb-3">
                         <span className="text-xs font-bold text-slate-800">Staff Portal Login</span>
                         <span
-                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                            isFirebaseConfigured || isRealSupabaseConfigured
+                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isFirebaseConfigured || isRealSupabaseConfigured
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                               : 'bg-slate-100 text-slate-600 border border-slate-200'
-                          }`}
+                            }`}
                         >
                           {isFirebaseConfigured
                             ? 'Firebase: sakshya-aasha'
                             : isRealSupabaseConfigured
-                            ? 'Supabase Connected'
-                            : 'Local Mock'}
+                              ? 'Supabase Connected'
+                              : 'Local Mock'}
                         </span>
                       </div>
 
@@ -916,7 +915,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
       {/* Footer */}
       <footer className="relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 text-center text-xs text-slate-400">
-        Sakshya · National Health Mission (NHM) Rural Tele-Health System · All demonstration fixtures BEN-1042–BEN-1048 are synthetic.
+        Saakshya · National Health Mission (NHM) Rural Tele-Health System · All demonstration fixtures BEN-1042–BEN-1048 are synthetic.
       </footer>
     </div>
   );

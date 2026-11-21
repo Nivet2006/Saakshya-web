@@ -136,7 +136,7 @@ export interface Translations {
 }
 
 const BASE_EN: Translations = {
-  appName: 'Sakshya ASHA',
+  appName: 'Saakshya ASHA',
   appSubtitle: 'Voice Field Register',
   portalSubtitle: 'National Health Mission',
   ashaPortal: 'ASHA Portal',

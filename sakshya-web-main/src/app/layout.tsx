@@ -10,7 +10,7 @@ const notoSans = Noto_Sans({
 });
 
 export const metadata: Metadata = {
-  title: 'ASHA Voice Field Register | Sakshya Healthcare Platform',
+  title: 'ASHA Voice Field Register | Saakshya Healthcare Platform',
   description:
     'Voice-first multilingual healthcare field register and PHC supervisor command center for ASHA workers.',
 };
