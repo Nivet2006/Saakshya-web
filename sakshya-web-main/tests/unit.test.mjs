@@ -50,8 +50,8 @@ test('shared-contracts mock-events.jsonl has valid v1 lifecycle sequence', () =>
   assert.ok(committed.visit.persistence_record_id);
 });
 
-test('synthetic beneficiaries match Agent 1 BEN-1042..BEN-1048 fixtures', () => {
-  const mockDataSrc = fs.readFileSync(path.join(rootDir, 'src', 'lib', 'mock-data.ts'), 'utf8');
+test('synthetic beneficiaries match Agent 1 BEN-1042..BEN-1048 fixtures in Firestore seed', () => {
+  const seedSrc = fs.readFileSync(path.join(rootDir, 'scripts', 'migrate-firebase.mjs'), 'utf8');
   for (const [id, name] of [
     ['BEN-1042', 'Lakshmi Devi'],
     ['BEN-1043', 'Kavitha Rao'],
@@ -61,9 +61,16 @@ test('synthetic beneficiaries match Agent 1 BEN-1042..BEN-1048 fixtures', () => 
     ['BEN-1047', 'Anita Devi'],
     ['BEN-1048', 'Lakshmi Narayanan'],
   ]) {
-    assert.ok(mockDataSrc.includes(id), `Missing synthetic ID ${id}`);
-    assert.ok(mockDataSrc.includes(name), `Missing synthetic name ${name}`);
+    assert.ok(seedSrc.includes(id), `Missing seeded synthetic ID ${id}`);
+    assert.ok(seedSrc.includes(name), `Missing seeded synthetic name ${name}`);
   }
+
+  // Ensure mock-data.ts does not keep hardcoded beneficiaries
+  const mockDataSrc = fs.readFileSync(path.join(rootDir, 'src', 'lib', 'mock-data.ts'), 'utf8');
+  assert.ok(
+    mockDataSrc.includes('export const SYNTHETIC_BENEFICIARIES: Beneficiary[] = [];'),
+    'mock-data.ts must be empty array since database stores live records'
+  );
 });
 
 test('no service-role secrets leaked into src client components', () => {
@@ -95,3 +102,14 @@ test('supervisor-metrics pure functions exist without hardcoded offset numbers',
   assert.ok(!metricsSrc.includes('visits.length + 12'), 'Must not pad visit count');
 });
 
+test('AddPatientModal provides dual mode (typing & speech) with deterministic parser', () => {
+  const modalSrc = fs.readFileSync(
+    path.join(rootDir, 'src', 'components', 'asha', 'AddPatientModal.tsx'),
+    'utf8'
+  );
+  assert.ok(modalSrc.includes("mode === 'speech'"), 'Must support speech mode');
+  assert.ok(modalSrc.includes("mode === 'type'"), 'Must support type mode');
+  assert.ok(modalSrc.includes('parseSpokenPatientText'), 'Must implement spoken text parser');
+  assert.ok(modalSrc.includes('normalizeIndicDigits'), 'Must support Indic Devanagari numerals');
+  assert.ok(modalSrc.includes('SpeechRecognition'), 'Must integrate Web Speech API');
+});

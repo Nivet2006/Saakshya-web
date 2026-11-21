@@ -32,6 +32,7 @@ const STORAGE_ALERTS_KEY = 'sakshya_alerts_v3';
 const STORAGE_FOLLOWUPS_KEY = 'sakshya_followups_v2';
 const STORAGE_AUDIT_KEY = 'sakshya_audit_v2';
 const STORAGE_CUSTOM_BENEFICIARIES_KEY = 'sakshya_custom_beneficiaries_v1';
+const STORAGE_CACHED_BENEFICIARIES_KEY = 'sakshya_cached_beneficiaries_v2';
 
 class DataService {
   private beneficiaries: Beneficiary[] = [...SYNTHETIC_BENEFICIARIES];
@@ -59,6 +60,20 @@ class DataService {
       if (f) this.followUps = JSON.parse(f);
       const aud = localStorage.getItem(STORAGE_AUDIT_KEY);
       if (aud) this.auditLogs = JSON.parse(aud);
+      const cachedBensRaw = localStorage.getItem(STORAGE_CACHED_BENEFICIARIES_KEY);
+      if (cachedBensRaw) {
+        const cached = JSON.parse(cachedBensRaw) as Beneficiary[];
+        for (const cb of cached) {
+          if (
+            cb?.beneficiary_id &&
+            !this.beneficiaries.some(
+              (b) => b.beneficiary_id.toUpperCase() === cb.beneficiary_id.toUpperCase()
+            )
+          ) {
+            this.beneficiaries.push(cb);
+          }
+        }
+      }
       const customBensRaw = localStorage.getItem(STORAGE_CUSTOM_BENEFICIARIES_KEY);
       if (customBensRaw) {
         const customBens = JSON.parse(customBensRaw) as Beneficiary[];
@@ -120,6 +135,7 @@ class DataService {
       localStorage.setItem(STORAGE_ALERTS_KEY, JSON.stringify(this.dangerAlerts));
       localStorage.setItem(STORAGE_FOLLOWUPS_KEY, JSON.stringify(this.followUps));
       localStorage.setItem(STORAGE_AUDIT_KEY, JSON.stringify(this.auditLogs));
+      localStorage.setItem(STORAGE_CACHED_BENEFICIARIES_KEY, JSON.stringify(this.beneficiaries));
     } catch {
       // ignore storage quota errors
     }

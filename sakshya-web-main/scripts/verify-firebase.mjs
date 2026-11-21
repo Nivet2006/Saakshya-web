@@ -15,21 +15,14 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 async function verify() {
-  console.log('🔍 Reading back from Firebase Firestore...');
-  const facSnap = await getDocs(collection(db, 'facilities'));
-  console.log(`Facilities found (${facSnap.size}):`, facSnap.docs.map(d => d.data().name));
+  console.log('🔍 Checking Firestore live database contents...');
+  const benSnap = await getDocs(collection(db, 'beneficiaries'));
+  console.log(`Beneficiaries in Firestore (${benSnap.size}):`, benSnap.docs.map(d => `${d.data().beneficiary_id}: ${d.data().full_name}`));
 
-  const profSnap = await getDocs(collection(db, 'user_profiles'));
-  console.log(`User profiles found (${profSnap.size}):`, profSnap.docs.map(d => `${d.data().full_name} (${d.data().role})`));
+  const fuSnap = await getDocs(collection(db, 'follow_ups'));
+  console.log(`Follow-ups in Firestore (${fuSnap.size}):`, fuSnap.docs.map(d => d.data().task_type));
 
-  const auditSnap = await getDocs(collection(db, 'audit_logs'));
-  console.log(`Audit logs found (${auditSnap.size}):`, auditSnap.docs.map(d => d.data().action_type));
-
-  console.log('✨ All Firestore read verifications passed successfully!');
   process.exit(0);
 }
 
-verify().catch(err => {
-  console.error('Verification failed:', err);
-  process.exit(1);
-});
+verify().catch(e => { console.error(e); process.exit(1); });
