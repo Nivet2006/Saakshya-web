@@ -7,6 +7,7 @@ and 1C together via clean typed contracts.
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
@@ -119,6 +120,75 @@ def detect_language_from_text(text: str | None, *, fallback: str = "hi-IN") -> s
     ):
         return fallback[:2].lower() + "-IN"
     return normalize_language(fallback)
+
+
+_SWITCH_LANGUAGE_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("hi-IN", ("hindi", "hinglish", "हिंदी", "हिन्दी")),
+    ("en-IN", ("english", "अंग्रेजी", "अंग्रेज़ी", "ஆங்கிலம்", "ಇಂಗ್ಲಿಷ್", "ఇంగ్లీష్")),
+    ("kn-IN", ("kannada", "कन्नड़", "ಕನ್ನಡ")),
+    ("ta-IN", ("tamil", "तमिल", "தமிழ்", "தமிழ")),
+    ("te-IN", ("telugu", "तेलुगु", "తెలుగు")),
+    ("ml-IN", ("malayalam", "मलयालम", "മലയാളം")),
+    ("bn-IN", ("bengali", "bangla", "बंगाली", "বাংলা")),
+    ("mr-IN", ("marathi", "मराठी")),
+    ("gu-IN", ("gujarati", "गुजराती", "ગુજરાતી")),
+    ("pa-IN", ("punjabi", "पंजाबी", "ਪੰਜਾਬੀ")),
+)
+
+_SWITCH_VERB_RE = re.compile(
+    r"(?:"
+    r"switch\s+(?:to|language\s+to)|"
+    r"change\s+(?:language\s+to|to)|"
+    r"speak\s+(?:in|to\s+me\s+in)?|"
+    r"talk\s+(?:in|to\s+me\s+in)?|"
+    r"respond\s+in|reply\s+in|use\s+language|"
+    r"mein\s+(?:baat\s+karo|bolo|boliye|bataye|bataiye)|"
+    r"me\s+(?:baat\s+karo|bolo|boliye)|"
+    r"में\s*(?:बात\s*करो|बोलो|बोलिए|बताइए)|"
+    r"(?:lo|la|il|dalli|nalli|alli)\s*(?:matladu|matladandi|pesu|pesunga|maathadi|heli)|"
+    r"பேசு|பேசவும்|பேசலாம்|"
+    r"మాట్లాడు|మాట్లాడండి|"
+    r"ಮಾತನಾಡಿ|ಹೇಳಿ"
+    r")",
+    re.IGNORECASE,
+)
+
+LANGUAGE_SWITCH_CONFIRMATIONS: dict[str, str] = {
+    "hi-IN": "ठीक है, अब हम हिंदी में बात करेंगे। कृपया आगे की जानकारी बताएं।",
+    "en-IN": "Okay, I have switched to English. Please continue with the visit details.",
+    "kn-IN": "ಸರಿ, ಈಗ ನಾವು ಕನ್ನಡದಲ್ಲಿ ಮಾತನಾಡೋಣ. ದಯವಿಟ್ಟು ಭೇಟಿಯ ವಿವರಗಳನ್ನು ಹೇಳಿ.",
+    "ta-IN": "சரி, இனி நாம் தமிழில் பேசலாம். தயவுசெய்து விவரங்களைச் சொல்லுங்கள்.",
+    "te-IN": "సరే, ఇప్పుడు మనం తెలుగులో మాట్లాడుకుందాం. దయచేసి వివరాలు చెప్పండి.",
+    "ml-IN": "ശരി, ഇനി നമുക്ക് മലയാളത്തിൽ സംസാരിക്കാം. ദയവായി വിവരങ്ങൾ പറയൂ.",
+    "bn-IN": "ঠিক আছে, এখন আমরা বাংলায় কথা বলব। অনুগ্রহ করে ভিজিটের তথ্য বলুন।",
+    "mr-IN": "ठीक आहे, आता आपण मराठीत बोलूया. कृपया भेटीची माहिती सांगा.",
+    "gu-IN": "સારું, હવે આપણે ગુજરાતીમાં વાત કરીશું. કૃપા કરીને મુલાકાતની વિગતો જણાવો.",
+    "pa-IN": "ਠੀਕ ਹੈ, ਹੁਣ ਅਸੀਂ ਪੰਜਾਬੀ ਵਿੱਚ ਗੱਲ ਕਰਾਂਗੇ। ਕਿਰਪਾ ਕਰਕੇ ਵੇਰਵੇ ਦੱਸੋ।",
+}
+
+
+def detect_language_switch_command(text: str | None) -> str | None:
+    """Detect an explicit spoken request to switch conversation language."""
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return None
+    lower = cleaned.lower()
+    # Short direct command like "Tamil please" / "Hindi" / "Switch to Kannada"
+    has_verb = bool(_SWITCH_VERB_RE.search(cleaned))
+    is_short_direct = len(lower.split()) <= 3 and any(
+        cue in lower for cue in ("please", "language", "bhasha", "भाषा", "மொழி", "భాష")
+    )
+    if not has_verb and not is_short_direct:
+        return None
+
+    for lang_code, terms in _SWITCH_LANGUAGE_TERMS:
+        for term in terms:
+            if term.isascii():
+                if re.search(rf"\b{re.escape(term)}\b", lower):
+                    return lang_code
+            elif term in cleaned:
+                return lang_code
+    return None
 
 
 class ConversationState(str, Enum):

@@ -32,7 +32,8 @@ export type AshaNavSection =
   | 'beneficiaries'
   | 'followups'
   | 'history'
-  | 'offline';
+  | 'offline'
+  | 'reports';
 
 export type SupervisorNavSection =
   | 'overview'
@@ -106,6 +107,11 @@ export const AppShell: React.FC<AppShellProps> = ({
       label: ui.navOfflineDrafts,
       icon: <RefreshCw className="h-4 w-4" aria-hidden="true" />,
       badge: offlinePendingCount > 0 ? offlinePendingCount : undefined,
+    },
+    {
+      id: 'reports',
+      label: ui.navReportsAudit,
+      icon: <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />,
     },
   ];
 

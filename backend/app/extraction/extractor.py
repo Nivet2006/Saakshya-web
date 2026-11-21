@@ -15,6 +15,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from app.conversation.models import detect_language_from_text, normalize_language
+from app.extraction.abbreviations import normalize_healthcare_abbreviations
 from app.extraction.dates import (
     AMBIGUOUS_DATE_RE,
     find_date_candidates,
@@ -101,6 +102,13 @@ _VISIT_TYPE_PATTERNS: dict[VisitType, tuple[re.Pattern[str], ...]] = {
             "गर्भ जांच",
             "ಗರ್ಭಿಣಿ",
             "கர்ப்பிணி",
+            "గర్భిణీ",
+            "గర్భవతి",
+            "ഗർഭിണി",
+            "গর্ভবতী",
+            "गर्भधारणा",
+            "ગર્ભવતી",
+            "ਗਰਭਵਤੀ",
         )
     ),
     "PNC": tuple(
@@ -124,6 +132,13 @@ _VISIT_TYPE_PATTERNS: dict[VisitType, tuple[re.Pattern[str], ...]] = {
             "प्रसवोत्तर",
             "ಬಾಣಂತಿ",
             "பிரசவத்திற்கு பிறகு",
+            "ప్రసవం తర్వాత",
+            "బాలింత",
+            "പ്രസവശേഷം",
+            "প্রসবের পর",
+            "प्रसूतीनंतर",
+            "પ્રસૂતિ પછી",
+            "ਜਣੇਪੇ ਤੋਂ ਬਾਅਦ",
         )
     ),
     "Newborn": tuple(
@@ -146,6 +161,13 @@ _VISIT_TYPE_PATTERNS: dict[VisitType, tuple[re.Pattern[str], ...]] = {
             "एचबीएनसी",
             "ನವಜಾತ",
             "பிறந்த குழந்தை",
+            "నవజాత శిశువు",
+            "నవజాత",
+            "നവജാതശിശു",
+            "নবজাতক",
+            "नवजात बाळ",
+            "નવજાત",
+            "ਨਵਜੰਮਿਆ",
         )
     ),
     "Immunisation": tuple(
@@ -162,6 +184,12 @@ _VISIT_TYPE_PATTERNS: dict[VisitType, tuple[re.Pattern[str], ...]] = {
             "टीका विजिट",
             "ಲಸಿಕೆ",
             "தடுப்பூசி",
+            "టీకా",
+            "കുത്തിവയ്പ്പ്",
+            "টিকা",
+            "लसीकरण",
+            "રસીકરણ",
+            "ਟੀਕਾਕਰਨ",
         )
     ),
 }
@@ -471,7 +499,7 @@ class VisitFieldExtractor:
         existing_draft: VisitDraft | None = None,
     ) -> ExtractionResult:
         """Extract only fields grounded in `text`; never guess missing facts."""
-        normalized = _normalize_text(text)
+        normalized = normalize_healthcare_abbreviations(_normalize_text(text))
         if not normalized:
             return ExtractionResult()
         lang = (
@@ -1750,7 +1778,7 @@ class VisitFieldExtractor:
 
         # 1. Height / length in cm
         m_len = re.search(
-            rf"{_LB}(?:height|length|lambai|लंबाई|ಎತ್ತರ|ಉದ್ದ|உயரம்)\s*(?:is|hai|है|=|:|was)?\s*(?P<qty>{_QTY_PHRASE})\s*(?:cm|centimeter|centimeters|सेमी)?{_RB}",
+            rf"{_LB}(?:height|length|lambai|लंबाई|ಎತ್ತರ|ಉದ್ದ|உயரம்|ఎత్తు|ഉയരം|উচ্চতা|उंची|ઊંચાઈ|ਉਚਾਈ)\s*(?:is|hai|है|=|:|was)?\s*(?P<qty>{_QTY_PHRASE})\s*(?:cm|centimeter|centimeters|सेमी)?{_RB}",
             text,
             re.IGNORECASE,
         )
@@ -1798,7 +1826,7 @@ class VisitFieldExtractor:
 
         # 3. Temperature (supports digits and spoken decimal phrases like "99 point 8")
         m_temp = re.search(
-            rf"{_LB}(?:temp|temperature|tapman|तापमान|ಜ್ವರ|ತಾಪಮಾನ|வெப்பநிலை)\s*(?:is|hai|है|=|:)?\s*(?P<qty>{_QTY_PHRASE})\s*(?P<unit>°?\s*[cf]|celsius|fahrenheit|degree|degrees)?{_RB}",
+            rf"{_LB}(?:temp|temperature|tapman|bukhar|jwaram|kaichal|तापमान|बुखार|ಜ್ವರ|ತಾಪಮಾನ|வெப்பநிலை|காய்ச்சல்|జ్వరం|ഉഷ്ണം|പനി|জ্বর|ताप|તાવ|ਬੁਖਾਰ)\s*(?:is|hai|है|=|:)?\s*(?P<qty>{_QTY_PHRASE})\s*(?P<unit>°?\s*[cf]|celsius|fahrenheit|degree|degrees)?{_RB}",
             text,
             re.IGNORECASE,
         )
@@ -1824,7 +1852,7 @@ class VisitFieldExtractor:
 
         # 4. Blood pressure (e.g. "BP 110/70", "BP is 120 by 80")
         m_bp = re.search(
-            rf"{_LB}(?:bp|b\.p\.|blood\s+pressure|रक्तचाप)\s*(?:is|hai|है|=|:)?\s*(?P<sys>\d{{2,3}})\s*(?:/|by|over)\s*(?P<dia>\d{{2,3}}){_RB}",
+            rf"{_LB}(?:bp|b\.p\.|blood\s+pressure|रक्तचाप|రక్తపోటు|ரத்த\s+அழுத்தம்|ರಕ್ತದೊತ್ತಡ)\s*(?:is|hai|है|=|:)?\s*(?P<sys>\d{{2,3}})\s*(?:/|by|over)\s*(?P<dia>\d{{2,3}}){_RB}",
             text,
             re.IGNORECASE,
         )
@@ -1846,7 +1874,7 @@ class VisitFieldExtractor:
 
         # 5. Hemoglobin (Hb)
         m_hb = re.search(
-            rf"{_LB}(?:hb|h\.b\.|hemoglobin|haemoglobin|हीमोग्लोबिन)\s*(?:is|hai|है|=|:)?\s*(?P<qty>{_QTY_PHRASE})\s*(?:g/dl|gm%|grams?)?{_RB}",
+            rf"{_LB}(?:hb|h\.b\.|hemoglobin|haemoglobin|हीमोग्लोबिन|రక్తహీనత|ரத்த\s+சோகை)\s*(?:is|hai|है|=|:)?\s*(?P<qty>{_QTY_PHRASE})\s*(?:g/dl|gm%|grams?)?{_RB}",
             text,
             re.IGNORECASE,
         )
@@ -1868,9 +1896,9 @@ class VisitFieldExtractor:
                 numbers.append({"field": "hemoglobin_g_dl", "value": hb_r, "normalized_decimal": format_decimal_clean(dec_hb), "unit": "g/dL", "source_text": m_hb.group(0).strip(), "status": "confirmed"})
                 covered_spans.append(m_hb.span())
 
-        # 6. Feeding / breastfeeding status
+        # 6. Feeding / breastfeeding status (including EBF abbreviation)
         m_feed = re.search(
-            r"(?:exclusive(?:ly)?\s+breastfeeding|breastfeeding\s+(?:well|poorly|not\s+well|started|regularly|ok|good|fine)|not\s+(?:feeding|breastfeeding)(?:\s+well)?|poor\s+feeding|feeding\s+(?:well|poorly|fine|ok|normal)|स्तनपान\s+(?:ठीक|अच्छा|नहीं)|दूध\s+(?:ठीक\s+से\s+)?पी\s+रहा)",
+            r"(?:exclusive(?:ly)?\s+breastfeeding|\bebf\b|breastfeeding\s+(?:well|poorly|not\s+well|started|regularly|ok|good|fine)|not\s+(?:feeding|breastfeeding)(?:\s+well)?|poor\s+feeding|feeding\s+(?:well|poorly|fine|ok|normal)|स्तनपान\s+(?:ठीक|अच्छा|नहीं)|दूध\s+(?:ठीक\s+से\s+)?पी\s+रहा)",
             text,
             re.IGNORECASE,
         )
@@ -1886,6 +1914,141 @@ class VisitFieldExtractor:
                 )
             )
             covered_spans.append(m_feed.span())
+
+        # 6b. SpO2 (Oxygen saturation %)
+        m_spo2 = re.search(
+            rf"{_LB}(?:spo2|oxygen(?:\s+saturation)?|saturation|ऑक्सीजन)\s*(?:is|hai|है|=|:)?\s*(?P<qty>{_QTY_PHRASE})\s*%?{_RB}",
+            text,
+            re.IGNORECASE,
+        )
+        if m_spo2:
+            dec_sp = parse_decimal_phrase(m_spo2.group("qty"))
+            if dec_sp is not None and Decimal("40") <= dec_sp <= Decimal("100"):
+                sp_r = decimal_to_float(dec_sp, places=1)
+                observations.append(
+                    DynamicObservation(
+                        key="spo2_pct",
+                        label="SpO2 (Oxygen Saturation)",
+                        value=sp_r,
+                        unit="%",
+                        category="measurement",
+                        status="confirmed",
+                        source_text=m_spo2.group(0).strip(),
+                    )
+                )
+                numbers.append({"field": "spo2_pct", "value": sp_r, "normalized_decimal": format_decimal_clean(dec_sp), "unit": "%", "source_text": m_spo2.group(0).strip(), "status": "confirmed"})
+                covered_spans.append(m_spo2.span())
+
+        # 6c. Pulse / Heart rate (PR / HR)
+        m_pr = re.search(
+            rf"{_LB}(?:pr|hr|pulse(?:\s+rate)?|heart\s+rate|dhadkan|naadi|धड़कन|नाड़ी)\s*(?:is|hai|है|=|:)?\s*(?P<qty>{_QTY_PHRASE})\s*(?:bpm|/min)?{_RB}",
+            text,
+            re.IGNORECASE,
+        )
+        if m_pr:
+            dec_pr = parse_decimal_phrase(m_pr.group("qty"))
+            if dec_pr is not None and Decimal("30") <= dec_pr <= Decimal("240"):
+                pr_r = decimal_to_float(dec_pr, places=0)
+                observations.append(
+                    DynamicObservation(
+                        key="pulse_rate_bpm",
+                        label="Pulse / Heart Rate",
+                        value=pr_r,
+                        unit="bpm",
+                        category="measurement",
+                        status="confirmed",
+                        source_text=m_pr.group(0).strip(),
+                    )
+                )
+                numbers.append({"field": "pulse_rate_bpm", "value": pr_r, "normalized_decimal": format_decimal_clean(dec_pr), "unit": "bpm", "source_text": m_pr.group(0).strip(), "status": "confirmed"})
+                covered_spans.append(m_pr.span())
+
+        # 6d. Respiratory rate (RR)
+        m_rr = re.search(
+            rf"{_LB}(?:rr|respiratory\s+rate|breathing\s+rate|saans\s+ki\s+gati|सांस\s+की\s+गति)\s*(?:is|hai|है|=|:)?\s*(?P<qty>{_QTY_PHRASE})\s*(?:/min|breaths)?{_RB}",
+            text,
+            re.IGNORECASE,
+        )
+        if m_rr:
+            dec_rr = parse_decimal_phrase(m_rr.group("qty"))
+            if dec_rr is not None and Decimal("8") <= dec_rr <= Decimal("120"):
+                rr_r = decimal_to_float(dec_rr, places=0)
+                observations.append(
+                    DynamicObservation(
+                        key="respiratory_rate",
+                        label="Respiratory Rate (RR)",
+                        value=rr_r,
+                        unit="/min",
+                        category="measurement",
+                        status="confirmed",
+                        source_text=m_rr.group(0).strip(),
+                    )
+                )
+                numbers.append({"field": "respiratory_rate", "value": rr_r, "normalized_decimal": format_decimal_clean(dec_rr), "unit": "/min", "source_text": m_rr.group(0).strip(), "status": "confirmed"})
+                covered_spans.append(m_rr.span())
+
+        # 6e. Blood sugar (RBS / FBS / Sugar)
+        m_rbs = re.search(
+            rf"{_LB}(?:rbs|blood\s+sugar|sugar|glucose|शुगर|रक्त\s+शर्करा)\s*(?:is|hai|है|=|:)?\s*(?P<qty>{_QTY_PHRASE})\s*(?:mg/dl|mg)?{_RB}",
+            text,
+            re.IGNORECASE,
+        )
+        if m_rbs:
+            dec_rbs = parse_decimal_phrase(m_rbs.group("qty"))
+            if dec_rbs is not None and Decimal("20") <= dec_rbs <= Decimal("600"):
+                rbs_r = decimal_to_float(dec_rbs, places=0)
+                observations.append(
+                    DynamicObservation(
+                        key="blood_sugar_mg_dl",
+                        label="Blood Sugar (RBS)",
+                        value=rbs_r,
+                        unit="mg/dL",
+                        category="measurement",
+                        status="confirmed",
+                        source_text=m_rbs.group(0).strip(),
+                    )
+                )
+                numbers.append({"field": "blood_sugar_mg_dl", "value": rbs_r, "normalized_decimal": format_decimal_clean(dec_rbs), "unit": "mg/dL", "source_text": m_rbs.group(0).strip(), "status": "confirmed"})
+                covered_spans.append(m_rbs.span())
+
+        # 6f. ORS / Zinc diarrhoea treatment
+        m_ors = re.search(
+            r"(?:(?:ors|zinc|ors\s+and\s+zinc|zinc\s+and\s+ors)(?:\s+(?:packet|tablets?|syrup))?\s+(?:given|started|advised|provided)|given\s+(?:ors|zinc|ors\s+and\s+zinc)|ओआरएस\s+(?:दिया|पिलाया|और\s+जिंक))",
+            text,
+            re.IGNORECASE,
+        )
+        if m_ors:
+            observations.append(
+                DynamicObservation(
+                    key="ors_zinc_therapy",
+                    label="ORS / Zinc Therapy",
+                    value=m_ors.group(0).strip(),
+                    category="supplements",
+                    status="confirmed",
+                    source_text=m_ors.group(0).strip(),
+                )
+            )
+            covered_spans.append(m_ors.span())
+
+        # 6g. EDD / LMP pregnancy dates
+        m_edd = re.search(
+            rf"{_LB}(?:edd|expected\s+date\s+of\s+delivery|lmp|last\s+menstrual\s+period)\s*(?:is|hai|है|=|:)?\s*(?P<val>[A-Za-z0-9/\- ]{{4,25}}?)(?=[,.;]|$)",
+            text,
+            re.IGNORECASE,
+        )
+        if m_edd:
+            obs_key = "lmp_date" if "lmp" in m_edd.group(0).lower() or "menstrual" in m_edd.group(0).lower() else "edd_date"
+            observations.append(
+                DynamicObservation(
+                    key=obs_key,
+                    label="LMP Date" if obs_key == "lmp_date" else "Expected Delivery Date (EDD)",
+                    value=m_edd.group("val").strip(),
+                    category="maternal_health",
+                    status="confirmed",
+                    source_text=m_edd.group(0).strip(),
+                )
+            )
+            covered_spans.append(m_edd.span())
 
         # 7. IFA / Calcium supplement adherence
         m_supp = re.search(
@@ -1906,9 +2069,9 @@ class VisitFieldExtractor:
             )
             covered_spans.append(m_supp.span())
 
-        # 8. Umbilical cord / hygiene / skin-to-skin care
+        # 8. Umbilical cord / hygiene / skin-to-skin care / KMC (Kangaroo Mother Care)
         m_care = re.search(
-            r"(?:umbilical\s+cord\s+[^,.]+|cord\s+(?:is\s+)?(?:clean|dry|healthy)|skin[\s-]+to[\s-]+skin\s+care[^,.]*|kangaroo\s+mother\s+care[^,.]*)",
+            r"(?:umbilical\s+cord\s+[^,.]+|cord\s+(?:is\s+)?(?:clean|dry|healthy)|skin[\s-]+to[\s-]+skin\s+care[^,.]*|kangaroo\s+mother\s+care[^,.]*|\bkmc\s+(?:started|given|advised|done|continued)\b|\b(?:started|given|advised)\s+kmc\b|\b(?:vlbw|lbw)\b(?:\s+baby)?)",
             text,
             re.IGNORECASE,
         )

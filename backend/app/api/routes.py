@@ -17,6 +17,7 @@ from app.danger_signs.detector import detect_danger_signs, get_referral_message
 from app.healthcare.pipeline import format_danger_alert_contract, session_registry
 from app.healthcare.risk_engine import assess_clinical_risk
 from app.services.beneficiaries import SyntheticBeneficiaryDirectory
+from app.services.worker_memory import get_worker_memory
 
 router = APIRouter()
 _directory = SyntheticBeneficiaryDirectory()
@@ -347,6 +348,40 @@ async def assess_clinical_risk_endpoint(req: ClinicalRiskRequest) -> dict[str, A
     return {
         "schema_version": "v1",
         "assessment": assessment.model_dump(),
+    }
+
+
+class WorkerCorrectionRequest(BaseModel):
+    schema_version: str = "v1"
+    wrong_phrase: str | None = None
+    corrected_phrase: str | None = None
+    field_name: str | None = None
+
+
+@router.get("/api/v1/workers/{worker_id}/corrections")
+async def get_worker_corrections(worker_id: str) -> dict[str, Any]:
+    summary = get_worker_memory().get_worker_summary(worker_id)
+    return {
+        "schema_version": "v1",
+        **summary,
+    }
+
+
+@router.post("/api/v1/workers/{worker_id}/corrections")
+async def record_worker_correction(
+    worker_id: str, req: WorkerCorrectionRequest
+) -> dict[str, Any]:
+    mem = get_worker_memory()
+    entry = mem.record_correction(
+        worker_id,
+        wrong_phrase=req.wrong_phrase,
+        corrected_phrase=req.corrected_phrase,
+        field_name=req.field_name,
+    )
+    return {
+        "schema_version": "v1",
+        "recorded": entry is not None,
+        "summary": mem.get_worker_summary(worker_id),
     }
 
 

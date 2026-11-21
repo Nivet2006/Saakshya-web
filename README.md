@@ -1,194 +1,323 @@
-# ASHA Voice Field Register — AI Voice & Healthcare Backend (Agent 1)
+# ASHA Voice Field Register (Sakshya)
 
-**Project:** ASHA Voice Field Register (PS1 · Healthcare · 24-Hour Hackathon)  
-**Owner:** Agent 1 — Master Architect & AI Voice/Backend Lead  
-**Status:** Milestone 1 (Live Voice Loop) & Phase 2 (Healthcare Intelligence + `v1` Cross-Agent Contracts) **Verified & Passing**
+Voice-first maternal, newborn, and immunisation home-visit register and emergency referral assistant for **ASHAs (Accredited Social Health Activists)** and **PHC Supervisors** under India's **National Health Mission (NHM)**.
 
-A low-latency, voice-first Python/FastAPI backend that converts an ASHA worker's spoken home-visit notes in Indian languages with natural English code-mixing into structured visit records, spoken read-back confirmations, single-field voice corrections, follow-up actions, and immediate deterministic danger-sign PHC referral escalations — requiring **zero typing**.
+Converts noisy, spoken household-visit notes in Indic languages and natural Indic-English code-mixing into confirmed, schema-validated visit records—with spoken read-back, selective field correction, exact numeric/unit parsing, and immediate deterministic escalation of verified danger signs requiring urgent Primary Health Centre (PHC/FRU) referral.
+
+**Three Integrated Components:**
+1. **Python Voice & Healthcare AI Backend (`backend/`)** — FastAPI WebSocket orchestrator (`Gnani Prisma v3.0` STT, `Gnani Timbre v3.0` TTS, ONNX Silero VAD barge-in, Gemini/Groq LLM adapters, exact-`Decimal` numeric/date extraction, NHM danger-sign & clinical risk engines).
+2. **Next.js Clinical Web Application (`sakshya-web-main/`)** — Bilingual/multilingual ASHA worker & PHC supervisor web workspace with live microphone streaming, Audio Diagnostics, Offline IndexedDB drafts, Printable NHM Reports, and Supabase/Firebase sync.
+3. **Companion Android Mobile App (`../sakshya-app` — *Sakshya ASHA*)** — React Native + Expo Android field app with native 16 kHz `pcm_s16le` hardware `AudioRecord` capture, Push-to-Talk voice workflow, Firebase Firestore + Android Room persistence, and standalone Release APK builds.
 
 ---
 
-## 1. Architecture & Verified Stack
+## 1. Architecture & Voice Pipeline
 
 ```text
-Microphone / Android / CLI (16 kHz, 16-bit LE mono PCM, 32 ms frames)
-  └─► FastAPI WebSocket /ws/voice/{session_id}
-        ├─► Local ONNX Silero VAD + Adaptive RMS Dual-Gate Barge-In
-        ├─► Gnani Prisma v3.0 Streaming STT (wss://api.vachana.ai/stt/v3/stream)
-        │     • indic-auto + 2–4 language candidates + format=codemix + x-partials=true + ASHA x-keywords
-        ├─► Layer 1 Deterministic Danger-Sign Engine (runs on EVERY partial & final)
-        │     • 44 NHM/MoHFW guideline-cited signs, Indic/ASR normalizer, clause negation/history/subject guards
-        │     • Hard-interrupts active TTS immediately -> emits urgent v1 danger_alert -> PHC referral speech
-        ├─► Healthcare Field Extractor (1C) + 9-State Conversation Machine (1B)
-        │     • Synthetic beneficiary directory, weight/date/vaccination normalization, localized read-back,
-        │       single-field correction patch, explicit confirmation gate, Agent 3 persistence-ack separation
-        ├─► Replaceable LLM Adapter (Gemini 3.1 Flash-Lite zero-thinking / Groq optional fallback)
-        └─► Gnani Timbre v3.0 Interruptible Streaming TTS (wss://api.vachana.ai/api/v1/tts)
-              • 16 kHz linear_pcm, WAV header stripping + int16 alignment, socket-reset on barge-in (0 stale audio)
+Mic Audio (16 kHz, mono, pcm_s16le, 512 samples / 1024 B / 32 ms)
+   │  (Web Audio / CLI sounddevice / Android PcmAudioRecorderModule.kt)
+   ▼
+FastAPI Full-Duplex WebSocket (/ws/voice/{session_id})
+   ├──► Dual-Gate ONNX Silero VAD (barge-in >= 192 ms -> prompt tts_cancelled)
+   ├──► Gnani Prisma v3.0 Streaming STT (x-format: transcribe + ITN + context headers)
+   │       ├──► Per-Worker Correction Memory + Abbreviation Expansion
+   │       ├──► Layer 1: Deterministic Multilingual NHM Danger-Sign Engine (44 entries)
+   │       │            └─ Immediate interrupt + danger_alert + urgent PHC referral TTS
+   │       ├──► Exact-Decimal Numeric, Unit, Date & Beneficiary Extraction
+   │       │            └─ Optional Gnani REST Secondary Recognition on uncertain numbers
+   │       └──► 9-State Visit Conversation Machine (Read-back -> Patch -> Confirm-before-save)
+   └──► LLM Adapter (Gemini / Groq fallback) ──► Gnani Timbre v3.0 Streaming TTS ──► Audio Out
 ```
 
-Key design documents:
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — System design, canonical audio format, barge-in architecture
-- [docs/GNANI_INTEGRATION.md](docs/GNANI_INTEGRATION.md) — Live-verified Gnani Prisma v3.0 & Timbre v3.0 protocols
-- [docs/DANGER_SIGN_GUIDELINES.md](docs/DANGER_SIGN_GUIDELINES.md) — Primary-source NHM/MoHFW citations (9 official PDFs)
-- [docs/VOICE_PROTOCOL.md](docs/VOICE_PROTOCOL.md) — Full `v1` WebSocket event & binary PCM framing specification
-- [docs/INTEGRATION_HANDOFF.md](docs/INTEGRATION_HANDOFF.md) — Handoff guide for Agent 2 (Android) and Agent 3 (Web/Supabase)
-- [docs/DECISIONS.md](docs/DECISIONS.md) — Concise architectural decision log
+### Core Capabilities
+
+- **Numeric-Oriented Gnani Prisma v3.0 Configuration:** Uses `prisma-v3.0` with primary `x-format: transcribe` (enabling upstream Inverse Text Normalisation for numbers, weights, and dates), partial + final streaming events, automatic/configured language ID (`hi-IN`, `kn-IN`, `ta-IN`, `en-IN`, `indic-auto`, and extended UI languages), and contextual headers (`x-keywords`, `x-speaker-names`, `x-previous-text`, `x-topic`) plus mid-session `update_settings`.
+- **Dedicated Exact-`Decimal` Extraction & Secondary Recognition (`backend/app/extraction/`):**
+  - Specialized parsers for English, Hindi, Kannada, Tamil, and code-mixed spoken numbers, decimals, grams/kilograms conversion, dates (`dates.py`), beneficiary IDs (`BEN-XXXX`), and repeated spoken self-corrections (`numbers.py`, `extractor.py`) while preserving original spoken evidence alongside normalized values.
+  - Healthcare abbreviation expansion (`abbreviations.py`: `ANC`, `PNC`, `HBNC`, `BP`, `Hb`, `SpO2`, `KMC`, `ORS`, `IFA`, `PHC`, `FRU`, etc.).
+  - Optional secondary re-evaluation (`secondary_recognition.py` via `GnaniRestSecondaryRecognizer` in `codemix` mode) on retained utterance audio when critical numbers look uncertain or inconsistent, plus configurable `MANDATORY_NUMERIC_CONFIRMATION` read-back.
+- **Safety-Critical NHM Danger-Sign Engine (`backend/app/danger_signs/`) & Risk Stratification (`backend/app/healthcare/risk_engine.py`):**
+  - 44 catalog entries grounded in official MoHFW/NHSRC protocols with source, section, and page mappings.
+  - Handles negation, historical context, and third-person mentions; interrupts ongoing read-back immediately upon verified detection, sets `danger_sign_flagged=true`, emits urgent `danger_alert` events, and triggers immediate PHC referral speech without diagnosing or prescribing.
+  - Deterministic clinical risk stratification across Pregnant Mother (`ANC`/`PNC`), Child (`Newborn`/`Infant`), Adult, and Elderly lifecycles (`POST /api/v1/clinical/assess-risk`).
+- **Per-Worker Correction Memory (`backend/app/services/worker_memory.py`):** JSON-persisted per-worker correction store (`GET/POST /api/v1/workers/{worker_id}/corrections`) that applies learned ASR fixes deterministically and feeds frequent corrections back into STT keyterm biasing.
+- **Read-Back & Confirm-Before-Save State Machine (`backend/app/conversation/state_machine.py`):** Reads extracted fields aloud, supports targeted voice corrections (*"No, weight is 2.8 kilo"* — patching only the targeted field), re-reads changes, and never marks an unconfirmed draft as committed.
 
 ---
 
-## 2. Quick Setup & Running Locally
+## 2. Repository Layout
 
-### Prerequisites
-- Python `3.12` (tested on Python `3.12.7` / macOS `arm64`)
-- `uv` (or `pip`)
-- Valid credentials in root `.env` (never commit `.env`; `.gitignore` ignores `.env` and `.env.*` while keeping `.env.example` trackable)
+```text
+sakshya-web/
+├── start_demo.py                         # Cross-platform one-click backend + frontend launcher
+├── start_demo.command / start_demo.bat   # macOS double-click & Windows batch launchers
+├── .env.example                          # Environment variable template (no real secrets)
+├── backend/
+│   ├── requirements.txt                  # Pinned Python 3.12 dependencies
+│   ├── cli_client.py                     # Minimal local microphone/playback CLI test client
+│   ├── app/
+│   │   ├── main.py                       # FastAPI entrypoint
+│   │   ├── api/                          # REST routes (routes.py) & WebSocket handler (ws.py)
+│   │   ├── conversation/                 # 9-state conversation machine & draft models
+│   │   ├── core/                         # Config (env aliases + contextual STT options), logging, telemetry
+│   │   ├── danger_signs/                 # 44-entry NHM catalog, normalizer & deterministic detector
+│   │   ├── extraction/                   # numbers.py, dates.py, abbreviations.py, extractor.py,
+│   │   │                                 # secondary_recognition.py, metrics.py, models.py
+│   │   ├── healthcare/                   # Orchestration pipeline & deterministic clinical risk_engine.py
+│   │   ├── services/                     # Synthetic beneficiary directory & worker_memory.py
+│   │   └── voice/                        # Gnani Prisma STT, Gnani Timbre TTS, Gemini/Groq LLM, Silero ONNX VAD
+│   ├── scripts/
+│   │   ├── benchmark_prisma_numeric.py   # Live Transcribe vs Code-Mix 7-metric numeric benchmark
+│   │   └── test_live_stt.py              # Live Gnani Prisma STT diagnostic probe
+│   └── tests/                            # 16 unit/integration/live verification test files
+├── sakshya-web-main/                     # Next.js 14 Clinical Web Application
+│   ├── package.json
+│   └── src/components/
+│       ├── asha/                         # Home, Directory, Follow-ups, History, Offline, Reports, AddPatient
+│       ├── supervisor/                   # Supervisor Overview/Alerts, Workers/Register, Analytics/Reports
+│       └── voice/                        # Basic & Advanced Visit Views, Recorder, AudioDiagnosticsPanel
+├── shared-contracts/                     # Versioned v1 JSON Schemas, OpenAPI spec & mock JSONL events
+├── docs/                                 # Architecture, Gnani integration, Android Room schema, NHM citations
+└── firebase.json / firestore.rules       # Firebase hosting & Firestore configuration
 
-### Installation
-```bash
-# 1. Create root .env from template if you don't already have one
-cp -n .env.example .env
-# Edit .env locally and populate GNANI_API_KEY and GEMINI_API_KEY
-
-# 2. Create isolated virtual environment & install pinned dependencies
-uv venv backend/.venv --python 3.12
-uv pip install --python backend/.venv/bin/python -r backend/requirements.txt
+../sakshya-app/                           # Sibling repository: Sakshya ASHA Android Mobile App (React Native + Expo)
 ```
 
-### Start the FastAPI Backend
+---
+
+## 3. Quick Start (Backend + Next.js Web)
+
+### Option A: One-Click Local Launcher (Recommended)
+
+`start_demo.py` validates prerequisites (`python3 >= 3.11`, `node`, `npm`), initializes `.env` and `sakshya-web-main/.env.local` if missing, sets up `backend/.venv` and `node_modules`, starts FastAPI (`http://localhost:8000`) and Next.js (`http://localhost:3000`), and opens the app in your browser:
+
+```bash
+# macOS / Linux
+python3 start_demo.py
+
+# macOS Finder double-click
+./start_demo.command
+
+# Windows
+start_demo.bat
+
+# Useful flags
+python3 start_demo.py --check-only   # Verify environment and health without launching UI
+python3 start_demo.py --no-browser   # Start servers in terminal without opening browser
+python3 start_demo.py --with-cli     # Also open the terminal CLI voice client alongside Web UI
+```
+
+### Option B: Manual Backend Setup
+
+> Do **not** run `git init` or commit secrets. Copy `.env.example` to root `.env` and fill in your own provider credentials.
+
+```bash
+python3 -m venv backend/.venv
+source backend/.venv/bin/activate
+pip install --upgrade pip
+pip install -r backend/requirements.txt
+
+cd backend
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Verify health:
+```bash
+curl -s http://localhost:8000/health
+```
+
+Run the terminal CLI voice harness (in another terminal with `backend/.venv` activated):
 ```bash
 cd backend
-.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+python cli_client.py --language indic-auto
 ```
 
-Verify readiness:
+### Option C: Manual Next.js Web Setup
+
 ```bash
-curl http://127.0.0.1:8000/health
-```
-
-### Run the Local CLI Voice / WAV / Barge-In Test Harness
-```bash
-# List audio devices
-backend/.venv/bin/python backend/cli_client.py --list-devices
-
-# Stream live microphone audio (recommend headphones to prevent speaker echo)
-backend/.venv/bin/python backend/cli_client.py --server ws://127.0.0.1:8000 --language indic-auto
-
-# Repeatable WAV replay + mid-TTS barge-in test
-backend/.venv/bin/python backend/cli_client.py --wav /path/to/visit.wav --barge-in-wav /path/to/correction.wav
+cd sakshya-web-main
+npm install
+npm run dev
+# Opens on http://localhost:3000 (Next.js 14.2.18 + React 18.3.1)
 ```
 
 ---
 
-## 3. Gnani Configuration & Environment Variable Reference
+## 4. Environment Configuration (Root `.env`)
 
-All configuration is loaded from the repository root `.env` via `backend/app/core/config.py`. Never hardcode secrets.
+All credentials live strictly in root `.env` (git-ignored) and are consumed by the backend—never embedded in web or mobile bundles. Key variables defined in `backend/app/core/config.py` and `.env.example`:
 
-| Variable | Default / Example | Purpose |
+| Group | Variables | Purpose / Default |
 |---|---|---|
-| `GNANI_API_KEY` | *(secret, required for live)* | Gnani Vachana API key (`X-API-Key-ID`) |
-| `GNANI_STT_MODEL` | `prisma-v3.0` | Gnani streaming STT model (`x-model`) |
-| `GNANI_TTS_MODEL` | `timbre-v3.0` | Gnani streaming TTS model |
-| `GNANI_STT_WS_URL` | `wss://api.vachana.ai/stt/v3/stream` | Optional Prisma v3.0 WS URL override |
-| `GNANI_TTS_WS_URL` | `wss://api.vachana.ai/api/v1/tts` | Optional Timbre v3.0 WS URL override |
-| `GNANI_TTS_VOICE` | `Shivani` | Multilingual Timbre v3.0 voice (34 voices supported across all 10 Indic languages) |
-| `LLM_PROVIDER` | `gemini` | Primary LLM provider (`gemini` or `groq`) |
-| `LLM_MODEL` | `gemini-3.1-flash-lite` | Low-latency LLM model (auto-fallback: `gemini-3.5-flash-lite`) |
-| `GEMINI_API_KEY` | *(secret, required for live)* | Google Gemini API key |
-| `GROQ_API_KEY` | *(optional secret)* | Optional Groq API key if using `LLM_PROVIDER=groq` |
-| `DEFAULT_LANGUAGE` | `hi-IN` | Default spoken language (`hi-IN`, `en-IN`, `kn-IN`, `ta-IN`) |
-| `SUPPORTED_LANGUAGES` | `hi-IN,kn-IN,ta-IN,en-IN` | Language candidates (2–4 BCP-47 codes passed to Prisma `indic-auto`) |
-| `AUDIO_SAMPLE_RATE` | `16000` | Canonical PCM_S16LE sample rate (Hz) |
-| `VAD_THRESHOLD` | `0.6` | ONNX Silero VAD speech threshold |
-| `BARGE_IN_MIN_SPEECH_MS` | `300` | Sustained dual-gate speech required to trigger barge-in |
-| `ENDPOINT_SILENCE_MS` | `700` | Trailing silence before finalizing a speech segment |
-| `LOG_REDACT_PHI` | `true` | Redacts raw health speech from backend logs by default |
-| `SYNTHETIC_DATA_ONLY` | `true` | Enforces synthetic beneficiary directory (`BEN-1042`..`BEN-1048`) |
-| `DANGER_SIGN_PARTIAL_MATCHING` | `true` | Runs Layer-1 danger-sign detector on streaming partials as well as finals |
+| **Gnani STT & TTS** | `GNANI_API_KEY`, `GNANI_STT_MODEL`, `GNANI_TTS_MODEL`, `GNANI_STT_WS_URL`, `GNANI_TTS_WS_URL`, `GNANI_TTS_VOICE`, `GNANI_STT_FORMAT`, `GNANI_STT_ENABLE_PARTIALS`, `GNANI_STT_SECONDARY_ENABLED`, `GNANI_STT_SECONDARY_FORMAT`, `MANDATORY_NUMERIC_CONFIRMATION` | `prisma-v3.0` (default `transcribe`), `timbre-v3.0` (`Shivani`), optional secondary `codemix` re-check & forced numeric confirmation |
+| **LLM Providers** | `LLM_PROVIDER`, `LLM_MODEL`, `GEMINI_API_KEY`, `LLM_FALLBACK_PROVIDER`, `LLM_FALLBACK_MODEL`, `GROQ_API_KEY`, `OPENROUTER_API_KEY` | Primary `gemini` + fallback `groq` (`llama-3.1-8b-instant`) |
+| **Server & Audio** | `APP_ENV`, `HOST`, `PORT`, `LOG_LEVEL`, `LOG_REDACT_PHI`, `DEFAULT_LANGUAGE`, `SUPPORTED_LANGUAGES`, `AUDIO_SAMPLE_RATE`, `VAD_THRESHOLD`, `BARGE_IN_VAD_THRESHOLD`, `BARGE_IN_MIN_SPEECH_MS`, `ENDPOINT_SILENCE_MS` | `16000 Hz`, `LOG_REDACT_PHI=true`, dual-gate barge-in (`0.70` prob / `192 ms` speech) |
+| **Safety & Storage** | `SYNTHETIC_DATA_ONLY`, `DANGER_SIGN_PARTIAL_MATCHING`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Synthetic-only guard & optional server-side Supabase integration |
 
 ---
 
-## 4. Official Cited Danger-Sign Guidelines (Summary)
+## 5. Next.js Web Application (`sakshya-web-main/`)
 
-All 44 canonical danger signs in `backend/app/danger_signs/catalog.py` are grounded strictly in official Indian public-health publications (see [docs/DANGER_SIGN_GUIDELINES.md](docs/DANGER_SIGN_GUIDELINES.md) for the exhaustive citation matrix, thresholds, and inter-guideline notes):
+Built with **Next.js `14.2.18`**, **React `18.3.1`**, **Tailwind CSS**, **Framer Motion**, **Supabase SSR**, **Firebase JS SDK**, and **IndexedDB (`idb`)**:
 
-| Phase | Representative Verified Danger Signs & Thresholds | Official Primary Source & Section/Page |
-|---|---|---|
-| **Antenatal (ANC)** | Any vaginal bleeding during pregnancy | NHSRC/MoHFW *ASHA Module 6* Part B §4, p. 30; *MCP Card 2018* p. 4; *Integrated ASHA Module 2026* §B.4.3, pp. 177, 183 |
-| **Antenatal (ANC)** | Convulsions / fits / loss of consciousness | *ASHA Module 6* Part B §4, p. 31; *MCP Card 2018* p. 4; *Dakshata Operational Guidelines 2015* SCC CHECK-1, p. 14 |
-| **Antenatal (ANC)** | Severe headache, blurred vision, swelling of face/hands, high BP (`>= 140/90 mmHg`) | *Integrated ASHA Module 2026* §B.4.3, pp. 177, 182–183; *ASHA Module 6* Part B §4, pp. 30–31; *Dakshata* CHECK-1, p. 14 |
-| **Antenatal (ANC)** | Reduced/absent fetal movements; severe abdominal pain; high fever (`> 100°F` / `>= 38°C`); breathlessness; severe anaemia (`Hb < 7.0 g/dl`); PROM | *ASHA Module 6* Part B §4, pp. 30–32; *MCP Guidebook 2018* §6, p. 15; *Integrated ASHA Module 2026* pp. 177, 183 |
-| **Intranatal** | Fresh bleeding; prolonged labour (`> 12h`); prolonged PROM; meconium-stained fluid; cord/limb prolapse; retained placenta (`> 30 min`) | *ASHA Module 6* Part B §4, p. 33 & Annexe 4, p. 66; *Dakshata* SCC CHECK-1–CHECK-3, pp. 14–16 |
-| **Postnatal (PNC)** | Excessive postpartum bleeding (`> 5 pads/day`, `> 2–3 pads in 20–30 min`, `>= 500 ml`); puerperal sepsis (foul lochia + fever); fever `> 102°F`; fits/psychosis | *ASHA Module 6* Part C, pp. 49–53 & Annexe 5, p. 68; *Integrated ASHA Module 2026* §B.4.6, pp. 191–194; *Dakshata* CHECK-3–4, pp. 16–17 |
-| **Newborn (HBNC)** | Birth asphyxia (no/weak cry); fast breathing (`>= 60/min`); severe chest indrawing; unable to feed/suck; lethargy/unconsciousness; convulsions | MoHFW *Revised HBNC Operational Guidelines 2014* Annexures 1b–1c, pp. 17–22 & p. 28; *ASHA Module 7* Part A & Annexe 1, pp. 20–31, 69–72 |
-| **Newborn (HBNC)** | Fever (`> 99°F` / `37.2°C`); hypothermia (`< 95.9°F` / `35.5°C` or cold to touch); umbilical redness/pus; jaundice Day 1 or yellow palms/soles; `> 10` skin pustules; newborn bleeding; VLBW (`< 1.8 kg`) | *HBNC Operational Guidelines 2014* Annexures 1b–1c, pp. 17–22; *ASHA Module 6* Annexe 6, p. 71; *MCP Card 2018* pp. 5, 28; *Integrated ASHA Module 2026* §B.1.10, p. 46 |
-
-**Safety Guardrail:** On any verified match, the assistant interrupts active speech immediately, flags `danger_sign_flagged = true`, emits a high-priority `v1` `danger_alert`, and speaks **referral instructions only** directing the worker to the nearest PHC immediately. It never diagnoses, prescribes medicine, recommends home remedies, or invents PHC locations/phone numbers. Layer 2 LLM can never suppress a Layer 1 positive match.
+- **ASHA Worker Workspace:**
+  - **Basic Mode & Advanced Mode** sharing one live voice session and `VisitDraft` state (`BasicVisitView.tsx`, `AdvancedVisitView.tsx`, `VoiceVisitWorkspace.tsx`).
+  - **Live Audio Diagnostics (`AudioDiagnosticsPanel.tsx`):** Mic device selector, input level & 16-band waveform meter, WebSocket connection diagnostics, and text-utterance injection for noisy/headless testing.
+  - **Field Operations Views:** Home dashboard (`AshaHomeView.tsx`), Beneficiary Directory + Voice/Modal Patient Onboarding (`BeneficiaryDirectoryView.tsx`), Follow-up Queue (`FollowUpQueueView.tsx`), Offline Sync Queue (`OfflineDraftsView.tsx`), Visit History (`VisitHistoryView.tsx`), and NHM Form/Register/Referral Slip Generation (`AshaReportsView.tsx`).
+- **PHC Supervisor Portal:** Real-time active danger alerts & escalation (`SupervisorOverviewAndAlerts.tsx`), ASHA directory & visit register (`SupervisorWorkersAndRegister.tsx`), and programme analytics & CSV exports (`SupervisorAnalyticsAndReports.tsx`).
 
 ---
 
-## 5. Verification & Test Results (2026-11-21)
+## 6. Companion Android Mobile App (`Sakshya ASHA` — `../sakshya-app`)
 
-Tests are strictly labelled by execution mode:
+The field mobile client lives in the sibling repository **`sakshya-app`** (`React Native 0.74.5 + Expo 51`), engineered to pair directly with this FastAPI Voice Backend over REST and `/ws/voice`.
 
-| Test Suite | Label | Command | Result |
-|---|---|---|---|
-| Milestone 1 Unit/Mocked Tests (`test_voice_unit.py`) | **UNIT / MOCKED** | `backend/.venv/bin/pytest backend/tests/test_voice_unit.py -v` | **5/5 PASSED** (WAV strip/int16 align, Prisma parser, ONNX Silero VAD noise rejection, barge-in 0-stale-audio, REST endpoints) |
-| Danger-Sign Engine (`test_danger_signs.py`) | **UNIT** | `backend/.venv/bin/pytest backend/tests/test_danger_signs.py -v` | **129/129 PASSED** (44 catalog signs, Hindi/Hinglish/Kannada/Tamil/ASR noise, negation/history/other-person, multi-clause, Layer-2 non-suppression) |
-| Conversation State Machine (`test_conversation_sm.py`) | **UNIT** | `backend/.venv/bin/pytest backend/tests/test_conversation_sm.py -v` | **42/42 PASSED** (9 states, clarification, corrections, explicit confirmation gate, failed persistence ack, danger interrupt from all states, 4-language read-back) |
-| Healthcare Field Extractor (`test_extraction.py`) | **UNIT** | `backend/.venv/bin/pytest backend/tests/test_extraction.py -v` | **70/70 PASSED** (synthetic beneficiary lookup/disambiguation, weight/fractions/grams/ASR artifacts, completed vs due vaccines, IST dates, correction patches) |
-| Shared `v1` Contracts (`test_contracts.py`) | **UNIT / CONTRACT** | `backend/.venv/bin/pytest backend/tests/test_contracts.py -v` | **8/8 PASSED** (Draft 2020-12 JSON Schemas, OpenAPI 3.1.0, 46-line `mock-events.jsonl`, FastAPI REST parity) |
-| Integrated Healthcare E2E (`test_healthcare_e2e.py`) | **INTEGRATION (MOCKED TRANSPORT)** | `backend/.venv/bin/pytest backend/tests/test_healthcare_e2e.py -v` | **3/3 PASSED** (Full ANC -> correction -> confirm -> persistence-ack -> committed, partial-transcript danger interrupt, 100% strict `v1` schema parity) |
-| Golden Evaluation Harness (`test_eval_golden.py`) | **GOLDEN EVAL (1E)** | `backend/.venv/bin/pytest backend/tests/test_eval_golden.py -v -s` | **1/1 PASSED** — **Danger Recall: 100.0% (15/15)**, **Specificity: 100.0% (8/8)**, **Per-Field Extraction Accuracy: 100.0% across all 6 fields** |
-| **LIVE Milestone 1 Voice Loop** (`test_milestone1_live.py`) | **LIVE-GNANI + LIVE-GEMINI (0 MOCKS)** | `backend/.venv/bin/python -u backend/tests/test_milestone1_live.py` | **PASSED** — 14 live Prisma partials, 2 live finals (215–332ms), live Gemini replies, live Timbre TTS (TTFB 628ms), live ONNX VAD mid-TTS barge-in with **0 stale chunks**, live context resumption |
-| **LIVE Phase 2 Healthcare + Danger Escalation** (`test_phase2_live.py`) | **LIVE-GNANI (0 MOCKS)** | `backend/.venv/bin/python -u backend/tests/test_phase2_live.py` | **PASSED** — Live Prisma Hinglish ANC extraction (`BEN-1042`, `52.0 kg`, `TT` due) -> live Timbre read-back -> live mid-readback interruption with vaginal bleeding danger sign -> immediate `ANC_VAGINAL_BLEEDING` alert + live Timbre urgent PHC referral (TTFB 162ms), **100% `v1` schema valid** |
+### Mobile Highlights
 
-Run all 258 automated tests at once:
+- **Basic & Advanced Voice Visit Modes:** Streamlined Basic Mode (11 Indic language options: `hi-IN`, `kn-IN`, `ta-IN`, `te-IN`, `ml-IN`, `bn-IN`, `mr-IN`, `gu-IN`, `pa-IN`, `en-IN`, `indic-auto`, live waveform, spoken read-back, selective voice correction, confirm-before-save) and detailed Advanced Clinical Form Mode sharing the same `VisitDraft` state.
+- **Native 16 kHz `pcm_s16le` Audio Pipeline (`PcmAudioRecorderModule.kt`):** Uses Android's `AudioRecord` (`16000 Hz`, mono, `ENCODING_PCM_16BIT`) with hardware `AcousticEchoCanceler` and `NoiseSuppressor` plus `PcmAudioLevel` waveform events—avoiding lossy compressed MediaRecorder formats.
+- **Push-to-Talk Workflow & Resilient WebSockets:** Press-and-hold mic orb (`onPressIn` -> `onPressOut`) streams PCM frames + trailing silence; supports **Hold to Speak / Resume** across turns and **Finish & Categorise** (plus an optional **Hands-Free** toggle), 12s heartbeat pings, 15s handshake timeout, and automatic reconnect.
+- **Voice-Enabled Patient Registration (`AddPatientModal.tsx`):** Per-field inline mic dictation (`Full Name`, `Age`, `Village / Ward`, `Household Head`, `Phone`, `EDD`) and a guided multi-field voice intake flow (`patient-voice-intake.ts`).
+- **Firebase Firestore & Android Room Persistence (Zero Sample Data):** Reads/writes `beneficiaries`, `visits`, `danger_alerts`, `follow_up_tasks`, and `audit_logs` to Firebase Firestore (`sakshya-aasha`) with `onSnapshot` subscriptions, `AsyncStorage` offline draft queuing, and local Android Room `2.6.1` entities, DAOs, `AppDatabase`, and `MIGRATION_1_2` matching `docs/ANDROID_DB_SCHEMA_AND_MIGRATIONS.md`.
+- **PHC Supervisor & Urgent Alert Banner:** High-contrast danger banner with haptic feedback, NHM citations, spoken referral guidance, and one-tap `108` ambulance dialing.
+
+### Mobile Backend Endpoints & Project Structure (`../sakshya-app`)
+
+```text
+sakshya-app/
+├── App.tsx / app.json / eas.json
+├── scripts/build-apk.sh                    # Builds standalone Release APK (builds/sakshya-asha-release.apk)
+├── android/app/
+│   ├── google-services.json                # Firebase Android app config (org.nhm.sakshya.asha)
+│   └── src/main/java/
+│       ├── org/nhm/sakshya/asha/
+│       │   ├── ApiConfig.kt                # Production Railway REST & WSS endpoints
+│       │   ├── MainApplication.kt          # Initializes FirebaseApp, AppDatabase, PcmAudioRecorderPackage
+│       │   └── PcmAudioRecorderModule.kt   # Native 16 kHz pcm_s16le AudioRecord capture
+│       └── com/sakshya/asha/data/local/    # Room entities, DAOs, converters, MIGRATION_1_2, AppDatabase
+└── src/
+    ├── components/{asha,auth,layout,supervisor,voice}/
+    ├── hooks/useVoiceVisitSession.ts
+    ├── lib/{api,firebase,i18n,offline,sync,voice}/
+    └── services/data-service.ts
+```
+
+- **Production Railway Endpoints configured for mobile (`ApiConfig.kt` / `.env`):**
+  - **REST API:** `https://sakshya-web-production.up.railway.app`
+  - **Voice WebSocket:** `wss://sakshya-web-production.up.railway.app/ws/voice`
+  - **Overrideable at runtime** from the mobile Login Screen's Voice Backend URL settings; all Gnani/Gemini API keys stay strictly on the FastAPI backend.
+
+### Mobile Quick Verification & APK Install (`../sakshya-app`)
+
 ```bash
-backend/.venv/bin/pytest backend/tests/ -q
+cd ../sakshya-app
+npm install --legacy-peer-deps
+./ralph/verify.sh            # Secret scan, TypeScript, ESLint, Jest unit & live backend contract tests
+npm run build:apk            # Produces builds/sakshya-asha-release.apk (66 MB)
+adb install -r builds/sakshya-asha-release.apk
 ```
 
 ---
 
-## 6. Shared Integration Contracts (Agents 2 & 3)
+## 7. Backend API Endpoints & Shared Contracts (`v1`)
 
-Published under `shared-contracts/` (version `v1`, technology-independent, zero Gnani payload exposure):
-- [shared-contracts/openapi.json](shared-contracts/openapi.json) — REST API (`GET /health`, `POST /api/v1/sessions`, `GET /api/v1/beneficiaries`, `GET /api/v1/sessions/{session_id}/visit`, `POST /api/v1/sessions/{session_id}/persistence-ack`, `POST /api/v1/danger-signs/check`)
-- [shared-contracts/visit.schema.json](shared-contracts/visit.schema.json) — Structured visit record (`draft` / `confirmed` / `committed`)
-- [shared-contracts/danger-alert.schema.json](shared-contracts/danger-alert.schema.json) — Urgent danger-sign alert event
-- [shared-contracts/voice-events.schema.json](shared-contracts/voice-events.schema.json) — All 8 client->server and 23 server->client WebSocket events
-- [shared-contracts/mock-events.jsonl](shared-contracts/mock-events.jsonl) — 46-event synthetic session replay for immediate offline client development
+### REST & WebSocket Endpoints (`backend/app/api/`)
 
-Ownership boundaries respected: Agent 1 owns `backend/`, `shared-contracts/`, and backend/protocol docs; Agent 2 owns Android/Kotlin/Compose; Agent 3 owns Next.js and all Supabase tables, migrations, auth, and RLS.
+| Method & Path | Purpose |
+|---|---|
+| `GET /health` | Service health, Gnani/LLM readiness flags, active sessions count |
+| `POST /api/v1/sessions` | Create a configured voice session (`language`, `beneficiary_id`, `worker_id`) |
+| `GET /api/v1/beneficiaries` / `POST /api/v1/beneficiaries` | Search synthetic beneficiary directory or register a synthetic beneficiary |
+| `GET /api/v1/sessions/{session_id}/visit` | Retrieve current structured `VisitDraft` and confirmation state |
+| `POST /api/v1/sessions/{session_id}/persistence-ack` | Record client database persistence acknowledgment (`visit_id`) |
+| `POST /api/v1/danger-signs/check` | Direct deterministic danger-sign text evaluation |
+| `POST /api/v1/clinical/assess-risk` | Rule-based NHM clinical risk engine assessment (`Critical` / `High` / `Medium` / `Low`) |
+| `GET / POST /api/v1/workers/{worker_id}/corrections` | Inspect or add per-worker ASR phrase corrections |
+| `GET /api/v1/sessions/{session_id}/metrics` | Session latency/TTFA and extraction telemetry |
+| `POST /api/v1/sessions/{session_id}/metrics/client-playback` | Report client playback timing (`ttfa` end-to-end instrumentation) |
+| `GET /api/v1/metrics/summary` | Aggregate latency/telemetry summary |
+| `WS /ws/voice/{session_id}` | Full-duplex `16 kHz` `pcm_s16le` audio stream & `v1` JSON control/clinical events |
 
----
+### Published Contracts & Documentation
 
-## 7. Manual End-to-End Testing Checklist
-
-- [ ] Start backend (`uvicorn app.main:app --port 8000`) and confirm `GET /health` returns `"live_credentials_configured": true`.
-- [ ] Run `cli_client.py --list-devices` and connect with headphones + microphone (`cli_client.py --language indic-auto`).
-- [ ] **Routine Hinglish ANC Visit:** Speak *"Today I visited Lakshmi, ANC checkup done, weight 52 kilo, TT injection pending hai, IFA goli regularly nahi le rahi, next visit 25 November."* Verify live partials, final transcript, and spoken read-back.
-- [ ] **Mid-Readback Barge-In & Single-Field Correction:** Interrupt the assistant while it is reading back by saying *"No, next visit is 28 November."* Verify assistant audio stops immediately, only `next_visit_date` updates to `2026-11-28`, all other fields remain intact, and the corrected record is re-read.
-- [ ] **Explicit Confirmation:** Say *"Yes"* / *"Haan, confirm karo"*. Verify `visit_confirmed` and `persistence_requested` emit (record does not claim `committed` until persistence ack arrives).
-- [ ] **Noisy Background Test:** Play household/street noise in background during TTS playback; verify transient noise does not continuously trigger false barge-in.
-- [ ] **Immediate Danger-Sign Escalation:** Start a new session for `BEN-1044` (or say *"Kavitha newborn baby, chest indrawing ho raha hai"*). Verify immediate interruption, `danger_alert` (`danger_sign_flagged=true`, `priority="urgent"`), urgent PHC referral speech, and alert preservation if visit notes continue.
-- [ ] **Negation Guard Test:** Say *"Sunita ANC checkup, weight 56 kilo, koi bleeding nahi hai"*. Verify NO false danger alert triggers.
-
----
-
-## 8. 3-Minute Live Hackathon Demo Script
-
-1. **0:00–0:30 — Setup & Live Health:** Show `GET /health` (`prisma-v3.0`, `timbre-v3.0`, `gemini-3.1-flash-lite`, `synthetic_data_only: true`) and connect CLI/Android client to `/ws/voice/{session_id}`.
-2. **0:30–1:20 — Zero-Typing Hinglish ANC Visit + Live Partials:** Speak Lakshmi's code-mixed ANC visit note with ambient household audio. Point out live streaming partials, `BEN-1042` resolution, `52.0 kg` extraction, `TT` due vs completed separation, IFA follow-up action, and natural spoken read-back.
-3. **1:20–1:55 — Live Mid-Speech Barge-In & Single-Field Correction:** Interrupt the read-back mid-sentence: *"Nahi, next visit 28 November hai."* Highlight instant TTS cancellation (0 stale audio), surgical single-field patch preserving weight/TT/IFA, re-read, and explicit *"Haan, confirm karo"* confirmation.
-4. **1:55–2:40 — Safety-Critical Deterministic Danger-Sign Interrupt:** Report a newborn danger sign in Hinglish (*"Baby ka chest indrawing ho raha hai aur doodh nahi pee raha"*). Show instant Layer-1 escalation interrupting speech, `danger_alert` event with exact NHM HBNC 2014 p. 22 citation, urgent PHC referral speech (no diagnosis/prescription), and alert persistence across the session.
-5. **2:40–3:00 — Cross-Agent Contracts & Evaluation Proof:** Highlight `shared-contracts/` (`v1` JSON Schemas + OpenAPI + 46-event `mock-events.jsonl` for Android & Supabase teams) and the Golden Eval Harness (**100% danger-sign recall**, **100% per-field accuracy**, **258 passing tests + 2 live Gnani E2E passes**).
+- **JSON Schemas & OpenAPI:** [`shared-contracts/openapi.json`](shared-contracts/openapi.json), [`shared-contracts/visit.schema.json`](shared-contracts/visit.schema.json), [`shared-contracts/danger-alert.schema.json`](shared-contracts/danger-alert.schema.json), [`shared-contracts/voice-events.schema.json`](shared-contracts/voice-events.schema.json), [`shared-contracts/mock-events.jsonl`](shared-contracts/mock-events.jsonl)
+- **Technical Specs:**
+  - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — System design and audio framing guarantees
+  - [`docs/VOICE_PROTOCOL.md`](docs/VOICE_PROTOCOL.md) — `v1` WebSocket event catalog
+  - [`docs/GNANI_INTEGRATION.md`](docs/GNANI_INTEGRATION.md) — Verified Gnani Prisma v3.0 & Timbre v3.0 headers, formats, and capabilities
+  - [`docs/ANDROID_DB_SCHEMA_AND_MIGRATIONS.md`](docs/ANDROID_DB_SCHEMA_AND_MIGRATIONS.md) — Kotlin Room entities, `YYYY-MM-DD` IST calendar vs UTC ISO-8601 policy, `MIGRATION_1_2`
+  - [`docs/AUDIO_PIPELINE_NOTES.md`](docs/AUDIO_PIPELINE_NOTES.md) — PyPI compatibility matrix & macOS/Bluetooth audio guidance
+  - [`docs/INTEGRATION_HANDOFF.md`](docs/INTEGRATION_HANDOFF.md) — Cross-agent API/schema handoff notes
 
 ---
 
-## 9. Known Limitations
+## 8. Verified NHM / MoHFW Danger-Sign Citations
 
-- **Bluetooth HFP on macOS:** Using AirPods simultaneously as mic + speaker forces macOS Bluetooth into HFP mode; use wired headphones or MacBook Air mic + headphones for cleanest local barge-in tests.
-- **In-memory session store:** Agent 1 maintains active session state in memory for the 24-hour demo; durable storage, auth, and RLS are owned by Agent 3 (Supabase) via the `persistence_requested` / `persistence-ack` handshake.
-- **Age-stratified IMNCI breathing thresholds (>2 months):** Newborn HBNC thresholds (`>= 60/min`) are active by default; older-infant age-bracketed IMNCI cutoffs (`>= 50/min` for 2–12m, `>= 40/min` for 1–5y) are documented in `docs/DANGER_SIGN_GUIDELINES.md` and can be parameterized when beneficiary DOB/age-in-months is supplied by Agent 3.
-- **Spoken number words in Kannada/Tamil:** Unicode digits and English/Hindi/Hinglish spoken number words/fractions are normalized deterministically; Kannada/Tamil spelled-out number words rely on upstream Prisma ITN/digit normalization.
+All **44 catalog entries** in `backend/app/danger_signs/catalog.py` trace directly to verified primary-source Government of India (MoHFW / NHSRC / NHM) publications documented in [`docs/DANGER_SIGN_GUIDELINES.md`](docs/DANGER_SIGN_GUIDELINES.md):
+
+| Citation Key | Official Document Title & Authority | Verified Clinical Scope |
+|---|---|---|
+| **MOD6** | *ASHA Module 6: Skills that Save Lives* (NHSRC / MoHFW) | ANC bleeding/pre-eclampsia (pp. 30–32), labour complications (pp. 33, 66), PPH & puerperal sepsis (`> 5 pads/day`, `> 100°F`, pp. 39, 70), HBNC newborn sepsis & hypothermia (pp. 43–44, 59, 68–71) |
+| **MOD7** | *ASHA Module 7: Skills that Save Lives — Focus on Child Health and Nutrition* (NHSRC / MoHFW) | IMNCI general danger signs & ARI `< 2 months` (pp. 20–31, 37), preterm/asphyxia/tetanus (pp. 49–56), maternal PPH/sepsis & newborn sepsis criteria (Annexe 1, pp. 69–72) |
+| **HBNC-2014** | *Home Based Newborn Care: Operational Guidelines (Revised 2014)* (MoHFW) | Revised 8-criterion neonatal sepsis rule: **any 1 sign -> immediate diagnosis, pre-referral dose & SNCU referral** (`RR > 60/min`, hypothermia `< 95.9°F / 35.5°C`, Annexure 1b–1c pp. 16–22, 28) |
+| **MCP-CARD / MCP-GB** | *Mother and Child Protection Card & Guidebook (2018)* (MoHFW & MWCD) | Antenatal/Postnatal red-flag symptoms (PDF pp. 3–5, 28) and Guidebook danger signs (§5–9, pp. 12–24) |
+| **INT-ASHA-2026** | *Integrated Training Module for ASHA (2026) — Part B* (NHSRC / MoHFW) | Maternal danger signs, DFMR, severe anemia `Hb < 7.0 g/dl`, postpartum psychosis / Tele-MANAS `14416`, immediate PPH `> 2–3 pads in 20–30 min` (§B.1.6–B.1.11 pp. 27–53; §B.4.2–B.4.7 pp. 171–194) |
+| **DAKSHATA** | *Dakshata Safe Childbirth Checklist (SCC) Operational Guidelines (Apr 2015)* (MoHFW) | Facility referral cutoffs: `BP >= 140/90` or `>= 160/110`, temp `>= 38°C`, `PPH >= 500 ml` or 1 pad `< 5 min`, newborn temp `< 36°C`, `RR > 60` or `< 30/min` (Annexure 1, pp. 14–17) |
+| **HBYC / SUMAN-2020** | *HBYC Handbook (3–15 mo)* & *SUMAN Guidelines (2020)* (MoHFW) | Older-infant tachypnoea (`>= 50/min` for 2–12 mo; `>= 40/min` for 12 mo–5 yr, §5.4 pp. 51–54) and facility guarantee / ASHA primary-informant reporting |
+
+> **Clinical Safety Guardrail:** The assistant strictly supports early recognition and **immediate referral to PHC/FRU/CHC/SNCU/DH**—it never diagnoses conditions, prescribes medicines, suggests home remedies for acute danger signs, or claims danger has been ruled out.
+
+---
+
+## 9. Verification, Tests & Benchmarks
+
+### Offline Unit & Contract Test Suite (`UNIT` / `INTEGRATION-MOCK`)
+
+Run all offline backend suites (excluding live external API scripts):
+
+```bash
+cd backend
+.venv/bin/pytest -q --ignore=tests/test_milestone1_live.py --ignore=tests/test_phase2_live.py
+```
+
+- **Last verified run:** **`369 passed in 63.35s`** across `backend/tests/`:
+  - `test_contracts.py` (OpenAPI & `v1` JSON Schema conformance)
+  - `test_danger_signs.py` & `test_risk_engine.py` (NHM danger-sign detection, negation/historical context, clinical risk stratification)
+  - `test_extraction.py`, `test_numeric_extraction_and_metrics.py`, `test_multilingual_abbreviations_and_learning.py` (Indic/English decimals, units, dates, IDs, self-corrections, abbreviations, worker memory)
+  - `test_conversation_sm.py`, `test_continuous_editing_workflow.py`, `test_healthcare_e2e.py` (state machine, targeted patching, confirm-before-save)
+  - `test_voice_unit.py`, `test_identity_and_ttfa.py`, `test_remediation_suite.py`, `test_eval_golden.py`, `test_windows_compat.py`
+
+### Live Provider Verification & Numeric Benchmarking (`LIVE-GNANI` + `LIVE-GEMINI`)
+
+Requires live `GNANI_API_KEY` and `GEMINI_API_KEY` in root `.env`:
+
+```bash
+cd backend
+
+# Milestone 1 live voice loop + mid-playback barge-in verification
+.venv/bin/python tests/test_milestone1_live.py
+
+# Phase 2 live healthcare extraction + urgent danger-sign read-back interruption
+.venv/bin/python tests/test_phase2_live.py
+
+# Live Gnani Prisma v3.0 Transcribe vs Code-Mix 7-metric numeric benchmark
+.venv/bin/python scripts/benchmark_prisma_numeric.py
+```
+
+---
+
+## 10. Manual End-to-End Check & Known Limitations
+
+### 3-Minute Demo / Manual Field Check
+
+1. Launch with `python3 start_demo.py` (or open the companion Android APK pointed at the backend URL).
+2. Select beneficiary **`BEN-1042`** (synthetic record) and speak a mixed-language note: *"Mother Rekha Devi ka weight fifty two point five kilo hai, TT injection due hai, next visit after seven days."*
+3. Verify partial + final transcription, structured `VisitDraft` extraction (`52.5 kg`, `TT`, calculated IST date), and spoken Timbre read-back.
+4. Interrupt read-back mid-sentence (barge-in): *"Nahi, weight 53.2 kilo hai."* Verify immediate TTS cancellation (`tts_cancelled`), targeted `weight_kg` patch preserving `vaccinations_due` and `next_visit_date`, and re-read before saying *"Haan, save kar do"*.
+5. Test emergency escalation: *"Baby is not feeding and has fast breathing / mother ko heavy bleeding ho rahi hai."* Verify immediate read-back interruption, urgent danger-alert UI banner, `danger_sign_flagged=true`, and spoken PHC referral guidance.
+
+### Known Scope & Limitations
+
+- **Clinical & Data Boundary:** All patient/beneficiary directories and demo scripts use **synthetic test records only** (`SYNTHETIC_DATA_ONLY=true`). Emergency routing prompts immediate transport to the nearest PHC/FRU/CHC/SNCU without fabricating local hospital phone numbers or driving directions.
+- **Secondary Numeric Recognition Latency/Cost:** Re-evaluating ambiguous utterances via `GnaniRestSecondaryRecognizer` (`GNANI_STT_SECONDARY_ENABLED=true`) triggers only when numeric uncertainty/inconsistency heuristics fire, avoiding duplicate calls on clean utterances.
+- **Bluetooth HFP Acoustic Echo on Desktop:** On macOS laptops without hardware AEC, speaker output can loop into the built-in mic during barge-in tests; use wired/Bluetooth headphones with the laptop mic or the Android native `AcousticEchoCanceler` pipeline for acoustic barge-in testing.

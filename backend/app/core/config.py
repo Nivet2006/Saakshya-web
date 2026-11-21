@@ -66,6 +66,22 @@ ASHA_CORE_KEYWORDS: tuple[str, ...] = (
     "vajan",
     "wajan",
     "next visit",
+    "BP",
+    "Hb",
+    "SpO2",
+    "MUAC",
+    "KMC",
+    "EBF",
+    "ORS",
+    "Zinc",
+    "RBS",
+    "EDD",
+    "LMP",
+    "LBW",
+    "VLBW",
+    "CHC",
+    "FRU",
+    "HWC",
 )
 
 # Backward-compatible alias
@@ -82,6 +98,7 @@ def build_contextual_stt_options(
     beneficiary_name: str | None = None,
     beneficiary_id: str | None = None,
     extra_speaker_names: list[str] | None = None,
+    extra_keywords: list[str] | None = None,
     previous_text: str | None = None,
 ) -> dict[str, Any]:
     """Build focused, non-overloaded Prisma v3.0 context options for a session."""
@@ -108,6 +125,12 @@ def build_contextual_stt_options(
         bid = beneficiary_id.strip()
         if bid not in keywords and len(keywords) < 200:
             keywords.append(bid)
+
+    if extra_keywords:
+        for kw in extra_keywords:
+            cleaned_kw = (kw or "").strip()
+            if cleaned_kw and cleaned_kw not in keywords and len(keywords) < 200:
+                keywords.append(cleaned_kw)
 
     return {
         "keywords": keywords[:200],

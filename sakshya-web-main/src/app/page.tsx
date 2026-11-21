@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AshaHomeView } from '@/components/asha/AshaHomeView';
+import { AshaReportsView } from '@/components/asha/AshaReportsView';
 import { BeneficiaryDirectoryView } from '@/components/asha/BeneficiaryDirectoryView';
 import { FollowUpQueueView } from '@/components/asha/FollowUpQueueView';
 import { OfflineDraftsView } from '@/components/asha/OfflineDraftsView';
@@ -326,6 +327,16 @@ export default function HomePage() {
           )}
 
           {ashaSection === 'offline' && <OfflineDraftsView onSynced={refreshAllData} />}
+
+          {ashaSection === 'reports' && (
+            <AshaReportsView
+              profile={currentProfile}
+              beneficiaries={beneficiaries}
+              visits={visits}
+              followUps={followUps}
+              dangerAlerts={dangerAlerts}
+            />
+          )}
         </>
       ) : (
         <>

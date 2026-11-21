@@ -1,0 +1,10 @@
+{
+  "ASHA-DEMO-01": {
+    "phrases": {},
+    "field_counts": {
+      "weight_kg": 21,
+      "next_visit_date": 6,
+      "vaccinations_completed": 3
+    }
+  }
+}

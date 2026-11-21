@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import uuid
 from datetime import date, datetime, timezone, timedelta
 from typing import Any
@@ -26,10 +27,12 @@ from app.conversation.models import (
     DangerAlertInput,
     DangerAlertRecord,
     ExtractionUpdate,
+    LANGUAGE_SWITCH_CONFIRMATIONS,
     TransitionResult,
     VisitRecordState,
     VisitStatus,
     detect_language_from_text,
+    detect_language_switch_command,
     normalize_language,
 )
 from app.conversation.state_machine import (
@@ -54,6 +57,7 @@ from app.extraction.secondary_recognition import (
     compare_numeric_interpretations,
 )
 from app.services.beneficiaries import SyntheticBeneficiaryDirectory
+from app.services.worker_memory import WorkerCorrectionMemory, get_worker_memory
 from app.voice.interfaces import TranscriptEvent
 from app.voice.orchestration.session import VoiceSessionOrchestrator
 
@@ -299,6 +303,7 @@ class HealthcareSessionPipeline:
         review_silence_timeout_s: float = 12.0,
         secondary_recognizer: SecondarySpeechRecognizer | None = None,
         confirm_important_numbers: bool = False,
+        worker_memory: WorkerCorrectionMemory | None = None,
     ) -> None:
         self.session_id = session_id
         self.worker_id = worker_id
@@ -313,6 +318,7 @@ class HealthcareSessionPipeline:
         self.review_silence_timeout_s = review_silence_timeout_s
         self._secondary_recognizer = secondary_recognizer
         self.confirm_important_numbers = confirm_important_numbers
+        self._worker_memory = worker_memory or get_worker_memory()
 
         ben_name: str | None = None
         if beneficiary_id:
@@ -385,6 +391,7 @@ class HealthcareSessionPipeline:
         ctx = build_contextual_stt_options(
             beneficiary_name=self.sm.visit.beneficiary_name,
             beneficiary_id=self.sm.visit.beneficiary_id,
+            extra_keywords=self._worker_memory.get_worker_bias_keywords(self.worker_id),
         )
         update_ctx(
             speaker_names=ctx["speaker_names"],
@@ -403,6 +410,35 @@ class HealthcareSessionPipeline:
                     self._reconnect_stt_safely(stt),
                     name=f"stt-ctx-reconnect-{self.session_id}",
                 )
+
+    def _learn_from_worker_correction(self, text: str, extraction: Any) -> None:
+        """Record spoken phrase & field corrections so future turns adapt for this worker."""
+        # Pattern: "not <wrong>, <right>" or "not <wrong> it is <right>"
+        m_pair = re.search(
+            r"\bnot\s+([A-Za-z0-9.\- ]{2,30}?)\s*(?:,|it\s+is|but)\s*([A-Za-z0-9.\- ]{2,30})\b",
+            text or "",
+            re.IGNORECASE,
+        )
+        wrong_phrase = m_pair.group(1).strip() if m_pair else None
+        corrected_phrase = m_pair.group(2).strip() if m_pair else None
+        patch_keys = [
+            k
+            for k in (extraction.patch or {})
+            if k not in ("weight_source_text", "next_visit_date_source_text", "follow_up_actions")
+        ]
+        primary_field = patch_keys[0] if patch_keys else None
+        if wrong_phrase and corrected_phrase:
+            self._worker_memory.record_correction(
+                self.worker_id,
+                wrong_phrase=wrong_phrase,
+                corrected_phrase=corrected_phrase,
+                field_name=primary_field,
+            )
+        elif primary_field:
+            self._worker_memory.record_correction(
+                self.worker_id,
+                field_name=primary_field,
+            )
 
     def _is_baby_context(self) -> bool:
         vtype = self.sm.visit.visit_type.value if self.sm.visit.visit_type else None
@@ -723,12 +759,40 @@ class HealthcareSessionPipeline:
     ) -> bool:
         """Process a final transcript through 1A (Danger) -> 1C (Extraction) -> 1B (State Machine)."""
         self._cancel_silence_timer()
+
+        # 0. Explicit spoken language switching (e.g. "speak in Tamil", "Hindi mein bolo")
+        switch_lang = detect_language_switch_command(event.text)
+        if switch_lang:
+            self.set_preferred_language(switch_lang)
+            orchestrator.active_language = switch_lang
+            orchestrator.language_locked = True
+            await orchestrator.emit_event(
+                "language_switched",
+                language=switch_lang,
+                source_text=event.text,
+            )
+            confirm_msg = LANGUAGE_SWITCH_CONFIRMATIONS.get(
+                switch_lang, LANGUAGE_SWITCH_CONFIRMATIONS["en-IN"]
+            )
+            await orchestrator.speak_direct(confirm_msg, language=switch_lang)
+            return True
+
         fallback_lang = self._preferred_language or event.language_code or orchestrator.active_language or self.language
         detected = detect_language_from_text(event.text, fallback=fallback_lang)
         # If the ASHA worker explicitly selected a language (e.g. ta-IN), do not flip
         # the conversation to English merely because code-mixed ASCII/digits were transcribed.
+        # However, if they naturally switch to a distinct Indic Unicode script, persist that switch!
         has_indic_script = any(0x0900 <= ord(ch) <= 0x0D7F for ch in (event.text or ""))
-        if self._preferred_language and (not has_indic_script or detected == "en-IN"):
+        if has_indic_script and detected and detected != "en-IN":
+            lang = detected
+            if self._preferred_language and detected != self._preferred_language:
+                self._preferred_language = detected
+                await orchestrator.emit_event(
+                    "language_switched",
+                    language=detected,
+                    source_text=event.text,
+                )
+        elif self._preferred_language:
             lang = self._preferred_language
         else:
             lang = detected
@@ -736,8 +800,13 @@ class HealthcareSessionPipeline:
         self.language = lang
         orchestrator.active_language = lang
 
+        # Apply learned worker-specific ASR corrections before danger/extraction
+        transcript_text, _applied_corrections = self._worker_memory.apply_learned_corrections(
+            self.worker_id, event.text
+        )
+
         # 1. Layer 1 Deterministic Danger-Sign Check (ALWAYS runs first; NEVER suppressed)
-        danger_res = self._run_danger_check(event.text, language=lang, is_partial=False)
+        danger_res = self._run_danger_check(transcript_text, language=lang, is_partial=False)
         danger_fired = False
         if danger_res.danger_sign_flagged and danger_res.matches:
             danger_fired = await self._trigger_danger_escalation(
@@ -888,11 +957,17 @@ class HealthcareSessionPipeline:
         # 2. Extract structured healthcare visit fields (1C)
         existing_draft = self._build_draft_snapshot_for_extractor()
         extraction = self._extractor.extract(
-            event.text,
+            transcript_text,
             reference_date=self._reference_date,
             active_language=lang,
             existing_draft=existing_draft,
         )
+        if extraction.detected_correction or re.search(
+            r"\bnot\s+[A-Za-z0-9.\- ]{2,30}?\s*(?:,|it\s+is|but)\s*",
+            transcript_text,
+            re.IGNORECASE,
+        ):
+            self._learn_from_worker_correction(transcript_text, extraction)
 
         # If spoken/unitless baby weight < 1.8 kg was extracted (e.g. "baby weight is one point five"),
         # ensure Layer 1 NB_VLBW urgent referral triggers even without explicit "kg" digits.
