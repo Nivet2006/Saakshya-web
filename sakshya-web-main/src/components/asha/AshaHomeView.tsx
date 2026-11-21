@@ -34,6 +34,7 @@ interface AshaHomeViewProps {
   onStartVoiceVisit: (beneficiary?: Beneficiary) => void;
   onNavigateSection: (section: AshaNavSection) => void;
   onAcknowledgeAlert: (alertId: string) => void;
+  onClearVisits?: () => void;
 }
 
 export const AshaHomeView: React.FC<AshaHomeViewProps> = ({
@@ -47,6 +48,7 @@ export const AshaHomeView: React.FC<AshaHomeViewProps> = ({
   onStartVoiceVisit,
   onNavigateSection,
   onAcknowledgeAlert,
+  onClearVisits,
 }) => {
   const { ui } = useTranslation(language);
   const todayStr = new Date().toISOString().split('T')[0];
@@ -188,14 +190,25 @@ export const AshaHomeView: React.FC<AshaHomeViewProps> = ({
         <section className="bg-white border border-clinical-border-subtle rounded-2xl p-4 sm:p-5 shadow-sm">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <h2 className="text-sm font-bold text-clinical-text">{ui.recentSavedVisits}</h2>
-            <button
-              type="button"
-              onClick={() => onNavigateSection('history')}
-              className="text-xs font-semibold text-clinical-primary hover:underline flex items-center gap-1"
-            >
-              <span>{ui.fullHistory}</span>
-              <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
+            <div className="flex items-center gap-3">
+              {visits.length > 0 && onClearVisits && (
+                <button
+                  type="button"
+                  onClick={onClearVisits}
+                  className="text-xs text-red-600 hover:text-red-700 hover:underline font-medium"
+                >
+                  Clear all
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => onNavigateSection('history')}
+                className="text-xs font-semibold text-clinical-primary hover:underline flex items-center gap-1"
+              >
+                <span>{ui.fullHistory}</span>
+                <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </div>
           </div>
 
           <ul className="mt-3 space-y-2.5">

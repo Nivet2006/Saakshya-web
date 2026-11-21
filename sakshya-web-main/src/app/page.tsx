@@ -170,6 +170,11 @@ export default function HomePage() {
     refreshAllData();
   };
 
+  const handleClearVisits = async () => {
+    await dataService.clearAllVisits();
+    refreshAllData();
+  };
+
   // Real computed Supervisor Aggregates
   const supervisorStats = useMemo(
     () =>
@@ -248,6 +253,7 @@ export default function HomePage() {
               onStartVoiceVisit={handleStartVoiceVisit}
               onNavigateSection={setAshaSection}
               onAcknowledgeAlert={handleAcknowledgeAlert}
+              onClearVisits={handleClearVisits}
             />
           )}
 
@@ -285,7 +291,9 @@ export default function HomePage() {
             />
           )}
 
-          {ashaSection === 'history' && <VisitHistoryView visits={visits} />}
+          {ashaSection === 'history' && (
+            <VisitHistoryView visits={visits} onClearVisits={handleClearVisits} />
+          )}
 
           {ashaSection === 'offline' && <OfflineDraftsView onSynced={refreshAllData} />}
         </>

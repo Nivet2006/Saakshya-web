@@ -8,19 +8,31 @@ import { AlertTriangle, CheckCircle2, FileText, X } from 'lucide-react';
 
 interface VisitHistoryViewProps {
   visits: VisitDraft[];
+  onClearVisits?: () => void;
 }
 
-export const VisitHistoryView: React.FC<VisitHistoryViewProps> = ({ visits }) => {
+export const VisitHistoryView: React.FC<VisitHistoryViewProps> = ({ visits, onClearVisits }) => {
   const { ui } = useTranslation();
   const [selectedVisit, setSelectedVisit] = useState<VisitDraft | null>(null);
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-clinical-text">{ui.visitHistoryTitle}</h1>
-        <p className="text-xs sm:text-sm text-clinical-text-secondary">
-          {ui.visitHistorySubtitle}
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-clinical-text">{ui.visitHistoryTitle}</h1>
+          <p className="text-xs sm:text-sm text-clinical-text-secondary">
+            {ui.visitHistorySubtitle}
+          </p>
+        </div>
+        {visits.length > 0 && onClearVisits && (
+          <button
+            type="button"
+            onClick={onClearVisits}
+            className="text-xs font-medium text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded-lg transition-colors"
+          >
+            Clear All Visits
+          </button>
+        )}
       </div>
 
       {visits.length === 0 ? (
