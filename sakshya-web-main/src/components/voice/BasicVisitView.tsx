@@ -185,19 +185,81 @@ export const BasicVisitView: React.FC<BasicVisitViewProps> = ({
             isTtsPlaying={voice.isTtsPlaying}
             isTtsPaused={voice.isTtsPaused}
             requiresReReadBack={voice.requiresReReadBack}
+            summaryOutdated={voice.summaryOutdated}
             activeCorrectionField={voice.targetCorrectionField}
             onPausePlayback={voice.pauseReadBack}
             onResumePlayback={voice.resumeReadBack}
             onVoiceCorrectField={(fieldKey) => voice.startVoiceCorrection(fieldKey)}
+            onVisualPatchFields={voice.patchFieldsVisually}
+            onSpeakToMakeChanges={voice.speakToMakeChanges}
           />
 
-          {/* Step 6: Confirmation Actions */}
+          {/* Summary Readback Preference & Final Submission Workflow Controls */}
+          {voice.reviewPhase === 'ask_readback' && (
+            <section
+              aria-label="Summary Playback Preference"
+              className="bg-sky-50 border-2 border-sky-400 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3"
+            >
+              <p className="text-sm font-bold text-sky-950">
+                Your visit information has been updated. Would you like me to read the complete visit summary aloud?
+              </p>
+              <div className="flex flex-wrap gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => voice.respondReadbackPreference(true)}
+                  className="px-4 py-2.5 rounded-xl bg-clinical-primary hover:bg-clinical-primary-dark text-white text-xs sm:text-sm font-bold"
+                >
+                  Yes, Read Summary Aloud
+                </button>
+                <button
+                  type="button"
+                  onClick={() => voice.respondReadbackPreference(false)}
+                  className="px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 text-xs sm:text-sm font-bold"
+                >
+                  No, Skip to Submission
+                </button>
+                <button
+                  type="button"
+                  onClick={voice.speakToMakeChanges}
+                  className="px-4 py-2.5 rounded-xl bg-amber-100 hover:bg-amber-200 border border-amber-400 text-amber-950 text-xs sm:text-sm font-bold"
+                >
+                  Speak to Make More Changes
+                </button>
+              </div>
+            </section>
+          )}
+
+          {voice.reviewPhase === 'editing' && voice.isConnected && (
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 border border-slate-200 rounded-xl p-3.5">
+              <span className="text-xs font-semibold text-slate-700">
+                Keep speaking to add or correct fields, or tap Finish &amp; Review when ready.
+              </span>
+              <button
+                type="button"
+                onClick={voice.finishNotesAndReview}
+                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold"
+              >
+                Finish &amp; Review Summary
+              </button>
+            </div>
+          )}
+
+          {voice.reviewPhase === 'draft_retained' && (
+            <div
+              role="status"
+              className="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-xs font-semibold text-amber-950"
+            >
+              Submission pending — visit retained safely as an unsubmitted draft. You can continue editing or submit anytime.
+            </div>
+          )}
+
+          {/* Step 6: Confirmation & Final Submission Actions */}
           <VisitConfirmationActions
             draft={voice.visitDraft}
             isSaving={voice.isPersistencePending}
             requiresReReadBack={voice.requiresReReadBack}
             onAcceptAndSave={voice.confirmAndSaveVisit}
-            onRejectAndCorrect={() => voice.startVoiceCorrection()}
+            onRejectAndCorrect={voice.speakToMakeChanges}
             onDiscardAndRerecord={voice.resetSessionState}
           />
         </>

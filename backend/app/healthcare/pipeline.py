@@ -10,6 +10,7 @@ Wires:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from datetime import date, datetime, timezone, timedelta
@@ -33,6 +34,7 @@ from app.conversation.state_machine import (
     ConversationStateMachine,
     InvalidTransitionError,
     classify_confirmation_intent,
+    is_completion_intent,
 )
 from app.core.config import get_settings
 from app.core.logging import log_event
@@ -68,12 +70,17 @@ _STATE_TO_WS_SESSION_STATE: dict[ConversationState, str] = {
     ConversationState.CANDIDATE_CONFIRMATION: "listening",
     ConversationState.GATHERING_NOTES: "listening",
     ConversationState.STREAMING_TRANSCRIPTION: "listening",
+    ConversationState.CONTINUE_CONVERSATION: "listening",
     ConversationState.EXTRACTING_FIELDS: "processing",
     ConversationState.CLARIFICATION_REQUIRED: "speaking",
+    ConversationState.FINAL_REVIEW_READY: "awaiting_confirmation",
+    ConversationState.ASK_READBACK_PREFERENCE: "awaiting_confirmation",
+    ConversationState.READ_COMPLETE_SUMMARY: "read_back",
+    ConversationState.ASK_SUBMISSION_CONFIRMATION: "awaiting_confirmation",
     ConversationState.READ_BACK_CONFIRMATION: "speaking",
     ConversationState.CORRECTION_PATCH: "processing",
     ConversationState.READY_TO_CONFIRM: "listening",
-    ConversationState.COMMITTED: "idle",
+    ConversationState.COMMITTED: "committed",
     ConversationState.DANGER_ESCALATION: "danger_escalation",
 }
 
@@ -224,6 +231,8 @@ class HealthcareSessionPipeline:
         beneficiary_id: str | None = None,
         directory: SyntheticBeneficiaryDirectory | None = None,
         reference_date: date | None = None,
+        continuous_editing: bool = False,
+        review_silence_timeout_s: float = 12.0,
     ) -> None:
         self.session_id = session_id
         self.worker_id = worker_id
@@ -231,6 +240,8 @@ class HealthcareSessionPipeline:
         self._directory = directory or SyntheticBeneficiaryDirectory()
         self._extractor = VisitFieldExtractor(beneficiary_directory=self._directory)
         self._reference_date = reference_date
+        self.continuous_editing = continuous_editing
+        self.review_silence_timeout_s = review_silence_timeout_s
 
         ben_name: str | None = None
         if beneficiary_id:
@@ -254,12 +265,45 @@ class HealthcareSessionPipeline:
         self._committed_at: str | None = None
         self._contract_alerts: dict[str, dict[str, Any]] = {}
         self._orchestrator: VoiceSessionOrchestrator | None = None
+        self._pending_ambiguous_patch: ExtractionUpdate | None = None
+        self._silence_task: asyncio.Task[None] | None = None
 
     def attach_orchestrator(self, orchestrator: VoiceSessionOrchestrator) -> None:
         self._orchestrator = orchestrator
 
+    def _cancel_silence_timer(self) -> None:
+        if self._silence_task is not None and not self._silence_task.done():
+            self._silence_task.cancel()
+        self._silence_task = None
+
+    def _schedule_silence_timer_if_needed(self, orchestrator: VoiceSessionOrchestrator) -> None:
+        self._cancel_silence_timer()
+        if self.review_silence_timeout_s <= 0:
+            return
+        if self.sm.state not in (
+            ConversationState.ASK_READBACK_PREFERENCE,
+            ConversationState.ASK_SUBMISSION_CONFIRMATION,
+        ):
+            return
+
+        async def _timer() -> None:
+            try:
+                await asyncio.sleep(self.review_silence_timeout_s)
+                if self.sm.state in (
+                    ConversationState.ASK_READBACK_PREFERENCE,
+                    ConversationState.ASK_SUBMISSION_CONFIRMATION,
+                ):
+                    await self.handle_silence_timeout(orchestrator)
+            except asyncio.CancelledError:
+                return
+
+        self._silence_task = asyncio.create_task(
+            _timer(), name=f"review-silence-{self.session_id}"
+        )
+
     async def start_session_greeting(self, orchestrator: VoiceSessionOrchestrator) -> None:
         """Initiate Section 1 personalized spoken greeting and enter voice identity verification."""
+        self.continuous_editing = True
         transition = self.sm.start_beneficiary_greeting(language=self.language)
         orchestrator.telemetry.steps.session_started = True
         orchestrator.telemetry.steps.beneficiary_identified = bool(self.sm.visit.beneficiary_id)
@@ -326,6 +370,7 @@ class HealthcareSessionPipeline:
     ) -> bool:
         """Layer 1 Danger-Sign Engine + live non-mutating field autofeed on EVERY partial transcript."""
         settings = get_settings()
+        self._cancel_silence_timer()
         raw_lang = event.language_code or orchestrator.active_language or self.language
         lang = detect_language_from_text(event.text, fallback=raw_lang)
         self.sm.set_language(lang)
@@ -390,6 +435,7 @@ class HealthcareSessionPipeline:
         self, event: TranscriptEvent, orchestrator: VoiceSessionOrchestrator
     ) -> bool:
         """Process a final transcript through 1A (Danger) -> 1C (Extraction) -> 1B (State Machine)."""
+        self._cancel_silence_timer()
         raw_lang = event.language_code or orchestrator.active_language or self.language
         lang = detect_language_from_text(event.text, fallback=raw_lang)
         self.sm.set_language(lang)
@@ -595,6 +641,102 @@ class HealthcareSessionPipeline:
             await self._dispatch_transition(transition, orchestrator)
             return True
 
+        # Section 6–8: Readback preference & Submission confirmation states
+        if self.sm.state == ConversationState.ASK_READBACK_PREFERENCE:
+            patch_arg = update if explicit_fields else None
+            transition = self.sm.handle_readback_preference_response(
+                event.text, correction_patch=patch_arg, language=lang
+            )
+            if transition.metadata.get("is_correction"):
+                orchestrator.telemetry.correction_count += 1
+            if self.sm.state == ConversationState.ASK_SUBMISSION_CONFIRMATION:
+                orchestrator.telemetry.steps.read_back_completed = True
+            await self._dispatch_transition(transition, orchestrator)
+            return True
+
+        if self.sm.state == ConversationState.ASK_SUBMISSION_CONFIRMATION:
+            patch_arg = update if explicit_fields else None
+            transition = self.sm.handle_submission_confirmation_response(
+                event.text, correction_patch=patch_arg, language=lang
+            )
+            if transition.metadata.get("is_correction"):
+                orchestrator.telemetry.correction_count += 1
+            if self.sm.visit.status == VisitStatus.CONFIRMED:
+                orchestrator.telemetry.steps.worker_confirmed = True
+            await self._dispatch_transition(transition, orchestrator)
+            return True
+
+        # Pending confirmation of an ambiguous numeric replacement ("Do you want me to update weight to 2.8?")
+        if self._pending_ambiguous_patch is not None and not explicit_fields:
+            amb_intent = classify_confirmation_intent(event.text)
+            if amb_intent == "confirm":
+                pending = self._pending_ambiguous_patch
+                self._pending_ambiguous_patch = None
+                orchestrator.telemetry.correction_count += 1
+                transition = self.sm.apply_continuous_update(
+                    pending, is_correction=True, language=lang
+                )
+                await self._dispatch_transition(transition, orchestrator)
+                return True
+            if amb_intent == "reject":
+                self._pending_ambiguous_patch = None
+                self.sm.pending_clarifications = []
+                transition = self.sm.apply_continuous_update(
+                    ExtractionUpdate(detected_language=lang),
+                    is_correction=False,
+                    language=lang,
+                )
+                await self._dispatch_transition(transition, orchestrator)
+                return True
+
+        # Continuous editing workflow (Basic Mode live conversation, Sections 1–9)
+        if self.continuous_editing:
+            done_intent = is_completion_intent(event.text)
+            if explicit_fields or sm_clarifications:
+                orchestrator.telemetry.steps.visit_notes_captured = True
+                # Capture pending ambiguous weight candidate if present
+                for c in sm_clarifications:
+                    if c.field == "weight_kg" and c.reason == "ambiguous_value" and c.candidates:
+                        try:
+                            cand_w = float(c.candidates[0])
+                            self._pending_ambiguous_patch = ExtractionUpdate(
+                                weight_kg=cand_w,
+                                explicit_fields={"weight_kg"},
+                                detected_language=lang,
+                            )
+                        except ValueError:
+                            pass
+                if extraction.detected_correction and explicit_fields:
+                    orchestrator.telemetry.correction_count += 1
+                transition = self.sm.apply_continuous_update(
+                    update,
+                    is_correction=extraction.detected_correction,
+                    merge_lists=True,
+                    language=lang,
+                )
+                if self.sm.visit.beneficiary_id:
+                    orchestrator.telemetry.steps.beneficiary_identified = True
+                    if self.sm.identity_verified:
+                        orchestrator.telemetry.steps.identity_voice_confirmed = True
+                orchestrator.telemetry.steps.clarifications_resolved = (
+                    len(self.sm.pending_clarifications) == 0
+                )
+                if not self._missing_required_fields():
+                    orchestrator.telemetry.steps.required_fields_extracted = True
+                await self._dispatch_transition(transition, orchestrator)
+                if done_intent and not self.sm.pending_clarifications:
+                    done_trans = self.sm.indicate_worker_done(language=lang)
+                    await self._dispatch_transition(done_trans, orchestrator)
+                return True
+
+            if done_intent:
+                done_trans = self.sm.indicate_worker_done(language=lang)
+                await self._dispatch_transition(done_trans, orchestrator)
+                return True
+
+            return False
+
+        # Legacy single-shot path (when continuous_editing=False)
         # If worker gave an explicit correction while gathering/clarifying
         if extraction.detected_correction and explicit_fields:
             orchestrator.telemetry.correction_count += 1
@@ -626,11 +768,112 @@ class HealthcareSessionPipeline:
         await self._dispatch_transition(transition, orchestrator)
         return True
 
+    async def handle_finish_review_command(
+        self, orchestrator: VoiceSessionOrchestrator
+    ) -> None:
+        """Handle explicit UI/WS request to finish note collection and enter final review."""
+        self._cancel_silence_timer()
+        transition = self.sm.indicate_worker_done(language=self.language)
+        await self._dispatch_transition(transition, orchestrator)
+
+    async def handle_silence_timeout(
+        self, orchestrator: VoiceSessionOrchestrator
+    ) -> None:
+        """Handle silence timeout during readback preference or submission confirmation."""
+        transition = self.sm.handle_silence_timeout()
+        if transition.actions or transition.spoken_text:
+            await self._dispatch_transition(transition, orchestrator)
+
+    async def handle_visual_patch(
+        self, fields: dict[str, Any], orchestrator: VoiceSessionOrchestrator
+    ) -> None:
+        """Apply visual UI field edits onto the exact same backend VisitRecordState."""
+        self._cancel_silence_timer()
+        kwargs: dict[str, Any] = {}
+        explicit: set[str] = set()
+        clear_fields: set[str] = set()
+
+        if "beneficiary_id" in fields:
+            bid = fields["beneficiary_id"]
+            if bid:
+                ben = self._directory.get_by_id(str(bid))
+                if ben is not None:
+                    kwargs["beneficiary_id"] = ben.beneficiary_id
+                    kwargs["beneficiary_name"] = ben.full_name
+                    explicit.update({"beneficiary_id", "beneficiary_name"})
+        if "visit_type" in fields:
+            if fields["visit_type"]:
+                kwargs["visit_type"] = fields["visit_type"]
+                explicit.add("visit_type")
+            else:
+                clear_fields.add("visit_type")
+        if "weight_kg" in fields:
+            if fields["weight_kg"] is not None and fields["weight_kg"] != "":
+                kwargs["weight_kg"] = float(fields["weight_kg"])
+                explicit.add("weight_kg")
+            else:
+                clear_fields.add("weight_kg")
+        if "next_visit_date" in fields:
+            if fields["next_visit_date"]:
+                kwargs["next_visit_date"] = str(fields["next_visit_date"])
+                explicit.add("next_visit_date")
+            else:
+                clear_fields.add("next_visit_date")
+        if "vaccinations_completed" in fields and isinstance(fields["vaccinations_completed"], list):
+            kwargs["vaccinations_completed"] = [str(x) for x in fields["vaccinations_completed"] if str(x).strip()]
+            explicit.add("vaccinations_completed")
+        if "vaccinations_due" in fields and isinstance(fields["vaccinations_due"], list):
+            kwargs["vaccinations_due"] = [str(x) for x in fields["vaccinations_due"] if str(x).strip()]
+            explicit.add("vaccinations_due")
+
+        if not explicit and not clear_fields:
+            return
+
+        update = ExtractionUpdate(
+            **kwargs,
+            explicit_fields=explicit if explicit else None,
+            clear_fields=clear_fields,
+            detected_language=self.language,
+        )
+        orchestrator.telemetry.correction_count += 1
+        transition = self.sm.apply_continuous_update(
+            update, is_correction=True, merge_lists=False, language=self.language
+        )
+        await self._dispatch_transition(transition, orchestrator)
+
     async def handle_explicit_confirm_command(
         self, confirmed: bool, orchestrator: VoiceSessionOrchestrator
     ) -> None:
         """Handle client `confirm_visit` WS command."""
+        self._cancel_silence_timer()
         utterance = "yes confirm" if confirmed else "no"
+        if self.sm.state == ConversationState.ASK_READBACK_PREFERENCE:
+            transition = self.sm.handle_readback_preference_response(utterance, language=self.language)
+            await self._dispatch_transition(transition, orchestrator)
+            return
+        if self.sm.state == ConversationState.ASK_SUBMISSION_CONFIRMATION:
+            transition = self.sm.handle_submission_confirmation_response(utterance, language=self.language)
+            if self.sm.visit.status == VisitStatus.CONFIRMED:
+                orchestrator.telemetry.steps.worker_confirmed = True
+            await self._dispatch_transition(transition, orchestrator)
+            return
+        if self.sm.state in (
+            ConversationState.CONTINUE_CONVERSATION,
+            ConversationState.GATHERING_NOTES,
+            ConversationState.FINAL_REVIEW_READY,
+        ):
+            if confirmed:
+                # Direct UI "Accept & Save" from review screen validates and submits
+                self.sm.state = ConversationState.ASK_SUBMISSION_CONFIRMATION
+                transition = self.sm.handle_submission_confirmation_response("yes", language=self.language)
+                if self.sm.visit.status == VisitStatus.CONFIRMED:
+                    orchestrator.telemetry.steps.worker_confirmed = True
+                await self._dispatch_transition(transition, orchestrator)
+                return
+            done_trans = self.sm.indicate_worker_done(language=self.language)
+            await self._dispatch_transition(done_trans, orchestrator)
+            return
+
         if self.sm.state not in (
             ConversationState.READ_BACK_CONFIRMATION,
             ConversationState.READY_TO_CONFIRM,
@@ -923,6 +1166,37 @@ class HealthcareSessionPipeline:
             if transition.current_state == ConversationState.READ_BACK_CONFIRMATION:
                 self.sm.on_read_back_completed()
                 orchestrator.telemetry.steps.read_back_completed = True
+
+        # Emit v1 `clarification_required` prompts for readback preference & submission confirmation
+        # so the frontend stays strictly backend-driven without breaking shared-contracts/v1 schemas.
+        if transition.current_state == ConversationState.ASK_READBACK_PREFERENCE:
+            await orchestrator.emit_event(
+                "clarification_required",
+                visit_id=visit_id,
+                field="readback_preference",
+                reason="missing_required",
+                prompt_text=transition.spoken_text or "Would you like me to read the complete visit summary aloud?",
+                language=lang,
+                candidates=[
+                    {"id": "yes", "label": "Yes, Read Summary Aloud", "detail": None},
+                    {"id": "no", "label": "No, Skip Summary", "detail": None},
+                ],
+            )
+            self._schedule_silence_timer_if_needed(orchestrator)
+        elif transition.current_state == ConversationState.ASK_SUBMISSION_CONFIRMATION:
+            await orchestrator.emit_event(
+                "clarification_required",
+                visit_id=visit_id,
+                field="submission_confirmation",
+                reason="missing_required",
+                prompt_text=transition.spoken_text or "Would you like to submit and save this visit now?",
+                language=lang,
+                candidates=[
+                    {"id": "yes", "label": "Yes, Submit & Save", "detail": None},
+                    {"id": "no", "label": "No, Keep as Draft", "detail": None},
+                ],
+            )
+            self._schedule_silence_timer_if_needed(orchestrator)
 
 
 class SessionRegistry:

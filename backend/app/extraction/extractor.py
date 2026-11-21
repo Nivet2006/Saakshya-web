@@ -1107,20 +1107,26 @@ _FOLLOWUP_VISIT_CUE_RE = re.compile(
 # ---------------------------------------------------------------------------
 
 _CORRECTION_COMMA_RE = re.compile(
-    rf"{_LB}(?:no|nahi|nahin|नहीं|नही)\s*[,.:!।\-]",
+    rf"{_LB}(?:no|nahi|nahin|नहीं|नही)(?:\s*[,.:!।\-]\s*(?:no|nahi|nahin|नहीं|नही))*\s*[,.:!।\-]",
     re.IGNORECASE,
 )
 _CORRECTION_START_RE = re.compile(
-    r"^\s*(?:no|nope|nahi|nahin|sorry|wait|actually|नहीं|नही|गलत|माफ\s+कीजिए)\s+"
+    r"^\s*(?:no|nope|nahi|nahin|sorry|wait|actually|correction|नहीं|नही|गलत|माफ\s+कीजिए)\s+"
     r"(?!(?:fever|bleeding|headache|swelling|danger|problem|issue|symptom|symptoms|"
     r"bukhar|dard|sujan|dikkat|takleef|complication|complications)\b)",
     re.IGNORECASE,
 )
 _CORRECTION_INLINE_RE = re.compile(
-    rf"{_LB}(?:galat|गलत|wrong|incorrect|actually|correction|correct\s+that|"
-    rf"change\s+(?:it|the|weight|visit|date|beneficiary|vaccine)|"
-    rf"update\s+(?:it|the|weight|visit|date|beneficiary|vaccine)|"
-    rf"i\s+meant|make\s+it|instead|badal\s+do|badlo|sahi\s+karo|theek\s+karo|बदलो|बदल\s+दो|दरअसल){_RB}",
+    rf"{_LB}(?:galat|गलत|गलती\s+से|wrong|incorrect|incorrectly|mistake|actually|correction|correct\s+that|"
+    rf"the\s+correct\s+(?:weight|date|next\s+visit|visit|beneficiary|value)|"
+    rf"(?:it|weight|date|next\s+visit)\s+should\s+be|should\s+be|"
+    rf"make\s+(?:it|that)|"
+    rf"change\s+(?:it|the|weight|visit|date|next\s+visit|beneficiary|vaccine|vaccination)|"
+    rf"update\s+(?:it|the|weight|visit|date|next\s+visit|beneficiary|vaccine|vaccination)|"
+    rf"i\s+meant|i\s+said\s+that\s+incorrectly|i\s+forgot\s+to\s+(?:mention|add)|forgot\s+to\s+(?:mention|add)|"
+    rf"that\s+was\s+(?:the\s+)?birth\s+weight|today'?s\s+weight|previous\s+(?:date|weight)\s+was\s+wrong|"
+    rf"instead|badal\s+do|badlo|sahi\s+karo|theek\s+karo|बदलो|बदल\s+दो|बदलें|सही\s+करें|दरअसल|आज\s+का\s+वजन|"
+    rf"ತಪ್ಪಾಗಿದೆ|ಬದಲಾಯಿಸಿ|ನಿಜವಾಗಿ|தவறு|மாற்று|உண்மையில்){_RB}",
     re.IGNORECASE,
 )
 
@@ -1246,7 +1252,7 @@ class VisitFieldExtractor:
         if date_clar is not None:
             clarifications.append(date_clar)
 
-        # 6b. Bare numeric weight correction fallback (e.g. "No, it is fifty-three." or "No, it is 3.2.")
+        # 6b. Bare numeric weight correction fallback (e.g. "No, it is fifty-three." or "No, it is 3.2." or "Actually, 2.8.")
         if (
             weight_kg is None
             and weight_clar is None
@@ -1259,7 +1265,7 @@ class VisitFieldExtractor:
             and visit_type is None
         ):
             m_bare = re.search(
-                rf"(?:it\s+is|is|hai|है|actually|no[, ]+|nahi[, ]+|नहीं[, ]+)\s*(?P<qty>{_LB}{_QTY_PHRASE}{_RB})",
+                rf"(?:it\s+should\s+be|should\s+be|make\s+(?:it|that)|it\s+is|is|hai|है|actually|correction|meant|no[, ]+|nahi[, ]+|नहीं[, ]+)\s*(?P<qty>{_LB}{_QTY_PHRASE}{_RB})",
                 normalized,
                 re.IGNORECASE,
             )
@@ -1288,7 +1294,59 @@ class VisitFieldExtractor:
         if actions:
             patch["follow_up_actions"] = actions
 
-        # Identify corrected fields when correction intent is detected
+        # Identify corrected fields when correction intent OR contextual replacement is detected
+        if not detected_correction and existing_draft is not None:
+            word_count = len(normalized.split())
+            if (
+                "weight_kg" in patch
+                and existing_draft.weight_kg is not None
+                and patch["weight_kg"] != existing_draft.weight_kg
+                and word_count <= 8
+            ):
+                detected_correction = True
+            elif (
+                "next_visit_date" in patch
+                and existing_draft.next_visit_date is not None
+                and patch["next_visit_date"] != existing_draft.next_visit_date
+                and word_count <= 10
+            ):
+                detected_correction = True
+
+        # Ambiguous standalone bare number without unit when weight already exists (Section 3)
+        if (
+            weight_kg is None
+            and weight_clar is None
+            and next_date is None
+            and date_clar is None
+            and not v_completed
+            and not v_due
+            and ben is None
+            and visit_type is None
+            and existing_draft is not None
+            and existing_draft.weight_kg is not None
+            and len(normalized.split()) <= 3
+        ):
+            bare_only = _parse_number_phrase(normalized)
+            if bare_only is not None:
+                min_kg, max_kg, _ctx = self._weight_bounds(
+                    effective_visit_type=effective_visit_type,
+                    effective_beneficiary=effective_ben,
+                    text=normalized,
+                )
+                if min_kg <= bare_only <= max_kg and round(bare_only, 3) != existing_draft.weight_kg:
+                    val_r = round(bare_only, 3)
+                    clarifications.append(
+                        FieldClarification(
+                            field_name="weight_kg",
+                            reason="ambiguous_value",
+                            prompt_hint=(
+                                f"Do you want me to update the previously recorded weight "
+                                f"to {val_r} kilograms?"
+                            ),
+                            candidates=[f"{val_r}"],
+                        )
+                    )
+
         corrected_fields: list[str] = []
         if detected_correction:
             for key in (

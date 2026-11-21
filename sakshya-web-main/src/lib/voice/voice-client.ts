@@ -740,6 +740,21 @@ export class BrowserVoiceClient {
     });
   }
 
+  sendPatchFields(fields: Record<string, unknown>): boolean {
+    return this.sendJson({
+      schema_version: 'v1',
+      type: 'patch_fields',
+      fields,
+    });
+  }
+
+  sendFinishNotes(): boolean {
+    return this.sendJson({
+      schema_version: 'v1',
+      type: 'finish_notes',
+    });
+  }
+
   sendPersistenceAck(payload: {
     visitId: string;
     correlationId: string;

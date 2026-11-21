@@ -9,6 +9,7 @@ import {
   Calendar,
   Check,
   CheckCircle2,
+  Edit3,
   HelpCircle,
   Mic,
   Pause,
@@ -125,56 +126,140 @@ export const CapturedField: React.FC<{
   fieldKey: string;
   label: string;
   value: string | null;
+  rawEditValue?: string;
+  editType?: 'text' | 'number' | 'date' | 'visit_type';
   sourcePhrase?: string | null;
   status: FieldConfirmStatus;
   onVoiceCorrect?: (fieldKey: string) => void;
+  onVisualSave?: (fieldKey: string, nextValue: string) => void;
   activeCorrectionField?: string | null;
 }> = ({
   fieldKey,
   label,
   value,
+  rawEditValue,
+  editType = 'text',
   sourcePhrase,
   status,
   onVoiceCorrect,
+  onVisualSave,
   activeCorrectionField,
 }) => {
+  const [editing, setEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState(rawEditValue ?? '');
   const isMissing = value === null || value === '';
   const needsAttn = status === 'needs_clarification' || isMissing;
+  const isModified = status === 'corrected';
+
+  const startEdit = () => {
+    setEditDraft(rawEditValue ?? (value || ''));
+    setEditing(true);
+  };
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    onVisualSave?.(fieldKey, editDraft);
+    setEditing(false);
+  };
 
   return (
     <div
-      className={`p-3 rounded-xl border transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
+      className={`p-3 rounded-xl border transition-colors flex flex-col gap-2 ${
         activeCorrectionField === fieldKey
           ? 'bg-indigo-50 border-indigo-400 ring-2 ring-indigo-200'
+          : isModified
+          ? 'bg-sky-50/60 border-sky-300'
           : needsAttn
           ? 'bg-amber-50/70 border-dashed border-amber-400'
           : 'bg-white border-slate-200'
       }`}
     >
-      <div className="min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-semibold text-clinical-text-secondary">{label}</span>
-          <FieldStatusPill status={isMissing && status !== 'needs_clarification' ? 'missing' : status} compact />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-semibold text-clinical-text-secondary">{label}</span>
+            <FieldStatusPill
+              status={isMissing && status !== 'needs_clarification' ? 'missing' : status}
+              compact
+            />
+            {isModified && (
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-900">
+                Updated
+              </span>
+            )}
+          </div>
+          <p
+            className={`mt-1 text-sm font-bold tabular-nums ${
+              isMissing ? 'text-amber-800 italic font-semibold' : 'text-clinical-text'
+            }`}
+          >
+            {isMissing ? 'Not identified — needs confirmation' : value}
+          </p>
+          {sourcePhrase && (
+            <p className="text-[11px] text-slate-500 mt-0.5">From speech: &ldquo;{sourcePhrase}&rdquo;</p>
+          )}
         </div>
-        <p
-          className={`mt-1 text-sm font-bold tabular-nums ${
-            isMissing ? 'text-amber-800 italic font-semibold' : 'text-clinical-text'
-          }`}
-        >
-          {isMissing ? 'Not identified — needs confirmation' : value}
-        </p>
-        {sourcePhrase && (
-          <p className="text-[11px] text-slate-500 mt-0.5">From speech: &ldquo;{sourcePhrase}&rdquo;</p>
-        )}
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          {onVisualSave && !editing && (
+            <button
+              type="button"
+              onClick={startEdit}
+              aria-label={`Edit ${label}`}
+              className="compact-chip inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+            >
+              <Edit3 className="h-3 w-3" aria-hidden="true" />
+              <span>Edit</span>
+            </button>
+          )}
+          {onVoiceCorrect && (
+            <VoiceCorrectionControl
+              fieldKey={fieldKey}
+              fieldLabel={label}
+              isActiveTarget={activeCorrectionField === fieldKey}
+              onTriggerVoiceCorrection={onVoiceCorrect}
+            />
+          )}
+        </div>
       </div>
 
-      {onVoiceCorrect && (
-        <VoiceCorrectionControl
-          fieldKey={fieldKey}
-          fieldLabel={label}
-          isActiveTarget={activeCorrectionField === fieldKey}
-          onTriggerVoiceCorrection={onVoiceCorrect}
-        />
+      {editing && onVisualSave && (
+        <form onSubmit={handleSave} className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200">
+          {editType === 'visit_type' ? (
+            <select
+              value={editDraft}
+              onChange={(e) => setEditDraft(e.target.value)}
+              className="flex-1 min-w-[140px] px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs bg-white"
+            >
+              <option value="">Select visit type</option>
+              <option value="ANC">ANC</option>
+              <option value="PNC">PNC</option>
+              <option value="Newborn">Newborn</option>
+              <option value="Immunisation">Immunisation</option>
+            </select>
+          ) : (
+            <input
+              type={editType === 'number' ? 'number' : editType === 'date' ? 'date' : 'text'}
+              step={editType === 'number' ? '0.1' : undefined}
+              value={editDraft}
+              onChange={(e) => setEditDraft(e.target.value)}
+              className="flex-1 min-w-[140px] px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs bg-white"
+            />
+          )}
+          <button
+            type="submit"
+            className="px-3 py-1.5 rounded-lg bg-clinical-primary text-white text-xs font-bold"
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold"
+          >
+            Cancel
+          </button>
+        </form>
       )}
     </div>
   );
@@ -228,33 +313,64 @@ export const VisitSummaryCard: React.FC<{
   isTtsPlaying: boolean;
   isTtsPaused: boolean;
   requiresReReadBack?: boolean;
+  summaryOutdated?: boolean;
   activeCorrectionField?: string | null;
   onPausePlayback: () => void;
   onResumePlayback: () => void;
   onVoiceCorrectField?: (fieldKey: string) => void;
+  onVisualPatchFields?: (fields: Record<string, unknown>) => void;
+  onSpeakToMakeChanges?: () => void;
 }> = ({
   draft,
   isTtsPlaying,
   isTtsPaused,
   requiresReReadBack,
+  summaryOutdated,
   activeCorrectionField,
   onPausePlayback,
   onResumePlayback,
   onVoiceCorrectField,
+  onVisualPatchFields,
+  onSpeakToMakeChanges,
 }) => {
   const statuses = draft.field_statuses || {};
 
   const vaccineText =
-    draft.vaccinations_due.length > 0
-      ? `Due: ${draft.vaccinations_due.join(', ')}`
-      : draft.vaccinations_completed.length > 0
-      ? `Completed: ${draft.vaccinations_completed.join(', ')}`
+    draft.vaccinations_due.length > 0 || draft.vaccinations_completed.length > 0
+      ? [
+          draft.vaccinations_completed.length > 0
+            ? `Completed: ${draft.vaccinations_completed.join(', ')}`
+            : '',
+          draft.vaccinations_due.length > 0 ? `Due: ${draft.vaccinations_due.join(', ')}` : '',
+        ]
+          .filter(Boolean)
+          .join(' · ')
       : null;
 
   const followUpText =
     draft.follow_up_actions.length > 0
       ? draft.follow_up_actions.map((a) => a.description).join('; ')
       : null;
+
+  const handleFieldVisualSave = (fieldKey: string, nextValue: string) => {
+    if (!onVisualPatchFields) return;
+    if (fieldKey === 'weight_kg') {
+      const parsed = parseFloat(nextValue);
+      onVisualPatchFields({ weight_kg: Number.isFinite(parsed) && parsed > 0 ? parsed : null });
+    } else if (fieldKey === 'next_visit_date') {
+      onVisualPatchFields({ next_visit_date: nextValue.trim() || null });
+    } else if (fieldKey === 'visit_type') {
+      onVisualPatchFields({ visit_type: nextValue.trim() || null });
+    } else if (fieldKey === 'beneficiary_id') {
+      onVisualPatchFields({ beneficiary_id: nextValue.trim().toUpperCase() || null });
+    } else if (fieldKey === 'vaccinations_due') {
+      const items = nextValue
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      onVisualPatchFields({ vaccinations_due: items });
+    }
+  };
 
   return (
     <section
@@ -267,29 +383,41 @@ export const VisitSummaryCard: React.FC<{
             Here&rsquo;s what I understood from your visit
           </h2>
           <p className="text-xs text-clinical-text-secondary">
-            Review every field below. Unidentified fields are never guessed.
+            Editable until final submission · Speak or tap Edit on any field.
           </p>
         </div>
-        <span
-          className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
-            draft.status === 'committed'
-              ? 'bg-emerald-100 text-emerald-900'
-              : draft.status === 'confirmed'
-              ? 'bg-sky-100 text-sky-900'
-              : 'bg-amber-100 text-amber-900'
-          }`}
-        >
-          {draft.status === 'draft' ? 'Draft — Unconfirmed' : draft.status}
-        </span>
+        <div className="flex items-center gap-2 flex-wrap">
+          {onSpeakToMakeChanges && draft.status === 'draft' && (
+            <button
+              type="button"
+              onClick={onSpeakToMakeChanges}
+              className="compact-chip inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 border border-sky-300 text-sky-900 text-xs font-bold"
+            >
+              <Mic className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Speak to make changes</span>
+            </button>
+          )}
+          <span
+            className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
+              draft.status === 'committed'
+                ? 'bg-emerald-100 text-emerald-900'
+                : draft.status === 'confirmed'
+                ? 'bg-sky-100 text-sky-900'
+                : 'bg-amber-100 text-amber-900'
+            }`}
+          >
+            {draft.status === 'draft' ? 'Unsubmitted Draft' : draft.status}
+          </span>
+        </div>
       </div>
 
       {/* Section A: Spoken Description */}
       <SpokenDescription
         transcriptSummary={draft.raw_transcript_summary}
-        readBackSummary={draft.read_back_summary}
+        readBackSummary={summaryOutdated ? undefined : draft.read_back_summary}
         isTtsPlaying={isTtsPlaying}
         isTtsPaused={isTtsPaused}
-        requiresReReadBack={requiresReReadBack}
+        requiresReReadBack={requiresReReadBack || summaryOutdated}
         onPausePlayback={onPausePlayback}
         onResumePlayback={onResumePlayback}
       />
@@ -309,42 +437,55 @@ export const VisitSummaryCard: React.FC<{
                 ? `${draft.beneficiary_name} (${draft.beneficiary_id})`
                 : draft.beneficiary_id || draft.beneficiary_name
             }
+            rawEditValue={draft.beneficiary_id || ''}
             status={statuses.beneficiary_id || (draft.beneficiary_id ? 'extracted' : 'needs_clarification')}
             onVoiceCorrect={onVoiceCorrectField}
+            onVisualSave={onVisualPatchFields ? handleFieldVisualSave : undefined}
             activeCorrectionField={activeCorrectionField}
           />
           <CapturedField
             fieldKey="visit_type"
             label="Visit Type"
             value={draft.visit_type}
+            rawEditValue={draft.visit_type || ''}
+            editType="visit_type"
             status={statuses.visit_type || (draft.visit_type ? 'extracted' : 'needs_clarification')}
             onVoiceCorrect={onVoiceCorrectField}
+            onVisualSave={onVisualPatchFields ? handleFieldVisualSave : undefined}
             activeCorrectionField={activeCorrectionField}
           />
           <CapturedField
             fieldKey="weight_kg"
             label="Weight"
             value={draft.weight_kg !== null ? `${draft.weight_kg} kg` : null}
+            rawEditValue={draft.weight_kg !== null ? String(draft.weight_kg) : ''}
+            editType="number"
             sourcePhrase={draft.weight_source_text}
             status={statuses.weight_kg || (draft.weight_kg !== null ? 'extracted' : 'missing')}
             onVoiceCorrect={onVoiceCorrectField}
+            onVisualSave={onVisualPatchFields ? handleFieldVisualSave : undefined}
             activeCorrectionField={activeCorrectionField}
           />
           <CapturedField
             fieldKey="vaccinations_due"
             label="Vaccinations / Immunisation"
             value={vaccineText}
+            rawEditValue={draft.vaccinations_due.join(', ')}
             status={statuses.vaccinations_due || (vaccineText ? 'extracted' : 'missing')}
             onVoiceCorrect={onVoiceCorrectField}
+            onVisualSave={onVisualPatchFields ? handleFieldVisualSave : undefined}
             activeCorrectionField={activeCorrectionField}
           />
           <CapturedField
             fieldKey="next_visit_date"
             label="Next Visit Date"
             value={draft.next_visit_date}
+            rawEditValue={draft.next_visit_date || ''}
+            editType="date"
             sourcePhrase={draft.next_visit_date_source_text}
             status={statuses.next_visit_date || (draft.next_visit_date ? 'extracted' : 'missing')}
             onVoiceCorrect={onVoiceCorrectField}
+            onVisualSave={onVisualPatchFields ? handleFieldVisualSave : undefined}
             activeCorrectionField={activeCorrectionField}
           />
           <CapturedField

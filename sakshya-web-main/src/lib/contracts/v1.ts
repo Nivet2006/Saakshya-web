@@ -308,6 +308,17 @@ export interface ClientEndSessionEventV1 {
   reason?: string;
 }
 
+export interface ClientPatchFieldsEventV1 {
+  schema_version?: 'v1';
+  type: 'patch_fields';
+  fields: Record<string, unknown>;
+}
+
+export interface ClientFinishNotesEventV1 {
+  schema_version?: 'v1';
+  type: 'finish_notes';
+}
+
 export type ClientWebSocketEventV1 =
   | ClientAudioChunkEventV1
   | ClientBargeInEventV1
@@ -316,7 +327,9 @@ export type ClientWebSocketEventV1 =
   | ClientConfirmVisitEventV1
   | ClientPersistenceAckEventV1
   | ClientPingEventV1
-  | ClientEndSessionEventV1;
+  | ClientEndSessionEventV1
+  | ClientPatchFieldsEventV1
+  | ClientFinishNotesEventV1;
 
 // ---------- WebSocket Server -> Client Events (voice-events.schema.json) ----------
 

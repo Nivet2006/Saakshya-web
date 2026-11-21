@@ -129,6 +129,13 @@ export type IdentityVerificationStatus =
   | 'candidate_confirmation'
   | 'verified';
 
+export type VisitReviewPhase =
+  | 'editing'
+  | 'ask_readback'
+  | 'reading_summary'
+  | 'ask_submission'
+  | 'draft_retained';
+
 export function useVoiceVisitSession(params: {
   worker: UserProfile;
   language: LanguageCode;
@@ -181,6 +188,8 @@ export function useVoiceVisitSession(params: {
     useState<IdentityVerificationStatus>('idle');
   const [verificationPrompt, setVerificationPrompt] = useState<string | null>(null);
   const [latencyMetrics, setLatencyMetrics] = useState<VoiceLatencyMetrics | null>(null);
+  const [reviewPhase, setReviewPhase] = useState<VisitReviewPhase>('editing');
+  const [summaryOutdated, setSummaryOutdated] = useState(false);
 
   const clientRef = useRef<BrowserVoiceClient | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -250,6 +259,8 @@ export function useVoiceVisitSession(params: {
     setIdentityVerificationStatus('idle');
     setVerificationPrompt(null);
     setLatencyMetrics(null);
+    setReviewPhase('editing');
+    setSummaryOutdated(false);
     finalLinesRef.current = [];
   }, []);
 
@@ -262,6 +273,8 @@ export function useVoiceVisitSession(params: {
     );
     setVerificationPrompt(null);
     setLatencyMetrics(null);
+    setReviewPhase('editing');
+    setSummaryOutdated(false);
     finalLinesRef.current = [];
     setTranscriptHistory([]);
     setPartialStable('');
@@ -436,6 +449,14 @@ export function useVoiceVisitSession(params: {
       },
       onClarificationRequired: (ev) => {
         setClarification(ev);
+        if (ev.field === 'readback_preference') {
+          setReviewPhase('ask_readback');
+          return;
+        }
+        if (ev.field === 'submission_confirmation') {
+          setReviewPhase('ask_submission');
+          return;
+        }
         if (ev.field === 'beneficiary_id') {
           setVerificationPrompt(ev.prompt_text);
           if (ev.reason === 'missing_required' || (ev.candidates && ev.candidates.length > 1)) {
@@ -454,6 +475,8 @@ export function useVoiceVisitSession(params: {
       },
       onReadBackStarted: (ev) => {
         setRequiresReReadBack(false);
+        setSummaryOutdated(false);
+        setReviewPhase('reading_summary');
         setIsCorrectingMode(false);
         setTargetCorrectionField(null);
         const merged = mergeVisitV1IntoDraft(draftRef.current, ev.draft, selectedBeneficiary, worker, {
@@ -466,6 +489,8 @@ export function useVoiceVisitSession(params: {
       },
       onCorrectionApplied: (ev) => {
         setRequiresReReadBack(true);
+        setSummaryOutdated(Boolean(draftRef.current?.read_back_summary));
+        setReviewPhase('editing');
         setIsCorrectingMode(false);
         setTargetCorrectionField(null);
         setCorrectionHistory((prev) => [
@@ -646,11 +671,82 @@ export function useVoiceVisitSession(params: {
   const startVoiceCorrection = useCallback((fieldKey?: string) => {
     setIsCorrectingMode(true);
     setTargetCorrectionField(fieldKey || null);
+    setReviewPhase('editing');
     if (clientRef.current) {
       clientRef.current.triggerBargeIn('voice_correction_tap');
       clientRef.current.setMicTransmissionActive(true);
     }
   }, []);
+
+  const speakToMakeChanges = useCallback(() => {
+    setIsCorrectingMode(true);
+    setTargetCorrectionField(null);
+    setReviewPhase('editing');
+    setClarification(null);
+    if (clientRef.current) {
+      clientRef.current.triggerBargeIn('speak_to_make_changes');
+      clientRef.current.setMicTransmissionActive(true);
+    }
+  }, []);
+
+  const finishNotesAndReview = useCallback(() => {
+    clientRef.current?.sendFinishNotes();
+  }, []);
+
+  const respondReadbackPreference = useCallback(
+    (readAloud: boolean) => {
+      setClarification(null);
+      clientRef.current?.sendTextInput(readAloud ? 'yes' : 'no', language);
+    },
+    [language]
+  );
+
+  const respondSubmissionConfirmation = useCallback(
+    (submit: boolean) => {
+      setClarification(null);
+      if (!submit) {
+        setReviewPhase('draft_retained');
+      }
+      if (clientRef.current?.isConnected()) {
+        clientRef.current.sendTextInput(submit ? 'yes' : 'no', language);
+      }
+    },
+    [language]
+  );
+
+  const patchFieldsVisually = useCallback(
+    (fields: Record<string, unknown>) => {
+      const updatedKeys = Object.keys(fields);
+      if (updatedKeys.length === 0) return;
+
+      setVisitDraft((prev) => {
+        if (!prev) return prev;
+        const nextStatuses = { ...(prev.field_statuses || {}) };
+        for (const k of updatedKeys) {
+          nextStatuses[k] = 'corrected';
+        }
+        const nextDraft: VisitDraft = {
+          ...prev,
+          ...fields,
+          status: 'draft',
+          field_statuses: nextStatuses,
+          updated_at: new Date().toISOString(),
+        };
+        if (prev.read_back_summary) {
+          setSummaryOutdated(true);
+        }
+        saveDraftLocally(nextDraft).catch(() => {});
+        return nextDraft;
+      });
+      setReviewPhase('editing');
+      setRequiresReReadBack(true);
+
+      if (clientRef.current?.isConnected()) {
+        clientRef.current.sendPatchFields(fields);
+      }
+    },
+    []
+  );
 
   const submitVoiceTextInput = useCallback((text: string) => {
     if (!text.trim()) return false;
@@ -758,6 +854,8 @@ export function useVoiceVisitSession(params: {
     identityVerificationStatus,
     verificationPrompt,
     latencyMetrics,
+    reviewPhase,
+    summaryOutdated,
     startVoiceSession,
     stopRecordingSession,
     resetSessionState,
@@ -769,6 +867,11 @@ export function useVoiceVisitSession(params: {
     resumeReadBack,
     sendClarificationSelection,
     startVoiceCorrection,
+    speakToMakeChanges,
+    finishNotesAndReview,
+    respondReadbackPreference,
+    respondSubmissionConfirmation,
+    patchFieldsVisually,
     submitVoiceTextInput,
     confirmAndSaveVisit,
     patchFieldStatus,

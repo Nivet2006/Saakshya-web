@@ -162,7 +162,7 @@ async def test_scenario_a_and_test1_greeting_and_correct_identity_verification()
     assert pipeline.sm.identity_verified is True
     assert "Lakshmi Devi is confirmed" in tts.spoken[-1]
 
-    # Now worker speaks visit notes
+    # Now worker speaks visit notes (continuous editing keeps session open for additions/corrections)
     await orch.handle_text_input(
         "Today I visited Lakshmi. ANC checkup completed. Weight is fifty-two kilo. "
         "TT injection pending. Next visit is twenty-eighth November."
@@ -174,14 +174,22 @@ async def test_scenario_a_and_test1_greeting_and_correct_identity_verification()
     assert pipeline.sm.visit.next_visit_date == "2026-11-28"
     assert "28 November 2026" in tts.spoken[-1]
 
-    # Section 7 & Test 9: Barge-in during read-back with bare number correction "No, it is fifty-three."
+    # Section 7 & Test 9: Barge-in / correction with bare number "No, it is fifty-three."
     await orch.handle_text_input("No, it is fifty-three.")
     await asyncio.sleep(0.05)
     assert pipeline.sm.visit.weight_kg == 53.0
     assert pipeline.sm.visit.next_visit_date == "2026-11-28"
-    assert "53 kg" in tts.spoken[-1]
+    assert "53 kilograms" in tts.spoken[-1]
 
-    # Worker confirms and persistence completes
+    # Worker indicates completion -> asks summary readback preference -> YES -> reads summary -> YES -> submits
+    await orch.handle_text_input("That's all.")
+    await asyncio.sleep(0.05)
+    assert pipeline.sm.state == ConversationState.ASK_READBACK_PREFERENCE
+    await orch.handle_text_input("Yes")
+    await asyncio.sleep(0.05)
+    assert "53 kg" in tts.spoken[-1]
+    assert "28 November 2026" in tts.spoken[-1]
+
     await orch.handle_text_input("Yes, confirm")
     await asyncio.sleep(0.05)
     await pipeline.handle_persistence_ack(

@@ -176,6 +176,14 @@ async def voice_session_ws(
                 await pipeline.handle_explicit_confirm_command(
                     bool(data.get("confirmed", False)), orchestrator
                 )
+            elif ev_type == "patch_fields" and pipeline is not None:
+                fields = data.get("fields")
+                if isinstance(fields, dict):
+                    await pipeline.handle_visual_patch(fields, orchestrator)
+            elif ev_type in ("finish_notes", "request_review") and pipeline is not None:
+                await pipeline.handle_finish_review_command(orchestrator)
+            elif ev_type == "silence_timeout" and pipeline is not None:
+                await pipeline.handle_silence_timeout(orchestrator)
             elif ev_type == "persistence_ack" and pipeline is not None:
                 try:
                     await pipeline.handle_persistence_ack(

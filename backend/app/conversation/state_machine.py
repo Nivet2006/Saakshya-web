@@ -203,6 +203,225 @@ def extract_fallback_correction_patch(utterance: str) -> ExtractionUpdate | None
 # NO fabricated PHC locations or phone numbers.
 # ---------------------------------------------------------------------------
 
+_COMPLETION_LATIN_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"\b(that'?s\s+all|that\s+is\s+all|i'?m\s+done|i\s+am\s+done|we\s+are\s+done|"
+        r"all\s+done|everything\s+is\s+correct|everything\s+looks\s+good|"
+        r"finish\s+(?:this\s+|the\s+)?visit|no\s+more\s+changes|nothing\s+else|"
+        r"complete\s+(?:the\s+)?visit|bas\s+itna\s+hi|ho\s+gaya|sab\s+theek\s+hai|"
+        r"koi\s+badlav\s+nahi)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"^\s*(?:done|finish|bas|itna\s+hi)\s*[.!]?\s*$", re.IGNORECASE),
+)
+
+_COMPLETION_INDIC_SUBSTRINGS: tuple[str, ...] = (
+    "बस इतना ही",
+    "बस हो गया",
+    "हो गया",
+    "सब ठीक है",
+    "कोई बदलाव नहीं",
+    "मुगियितु",
+    "ಮುಗಿಯಿತು",
+    "ಇಷ್ಟೇ",
+    "முடிந்தது",
+    "அவ்வளவுதான்",
+)
+
+
+def is_completion_intent(utterance: str) -> bool:
+    """Return True when the worker indicates note collection & editing are finished."""
+    text = utterance.strip()
+    if not text:
+        return False
+    for pat in _COMPLETION_LATIN_PATTERNS:
+        if pat.search(text):
+            return True
+    return any(sub in text for sub in _COMPLETION_INDIC_SUBSTRINGS)
+
+
+def generate_patch_acknowledgement_text(
+    *,
+    visit: VisitRecordState,
+    changed_fields: list[str],
+    is_correction: bool,
+    language: str,
+) -> str:
+    """Generate a short, natural localized acknowledgement of newly captured or updated fields."""
+    lang = normalize_language(language)
+    updates: list[str] = []
+
+    if "beneficiary_id" in changed_fields or "beneficiary_name" in changed_fields:
+        name = visit.beneficiary_name or visit.beneficiary_id or ""
+        if lang == "hi-IN":
+            updates.append(f"लाभार्थी {name}")
+        elif lang == "kn-IN":
+            updates.append(f"ಫಲಾನುಭವಿ {name}")
+        elif lang == "ta-IN":
+            updates.append(f"பயனாளி {name}")
+        else:
+            updates.append(f"beneficiary to {name}" if is_correction else f"beneficiary {name}")
+
+    if "visit_type" in changed_fields and visit.visit_type:
+        if lang == "hi-IN":
+            updates.append(f"विज़िट प्रकार {visit.visit_type.value}")
+        elif lang == "kn-IN":
+            updates.append(f"ಭೇಟಿಯ ವಿಧ {visit.visit_type.value}")
+        elif lang == "ta-IN":
+            updates.append(f"பார்வை வகை {visit.visit_type.value}")
+        else:
+            updates.append(f"visit type to {visit.visit_type.value}" if is_correction else f"visit type {visit.visit_type.value}")
+
+    if "weight_kg" in changed_fields and visit.weight_kg is not None:
+        w = _format_weight(visit.weight_kg)
+        if lang == "hi-IN":
+            updates.append(f"वज़न {w} किलो")
+        elif lang == "kn-IN":
+            updates.append(f"ತೂಕ {w} ಕೆಜಿ")
+        elif lang == "ta-IN":
+            updates.append(f"எடை {w} கிலோ")
+        else:
+            updates.append(f"weight to {w} kilograms" if is_correction else f"weight as {w} kilograms")
+
+    if "vaccinations_completed" in changed_fields and visit.vaccinations_completed:
+        v = _join_list(visit.vaccinations_completed)
+        if lang == "hi-IN":
+            updates.append(f"पूरे हुए टीके {v}")
+        elif lang == "kn-IN":
+            updates.append(f"ಪೂರ್ಣಗೊಂಡ ಲಸಿಕೆ {v}")
+        elif lang == "ta-IN":
+            updates.append(f"முடிந்த தடுப்பூசி {v}")
+        else:
+            updates.append(f"completed vaccinations ({v})")
+
+    if "vaccinations_due" in changed_fields and visit.vaccinations_due:
+        v = _join_list(visit.vaccinations_due)
+        if lang == "hi-IN":
+            updates.append(f"बाकी टीके {v}")
+        elif lang == "kn-IN":
+            updates.append(f"ಬಾಕಿ ಲಸಿಕೆ {v}")
+        elif lang == "ta-IN":
+            updates.append(f"நிலுவை தடுப்பூசி {v}")
+        else:
+            updates.append(f"pending vaccinations ({v})")
+
+    if "next_visit_date" in changed_fields and visit.next_visit_date:
+        d = format_unambiguous_spoken_date(visit.next_visit_date)
+        if lang == "hi-IN":
+            updates.append(f"अगली विज़िट की तारीख {d}")
+        elif lang == "kn-IN":
+            updates.append(f"ಮುಂದಿನ ಭೇಟಿಯ ದಿನಾಂಕ {d}")
+        elif lang == "ta-IN":
+            updates.append(f"அடுத்த பார்வை தேதி {d}")
+        else:
+            updates.append(f"next visit to {d}" if is_correction else f"next visit on {d}")
+
+    if not updates and "follow_up_actions" in changed_fields:
+        if lang == "hi-IN":
+            updates.append("फ़ॉलो-अप जानकारी")
+        elif lang == "kn-IN":
+            updates.append("ಮುಂದಿನ ಕ್ರಮ")
+        elif lang == "ta-IN":
+            updates.append("தொடர் நடவடிக்கை")
+        else:
+            updates.append("follow-up details")
+
+    joined = ", ".join(updates) if updates else "visit details"
+    if lang == "hi-IN":
+        return (
+            f"ठीक है, मैंने {joined} अपडेट कर दिया है। कोई और जानकारी या बदलाव बताएं, या समाप्त करने के लिए बोलें 'बस इतना ही'।"
+            if is_correction
+            else f"नोट किया: {joined}। कृपया आगे की जानकारी बताएं, या समाप्त करने के लिए बोलें 'बस इतना ही'।"
+        )
+    if lang == "kn-IN":
+        return (
+            f"ಸರಿ, {joined} ನವೀಕರಿಸಲಾಗಿದೆ. ಇನ್ನೇನಾದರೂ ಸೇರಿಸಲು ಅಥವಾ ಬದಲಾಯಿಸಲು ತಿಳಿಸಿ, ಅಥವಾ 'ಮುಗಿಯಿತು' ಎಂದು ಹೇಳಿ."
+            if is_correction
+            else f"ದಾಖಲಿಸಲಾಗಿದೆ: {joined}. ದಯವಿಟ್ಟು ಮುಂದುವರಿಸಿ, ಅಥವಾ 'ಮುಗಿಯಿತು' ಎಂದು ಹೇಳಿ."
+        )
+    if lang == "ta-IN":
+        return (
+            f"சரி, {joined} புதுப்பிக்கப்பட்டது. வேறு தகவல் அல்லது மாற்றம் இருந்தால் கூறுங்கள், அல்லது 'முடிந்தது' என்று சொல்லுங்கள்."
+            if is_correction
+            else f"பதிவு செய்யப்பட்டது: {joined}. தொடர்ந்து கூறுங்கள், அல்லது 'முடிந்தது' என்று சொல்லுங்கள்."
+        )
+    return (
+        f"Okay, I have updated {joined}. Let me know if you want to add or change anything else."
+        if is_correction
+        else f"Recorded {joined}. Continue speaking to add or change details, or say that's all when done."
+    )
+
+
+def generate_readback_preference_question(language: str) -> str:
+    lang = normalize_language(language)
+    if lang == "hi-IN":
+        return "आपकी विज़िट की जानकारी अपडेट हो गई है। क्या मैं पूरा विज़िट सारांश पढ़कर सुनाऊँ?"
+    if lang == "kn-IN":
+        return "ನಿಮ್ಮ ಭೇಟಿಯ ಮಾಹಿತಿಯನ್ನು ನವೀಕರಿಸಲಾಗಿದೆ. ಸಂಪೂರ್ಣ ಭೇಟಿಯ ಸಾರಾಂಶವನ್ನು ಓದಿ ಹೇಳಲೇ?"
+    if lang == "ta-IN":
+        return "உங்கள் பார்வைத் தகவல் புதுப்பிக்கப்பட்டுள்ளது. முழு பார்வை சுருக்கத்தையும் படித்துக் காட்டலாமா?"
+    return "Your visit information has been updated. Would you like me to read the complete visit summary aloud?"
+
+
+def generate_unclear_readback_preference_question(language: str) -> str:
+    lang = normalize_language(language)
+    if lang == "hi-IN":
+        return "माफ़ कीजिए, क्या मैं पूरा सारांश पढ़कर सुनाऊँ? कृपया हाँ या नहीं बोलें।"
+    if lang == "kn-IN":
+        return "ಕ್ಷಮಿಸಿ, ಸಾರಾಂಶವನ್ನು ಓದಿ ಹೇಳಲೇ? ದಯವಿಟ್ಟು ಹೌದು ಅಥವಾ ಇಲ್ಲ ಎಂದು ಹೇಳಿ."
+    if lang == "ta-IN":
+        return "மன்னிக்கவும், சுருக்கத்தை படித்துக் காட்டலாமா? தயவுசெய்து ஆம் அல்லது இல்லை என்று சொல்லுங்கள்."
+    return "Sorry, should I read the summary aloud? Please say yes or no."
+
+
+def generate_submission_confirmation_question(language: str) -> str:
+    lang = normalize_language(language)
+    if lang == "hi-IN":
+        return "ठीक है। क्या आप यह विज़िट अभी सबमिट और सेव करना चाहती हैं?"
+    if lang == "kn-IN":
+        return "ಸರಿ. ಈ ಭೇಟಿಯನ್ನು ಈಗ ಸಲ್ಲಿಸಿ ಉಳಿಸಬೇಕೇ?"
+    if lang == "ta-IN":
+        return "சரி. இந்தப் பார்வையை இப்போது சமர்ப்பித்து சேமிக்கலாமா?"
+    return "Okay. Would you like to submit and save this visit now?"
+
+
+def generate_unclear_submission_question(language: str) -> str:
+    lang = normalize_language(language)
+    if lang == "hi-IN":
+        return "माफ़ कीजिए, क्या मैं यह विज़िट सबमिट और सेव कर दूँ? कृपया हाँ या नहीं बोलें।"
+    if lang == "kn-IN":
+        return "ಕ್ಷಮಿಸಿ, ಈ ಭೇಟಿಯನ್ನು ಸಲ್ಲಿಸಿ ಉಳಿಸಬೇಕೇ? ದಯವಿಟ್ಟು ಹೌದು ಅಥವಾ ಇಲ್ಲ ಎಂದು ಹೇಳಿ."
+    if lang == "ta-IN":
+        return "மன்னிக்கவும், இந்தப் பார்வையை சமர்ப்பித்து சேமிக்கலாமா? தயவுசெய்து ஆம் அல்லது இல்லை என்று சொல்லுங்கள்."
+    return "Sorry, would you like to submit and save this visit now? Please say yes or no."
+
+
+def generate_submission_declined_text(language: str) -> str:
+    lang = normalize_language(language)
+    if lang == "hi-IN":
+        return "ठीक है, यह विज़िट अभी ड्राफ्ट के रूप में रखी गई है। आप इसमें और बदलाव कर सकती हैं या बाद में सबमिट कर सकती हैं।"
+    if lang == "kn-IN":
+        return "ಸರಿ, ಈ ಭೇಟಿಯನ್ನು ಸಲ್ಲಿಸದ ಡ್ರಾಫ್ಟ್ ಆಗಿ ಉಳಿಸಲಾಗಿದೆ. ನೀವು ಬದಲಾವಣೆಗಳನ್ನು ಮಾಡಬಹುದು ಅಥವಾ ನಂತರ ಸಲ್ಲಿಸಬಹುದು."
+    if lang == "ta-IN":
+        return "சரி, இந்தப் பார்வை சமர்ப்பிக்கப்படாத வரைவாக வைக்கப்பட்டுள்ளது. நீங்கள் மாற்றங்களைச் செய்யலாம் அல்லது பின்னர் சமர்ப்பிக்கலாம்."
+    return "Okay, I have kept this visit as an unsubmitted draft. You can make more changes or submit later."
+
+
+def generate_complete_summary_with_submit_prompt(visit: VisitRecordState, language: str) -> str:
+    """Read back the latest corrected summary clearly and ask for submission permission."""
+    lang = normalize_language(language)
+    base = generate_read_back_text(visit, lang)
+    for old_q, new_q in (
+        ("क्या मैं यह रिकॉर्ड कन्फर्म कर दूँ?", "क्या आप यह विज़िट अभी सबमिट और सेव करना चाहती हैं?"),
+        ("ಈ ದಾಖಲೆಯನ್ನು ದೃಢೀಕರಿಸಲೇ?", "ಈ ಭೇಟಿಯನ್ನು ಈಗ ಸಲ್ಲಿಸಿ ಉಳಿಸಬೇಕೇ?"),
+        ("இந்தப் பதிவை உறுதிப்படுத்தலாமா?", "இந்தப் பார்வையை இப்போது சமர்ப்பித்து சேமிக்கலாமா?"),
+        ("Should I confirm this record?", "Would you like to submit and save this visit now?"),
+    ):
+        if base.endswith(old_q):
+            return base[: -len(old_q)] + new_q
+    return f"{base} {generate_submission_confirmation_question(lang)}"
+
+
 def _format_weight(weight_kg: float) -> str:
     return f"{weight_kg:.2f}".rstrip("0").rstrip(".")
 
@@ -416,10 +635,10 @@ _CONFIRMATION_PENDING_MESSAGES: dict[str, str] = {
 }
 
 _COMMITTED_MESSAGES: dict[str, str] = {
-    "en-IN": "Visit record has been saved successfully.",
-    "hi-IN": "विज़िट रिकॉर्ड सफलतापूर्वक सेव हो गया है।",
-    "kn-IN": "ಭೇಟಿಯ ದಾಖಲೆಯನ್ನು ಯಶಸ್ವಿಯಾಗಿ ಉಳಿಸಲಾಗಿದೆ.",
-    "ta-IN": "பார்வை பதிவு வெற்றிகரமாக சேமிக்கப்பட்டது.",
+    "en-IN": "Your visit has been successfully saved. Thank you.",
+    "hi-IN": "आपकी विज़िट सफलतापूर्वक सेव हो गई है। धन्यवाद।",
+    "kn-IN": "ನಿಮ್ಮ ಭೇಟಿಯನ್ನು ಯಶಸ್ವಿಯಾಗಿ ಉಳಿಸಲಾಗಿದೆ. ಧನ್ಯವಾದಗಳು.",
+    "ta-IN": "உங்கள் பார்வை வெற்றிகரமாக சேமிக்கப்பட்டது. நன்றி.",
 }
 
 _PERSISTENCE_FAILED_MESSAGES: dict[str, str] = {
@@ -694,6 +913,10 @@ class ConversationStateMachine:
         self._danger_index_by_canonical: dict[str, int] = {}
 
         self.last_read_back_text: str | None = None
+        self.summary_outdated: bool = False
+        self.readback_silence_repompts: int = 0
+        self.submission_silence_reprompts: int = 0
+        self.change_history: list[dict[str, Any]] = []
         self.awaiting_persistence: bool = False
         self.persistence_error: str | None = None
         self.abandoned: bool = False
@@ -828,81 +1051,167 @@ class ConversationStateMachine:
         return ordered
 
     def _apply_update_fields(
-        self, update: ExtractionUpdate, *, is_patch: bool
+        self,
+        update: ExtractionUpdate,
+        *,
+        is_patch: bool,
+        merge_lists: bool = False,
     ) -> list[str]:
         """Apply extraction/patch fields to `self.visit` without touching danger state."""
         fields = update.specified_fields()
         changed: list[str] = []
+        prev_snapshot: dict[str, Any] = {}
+        new_snapshot: dict[str, Any] = {}
+
+        def _record(field_name: str, old_val: Any, new_val: Any) -> None:
+            if old_val != new_val:
+                prev_snapshot[field_name] = old_val
+                new_snapshot[field_name] = new_val
+                self.change_history.append(
+                    {
+                        "field": field_name,
+                        "previous_value": old_val,
+                        "new_value": new_val,
+                        "is_patch": is_patch,
+                        "timestamp": utc_now_iso(),
+                    }
+                )
+
+        for cf in update.clear_fields:
+            if cf == "weight_kg" and self.visit.weight_kg is not None:
+                _record("weight_kg", self.visit.weight_kg, None)
+                self.visit.weight_kg = None
+                self.confirmed_fields.discard("weight_kg")
+                changed.append("weight_kg")
+            elif cf == "next_visit_date" and self.visit.next_visit_date is not None:
+                _record("next_visit_date", self.visit.next_visit_date, None)
+                self.visit.next_visit_date = None
+                self.confirmed_fields.discard("next_visit_date")
+                changed.append("next_visit_date")
+            elif cf == "visit_type" and self.visit.visit_type is not None:
+                _record("visit_type", self.visit.visit_type.value, None)
+                self.visit.visit_type = None
+                self.confirmed_fields.discard("visit_type")
+                changed.append("visit_type")
+            elif cf == "vaccinations_due" and self.visit.vaccinations_due:
+                _record("vaccinations_due", list(self.visit.vaccinations_due), [])
+                self.visit.vaccinations_due = []
+                changed.append("vaccinations_due")
+            elif cf == "vaccinations_completed" and self.visit.vaccinations_completed:
+                _record("vaccinations_completed", list(self.visit.vaccinations_completed), [])
+                self.visit.vaccinations_completed = []
+                changed.append("vaccinations_completed")
 
         if "beneficiary_id" in fields and update.beneficiary_id is not None:
+            _record("beneficiary_id", self.visit.beneficiary_id, update.beneficiary_id)
             self.visit.beneficiary_id = update.beneficiary_id
+            self.candidate_beneficiary_id = update.beneficiary_id
+            self.identity_verified = True
             self.confirmed_fields.add("beneficiary_id")
             self._backfill_alert_beneficiary()
             changed.append("beneficiary_id")
 
         if "beneficiary_name" in fields and update.beneficiary_name is not None:
+            _record("beneficiary_name", self.visit.beneficiary_name, update.beneficiary_name)
             self.visit.beneficiary_name = update.beneficiary_name
+            self.candidate_beneficiary_name = update.beneficiary_name
             self.confirmed_fields.add("beneficiary_name")
             changed.append("beneficiary_name")
 
         if "visit_type" in fields and update.visit_type is not None:
+            old_vt = self.visit.visit_type.value if self.visit.visit_type else None
+            _record("visit_type", old_vt, update.visit_type.value)
             self.visit.visit_type = update.visit_type
             self.confirmed_fields.add("visit_type")
             changed.append("visit_type")
 
         if "weight_kg" in fields and update.weight_kg is not None:
+            _record("weight_kg", self.visit.weight_kg, update.weight_kg)
             self.visit.weight_kg = update.weight_kg
             self.confirmed_fields.add("weight_kg")
             changed.append("weight_kg")
 
         if "vaccinations_completed" in fields and update.vaccinations_completed is not None:
-            if is_patch:
-                self.visit.vaccinations_completed = [
-                    v.strip() for v in update.vaccinations_completed if v.strip()
-                ]
+            old_vc = list(self.visit.vaccinations_completed)
+            if is_patch and not merge_lists:
+                new_vc = [v.strip() for v in update.vaccinations_completed if v.strip()]
             else:
-                self.visit.vaccinations_completed = self._merge_unique_list(
+                new_vc = self._merge_unique_list(
                     self.visit.vaccinations_completed, update.vaccinations_completed
                 )
+            self.visit.vaccinations_completed = new_vc
+            _record("vaccinations_completed", old_vc, list(new_vc))
+            # If a vaccine is completed, automatically remove it from due list
+            completed_low = {v.lower() for v in new_vc}
+            filtered_due = [v for v in self.visit.vaccinations_due if v.lower() not in completed_low]
+            if filtered_due != self.visit.vaccinations_due:
+                _record("vaccinations_due", list(self.visit.vaccinations_due), filtered_due)
+                self.visit.vaccinations_due = filtered_due
+                if "vaccinations_due" not in changed:
+                    changed.append("vaccinations_due")
             self.confirmed_fields.add("vaccinations_completed")
             changed.append("vaccinations_completed")
 
         if "vaccinations_due" in fields and update.vaccinations_due is not None:
-            if is_patch:
-                self.visit.vaccinations_due = [
-                    v.strip() for v in update.vaccinations_due if v.strip()
-                ]
+            old_vd = list(self.visit.vaccinations_due)
+            if is_patch and not merge_lists:
+                new_vd = [v.strip() for v in update.vaccinations_due if v.strip()]
             else:
-                self.visit.vaccinations_due = self._merge_unique_list(
+                new_vd = self._merge_unique_list(
                     self.visit.vaccinations_due, update.vaccinations_due
                 )
+            self.visit.vaccinations_due = new_vd
+            _record("vaccinations_due", old_vd, list(new_vd))
+            if is_patch:
+                due_low = {v.lower() for v in new_vd}
+                filtered_comp = [
+                    v for v in self.visit.vaccinations_completed if v.lower() not in due_low
+                ]
+                if filtered_comp != self.visit.vaccinations_completed:
+                    _record(
+                        "vaccinations_completed",
+                        list(self.visit.vaccinations_completed),
+                        filtered_comp,
+                    )
+                    self.visit.vaccinations_completed = filtered_comp
+                    if "vaccinations_completed" not in changed:
+                        changed.append("vaccinations_completed")
             self.confirmed_fields.add("vaccinations_due")
             changed.append("vaccinations_due")
 
         if "next_visit_date" in fields and update.next_visit_date is not None:
-            self.visit.next_visit_date = update.next_visit_date.strip()
+            new_nd = update.next_visit_date.strip()
+            _record("next_visit_date", self.visit.next_visit_date, new_nd)
+            self.visit.next_visit_date = new_nd
             self.confirmed_fields.add("next_visit_date")
             changed.append("next_visit_date")
 
         if "follow_up_actions" in fields and update.follow_up_actions is not None:
-            if is_patch:
-                self.visit.follow_up_actions = [
-                    a.strip() for a in update.follow_up_actions if a.strip()
-                ]
+            old_fa = list(self.visit.follow_up_actions)
+            if is_patch and not merge_lists:
+                new_fa = [a.strip() for a in update.follow_up_actions if a.strip()]
             else:
-                self.visit.follow_up_actions = self._merge_unique_list(
+                new_fa = self._merge_unique_list(
                     self.visit.follow_up_actions, update.follow_up_actions
                 )
+            self.visit.follow_up_actions = new_fa
+            _record("follow_up_actions", old_fa, list(new_fa))
             self.confirmed_fields.add("follow_up_actions")
             changed.append("follow_up_actions")
 
-        # Clear any pending clarifications for fields that just received concrete values
+        # Any update invalidates a previously generated summary
         if changed:
+            if self.last_read_back_text is not None:
+                self.summary_outdated = True
+            self.last_read_back_text = None
             changed_set = set(changed)
             self.pending_clarifications = [
                 c for c in self.pending_clarifications if c.field not in changed_set
             ]
             self.visit.updated_at = utc_now_iso()
+
+        self._last_prev_snapshot = prev_snapshot
+        self._last_new_snapshot = new_snapshot
 
         # Merge newly reported clarifications (ignoring fields resolved in this same update
         # or already confirmed unless the value is still unknown).
@@ -2051,3 +2360,525 @@ class ConversationStateMachine:
                 "danger_alerts_preserved": len(self._danger_alerts),
             },
         )
+
+    # -- Section 1–9 Continuous Editing, Final Review & Submission API -------
+
+    def apply_continuous_update(
+        self,
+        update: ExtractionUpdate,
+        *,
+        is_correction: bool = False,
+        merge_lists: bool = True,
+        language: str | None = None,
+    ) -> TransitionResult:
+        """Apply new fields or field-level corrections and keep conversation open for edits."""
+        previous = self.state
+        if self.state == ConversationState.COMMITTED:
+            raise InvalidTransitionError("Cannot modify a committed visit record.")
+
+        if language:
+            self.set_language(language)
+        elif update.detected_language:
+            self.set_language(update.detected_language)
+
+        actions: list[StateMachineAction] = []
+        self.visit.status = VisitStatus.DRAFT
+        self.awaiting_persistence = False
+        self.persistence_error = None
+        self.readback_silence_repompts = 0
+        self.submission_silence_reprompts = 0
+
+        if is_correction:
+            self._transition(
+                ConversationState.CORRECTION_PATCH, "continuous_field_correction", actions
+            )
+        elif self.state in (
+            ConversationState.IDLE,
+            ConversationState.GATHERING_NOTES,
+            ConversationState.CONTINUE_CONVERSATION,
+            ConversationState.ASK_READBACK_PREFERENCE,
+            ConversationState.ASK_SUBMISSION_CONFIRMATION,
+            ConversationState.READ_BACK_CONFIRMATION,
+            ConversationState.READY_TO_CONFIRM,
+            ConversationState.CLARIFICATION_REQUIRED,
+        ):
+            self._transition(
+                ConversationState.EXTRACTING_FIELDS, "continuous_extraction", actions
+            )
+
+        changed = self._apply_update_fields(
+            update, is_patch=is_correction, merge_lists=merge_lists
+        )
+        prev_vals = dict(getattr(self, "_last_prev_snapshot", {}))
+        new_vals = dict(getattr(self, "_last_new_snapshot", {}))
+
+        # Only classify as correction when an existing value was actually replaced or explicit correction
+        actually_replaced = any(
+            k in prev_vals and prev_vals[k] not in (None, [], "")
+            for k in changed
+        )
+        emit_correction = is_correction or actually_replaced
+
+        if emit_correction and changed:
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.CORRECTION_APPLIED,
+                    payload={
+                        "patched_fields": changed,
+                        "previous_values": prev_vals,
+                        "new_values": new_vals,
+                        "visit_record": self.visit.to_contract_payload(),
+                    },
+                )
+            )
+
+        actions.append(
+            StateMachineAction(
+                action_type=ActionType.DRAFT_UPDATED,
+                payload={
+                    "changed_fields": changed,
+                    "visit_record": self.visit.to_contract_payload(),
+                },
+            )
+        )
+
+        # If an explicit ambiguity clarification was emitted (e.g., bare ambiguous number)
+        ambiguous_clars = [
+            c
+            for c in update.clarifications
+            if c.reason not in ("missing",) and c.field not in changed
+        ]
+        if ambiguous_clars:
+            self.pending_clarifications = ambiguous_clars
+            self._transition(
+                ConversationState.CLARIFICATION_REQUIRED,
+                "ambiguous_field_needs_clarification",
+                actions,
+            )
+            prompt = generate_clarification_text(ambiguous_clars, self.active_language)
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.CLARIFICATION_PROMPT,
+                    payload={
+                        "clarifications": [c.model_dump(mode="json") for c in ambiguous_clars],
+                        "language": self.active_language,
+                        "text": prompt,
+                    },
+                )
+            )
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.SPEAK,
+                    payload={"text": prompt, "language": self.active_language},
+                )
+            )
+            return self._result(
+                previous,
+                actions,
+                spoken_text=prompt,
+                metadata={"patched_fields": changed, "is_correction": emit_correction},
+            )
+
+        self._transition(
+            ConversationState.CONTINUE_CONVERSATION,
+            "continue_continuous_editing",
+            actions,
+        )
+        spoken = generate_patch_acknowledgement_text(
+            visit=self.visit,
+            changed_fields=changed,
+            is_correction=emit_correction,
+            language=self.active_language,
+        )
+        actions.append(
+            StateMachineAction(
+                action_type=ActionType.SPEAK,
+                payload={"text": spoken, "language": self.active_language},
+            )
+        )
+        return self._result(
+            previous,
+            actions,
+            spoken_text=spoken,
+            metadata={"patched_fields": changed, "is_correction": emit_correction},
+        )
+
+    def indicate_worker_done(self, *, language: str | None = None) -> TransitionResult:
+        """Transition from continuous editing to ASK_READBACK_PREFERENCE (Section 6)."""
+        previous = self.state
+        if self.state == ConversationState.COMMITTED:
+            raise InvalidTransitionError("Visit record is already committed.")
+        if language:
+            self.set_language(language)
+
+        actions: list[StateMachineAction] = []
+        clarifications = self._compute_clarifications()
+        if clarifications:
+            self.pending_clarifications = clarifications
+            self._transition(
+                ConversationState.CLARIFICATION_REQUIRED,
+                "missing_required_before_final_review",
+                actions,
+            )
+            prompt = generate_clarification_text(clarifications, self.active_language)
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.CLARIFICATION_PROMPT,
+                    payload={
+                        "clarifications": [c.model_dump(mode="json") for c in clarifications],
+                        "language": self.active_language,
+                        "text": prompt,
+                    },
+                )
+            )
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.SPEAK,
+                    payload={"text": prompt, "language": self.active_language},
+                )
+            )
+            return self._result(previous, actions, spoken_text=prompt)
+
+        self.readback_silence_repompts = 0
+        self.submission_silence_reprompts = 0
+        self._transition(
+            ConversationState.FINAL_REVIEW_READY, "worker_indicated_done", actions
+        )
+        self._transition(
+            ConversationState.ASK_READBACK_PREFERENCE,
+            "ask_readback_preference",
+            actions,
+        )
+        spoken = generate_readback_preference_question(self.active_language)
+        actions.append(
+            StateMachineAction(
+                action_type=ActionType.SPEAK,
+                payload={"text": spoken, "language": self.active_language},
+            )
+        )
+        return self._result(
+            previous,
+            actions,
+            spoken_text=spoken,
+            metadata={"awaiting_readback_preference": True},
+        )
+
+    def handle_readback_preference_response(
+        self,
+        utterance: str,
+        *,
+        correction_patch: ExtractionUpdate | None = None,
+        language: str | None = None,
+    ) -> TransitionResult:
+        """Handle YES / NO / correction / unclear during ASK_READBACK_PREFERENCE."""
+        previous = self.state
+        if language:
+            self.set_language(language)
+        if self.state == ConversationState.COMMITTED:
+            raise InvalidTransitionError("Visit record is already committed.")
+
+        # Scenario C: worker wants to edit a field before summary
+        if correction_patch is not None and (
+            correction_patch.specified_fields() or correction_patch.clear_fields
+        ):
+            return self.apply_continuous_update(correction_patch, is_correction=True)
+        inferred = extract_fallback_correction_patch(utterance)
+        if inferred is not None:
+            return self.apply_continuous_update(inferred, is_correction=True)
+
+        intent = classify_confirmation_intent(utterance)
+        actions: list[StateMachineAction] = []
+
+        if intent == "confirm":
+            self.pending_clarifications = []
+            self.summary_outdated = False
+            self._transition(
+                ConversationState.READ_COMPLETE_SUMMARY,
+                "worker_requested_summary_readback",
+                actions,
+            )
+            summary = generate_complete_summary_with_submit_prompt(
+                self.visit, self.active_language
+            )
+            self.last_read_back_text = summary
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.READ_BACK_STARTED,
+                    payload={
+                        "visit_draft_id": self.visit.visit_draft_id,
+                        "language": self.active_language,
+                        "read_back_text": summary,
+                    },
+                )
+            )
+            self._transition(
+                ConversationState.ASK_SUBMISSION_CONFIRMATION,
+                "awaiting_submission_after_summary",
+                actions,
+            )
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.SPEAK,
+                    payload={"text": summary, "language": self.active_language},
+                )
+            )
+            return self._result(
+                previous,
+                actions,
+                spoken_text=summary,
+                metadata={"readback_choice": "yes"},
+            )
+
+        if intent == "reject":
+            # Scenario B: Worker declined summary read-back ONLY -> ask whether to submit
+            self._transition(
+                ConversationState.ASK_SUBMISSION_CONFIRMATION,
+                "worker_declined_summary_readback",
+                actions,
+            )
+            spoken = generate_submission_confirmation_question(self.active_language)
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.SPEAK,
+                    payload={"text": spoken, "language": self.active_language},
+                )
+            )
+            return self._result(
+                previous,
+                actions,
+                spoken_text=spoken,
+                metadata={"readback_choice": "no"},
+            )
+
+        # Ambiguous response -> repeat question clearly without auto-assuming YES or NO
+        spoken = generate_unclear_readback_preference_question(self.active_language)
+        actions.append(
+            StateMachineAction(
+                action_type=ActionType.SPEAK,
+                payload={"text": spoken, "language": self.active_language},
+            )
+        )
+        return self._result(
+            previous,
+            actions,
+            spoken_text=spoken,
+            metadata={"intent": "unclear"},
+        )
+
+    def handle_submission_confirmation_response(
+        self,
+        utterance: str,
+        *,
+        correction_patch: ExtractionUpdate | None = None,
+        language: str | None = None,
+    ) -> TransitionResult:
+        """Handle YES / NO / correction / unclear during ASK_SUBMISSION_CONFIRMATION."""
+        previous = self.state
+        if language:
+            self.set_language(language)
+        if self.state == ConversationState.COMMITTED:
+            raise InvalidTransitionError("Visit record is already committed.")
+
+        # Test 8: worker changes a field after hearing summary -> invalidate old summary & return to editing
+        if correction_patch is not None and (
+            correction_patch.specified_fields() or correction_patch.clear_fields
+        ):
+            self.summary_outdated = True
+            self.last_read_back_text = None
+            return self.apply_continuous_update(correction_patch, is_correction=True)
+        inferred = extract_fallback_correction_patch(utterance)
+        if inferred is not None:
+            self.summary_outdated = True
+            self.last_read_back_text = None
+            return self.apply_continuous_update(inferred, is_correction=True)
+
+        intent = classify_confirmation_intent(utterance)
+        actions: list[StateMachineAction] = []
+
+        if intent == "confirm":
+            clarifications = self._compute_clarifications()
+            if clarifications or not self.identity_verified or not self.visit.beneficiary_id:
+                self.pending_clarifications = clarifications
+                self._transition(
+                    ConversationState.CLARIFICATION_REQUIRED,
+                    "validation_failed_before_submit",
+                    actions,
+                )
+                prompt = generate_clarification_text(
+                    clarifications or [ClarificationRequest(field="beneficiary_id", reason="missing")],
+                    self.active_language,
+                )
+                actions.append(
+                    StateMachineAction(
+                        action_type=ActionType.SPEAK,
+                        payload={"text": prompt, "language": self.active_language},
+                    )
+                )
+                return self._result(previous, actions, spoken_text=prompt)
+
+            self._transition(
+                ConversationState.READY_TO_CONFIRM,
+                "worker_approved_submission",
+                actions,
+            )
+            self.visit.status = VisitStatus.CONFIRMED
+            self.visit.updated_at = utc_now_iso()
+            self.awaiting_persistence = True
+            self.persistence_error = None
+
+            payload = self.visit.to_contract_payload()
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.WORKER_CONFIRMED,
+                    payload={"visit_record": payload},
+                )
+            )
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.PERSISTENCE_REQUESTED,
+                    priority="high",
+                    payload={
+                        "session_id": self.session_id,
+                        "visit_record": payload,
+                        "danger_alerts": [a.model_dump(mode="json") for a in self._danger_alerts],
+                    },
+                )
+            )
+            spoken = _CONFIRMATION_PENDING_MESSAGES[self.active_language]
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.SPEAK,
+                    payload={"text": spoken, "language": self.active_language},
+                )
+            )
+            return self._result(
+                previous,
+                actions,
+                spoken_text=spoken,
+                metadata={"intent": "confirm", "awaiting_persistence": True},
+            )
+
+        if intent == "reject":
+            # Test 9: submission declined -> retain unsubmitted draft and allow further edits
+            self.visit.status = VisitStatus.DRAFT
+            self.awaiting_persistence = False
+            self._transition(
+                ConversationState.CONTINUE_CONVERSATION,
+                "worker_declined_submission_keep_draft",
+                actions,
+            )
+            spoken = generate_submission_declined_text(self.active_language)
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.DRAFT_UPDATED,
+                    payload={
+                        "changed_fields": [],
+                        "visit_record": self.visit.to_contract_payload(),
+                    },
+                )
+            )
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.SPEAK,
+                    payload={"text": spoken, "language": self.active_language},
+                )
+            )
+            return self._result(
+                previous,
+                actions,
+                spoken_text=spoken,
+                metadata={"intent": "reject", "draft_retained": True},
+            )
+
+        spoken = generate_unclear_submission_question(self.active_language)
+        actions.append(
+            StateMachineAction(
+                action_type=ActionType.SPEAK,
+                payload={"text": spoken, "language": self.active_language},
+            )
+        )
+        return self._result(
+            previous,
+            actions,
+            spoken_text=spoken,
+            metadata={"intent": "unclear"},
+        )
+
+    def handle_silence_timeout(self) -> TransitionResult:
+        """Section 7: Repeat question once on silence, then preserve unsubmitted draft (never auto-submit)."""
+        previous = self.state
+        actions: list[StateMachineAction] = []
+
+        if self.state == ConversationState.ASK_READBACK_PREFERENCE:
+            if self.readback_silence_repompts < 1:
+                self.readback_silence_repompts += 1
+                spoken = generate_readback_preference_question(self.active_language)
+                actions.append(
+                    StateMachineAction(
+                        action_type=ActionType.SPEAK,
+                        payload={"text": spoken, "language": self.active_language},
+                    )
+                )
+                return self._result(
+                    previous,
+                    actions,
+                    spoken_text=spoken,
+                    metadata={"silence_action": "repeat_once"},
+                )
+            self.visit.status = VisitStatus.DRAFT
+            self._transition(
+                ConversationState.CONTINUE_CONVERSATION,
+                "silence_retained_unsubmitted_draft",
+                actions,
+            )
+            spoken = generate_submission_declined_text(self.active_language)
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.SPEAK,
+                    payload={"text": spoken, "language": self.active_language},
+                )
+            )
+            return self._result(
+                previous,
+                actions,
+                spoken_text=spoken,
+                metadata={"silence_action": "retained_draft"},
+            )
+
+        if self.state == ConversationState.ASK_SUBMISSION_CONFIRMATION:
+            if self.submission_silence_reprompts < 1:
+                self.submission_silence_reprompts += 1
+                spoken = generate_submission_confirmation_question(self.active_language)
+                actions.append(
+                    StateMachineAction(
+                        action_type=ActionType.SPEAK,
+                        payload={"text": spoken, "language": self.active_language},
+                    )
+                )
+                return self._result(
+                    previous,
+                    actions,
+                    spoken_text=spoken,
+                    metadata={"silence_action": "repeat_once"},
+                )
+            self.visit.status = VisitStatus.DRAFT
+            self._transition(
+                ConversationState.CONTINUE_CONVERSATION,
+                "silence_retained_unsubmitted_draft",
+                actions,
+            )
+            spoken = generate_submission_declined_text(self.active_language)
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.SPEAK,
+                    payload={"text": spoken, "language": self.active_language},
+                )
+            )
+            return self._result(
+                previous,
+                actions,
+                spoken_text=spoken,
+                metadata={"silence_action": "retained_draft"},
+            )
+
+        return self._result(previous, actions, metadata={"silence_action": "noop"})
