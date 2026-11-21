@@ -18,7 +18,6 @@ import {
   Radio,
   RefreshCw,
   Send,
-  Sparkles,
   Square,
   Volume2,
 } from 'lucide-react';
@@ -214,13 +213,9 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
               <span>{ui.startRecording}</span>
             </button>
 
-            {/* Ambient HealthWave & Indic numeral hint in idle state */}
+            {/* Ambient HealthWave in idle state */}
             <div className="w-full max-w-sm flex flex-col items-center gap-1.5 pt-2">
               <HealthWave width={300} height={32} color="#0D9488" opacity={0.35} />
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50 border border-slate-200 text-[11px] font-semibold text-slate-600">
-                <Sparkles className="h-3 w-3 text-teal-600 shrink-0" />
-                <span>Indic Numerals: &ldquo;वजन २.५ किलो&rdquo; or &ldquo;2.5 kg&rdquo; normalized cleanly</span>
-              </div>
             </div>
           </div>
         ) : (
