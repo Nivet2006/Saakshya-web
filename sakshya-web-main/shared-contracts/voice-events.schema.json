@@ -1,0 +1,809 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://asha-voice.local/schemas/v1/voice-events.schema.json",
+  "title": "AshaVoiceWebSocketEvent",
+  "description": "Versioned v1 discriminated union of all client-to-server and server-to-client JSON messages exchanged over WebSocket /ws/voice/{session_id}. For microphone uplink, raw binary WebSocket frames carrying canonical 16kHz mono signed 16-bit little-endian PCM (pcm_s16le, 512 samples / 1024 bytes / 32 ms per frame) are preferred over JSON audio_chunk frames.",
+  "x-binary-audio-framing": {
+    "direction": "client_to_server",
+    "websocket_frame_type": "binary",
+    "encoding": "pcm_s16le",
+    "sample_rate": 16000,
+    "channels": 1,
+    "sample_width_bytes": 2,
+    "frame_samples": 512,
+    "frame_bytes": 1024,
+    "frame_ms": 32
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/ClientAudioChunkEvent" },
+    { "$ref": "#/$defs/ClientBargeInEvent" },
+    { "$ref": "#/$defs/ClientTextInputEvent" },
+    { "$ref": "#/$defs/ClientSetLanguageEvent" },
+    { "$ref": "#/$defs/ClientConfirmVisitEvent" },
+    { "$ref": "#/$defs/ClientPersistenceAckEvent" },
+    { "$ref": "#/$defs/ClientPingEvent" },
+    { "$ref": "#/$defs/ClientEndSessionEvent" },
+    { "$ref": "#/$defs/ServerSessionReadyEvent" },
+    { "$ref": "#/$defs/ServerSessionStateEvent" },
+    { "$ref": "#/$defs/ServerSpeechStartEvent" },
+    { "$ref": "#/$defs/ServerSpeechEndEvent" },
+    { "$ref": "#/$defs/ServerPartialTranscriptEvent" },
+    { "$ref": "#/$defs/ServerFinalTranscriptEvent" },
+    { "$ref": "#/$defs/ServerAssistantResponseEvent" },
+    { "$ref": "#/$defs/ServerTtsStartEvent" },
+    { "$ref": "#/$defs/ServerTtsAudioChunkEvent" },
+    { "$ref": "#/$defs/ServerTtsCompleteEvent" },
+    { "$ref": "#/$defs/ServerBargeInEvent" },
+    { "$ref": "#/$defs/ServerTtsCancelledEvent" },
+    { "$ref": "#/$defs/ServerVisitDraftUpdatedEvent" },
+    { "$ref": "#/$defs/ServerClarificationRequiredEvent" },
+    { "$ref": "#/$defs/ServerReadBackStartedEvent" },
+    { "$ref": "#/$defs/ServerCorrectionAppliedEvent" },
+    { "$ref": "#/$defs/ServerVisitConfirmedEvent" },
+    { "$ref": "#/$defs/ServerPersistenceRequestedEvent" },
+    { "$ref": "#/$defs/ServerVisitCommittedEvent" },
+    { "$ref": "#/$defs/ServerPersistenceRejectedEvent" },
+    { "$ref": "#/$defs/ServerDangerAlertEvent" },
+    { "$ref": "#/$defs/ServerErrorEvent" },
+    { "$ref": "#/$defs/ServerPongEvent" }
+  ],
+  "$defs": {
+    "ClientEvent": {
+      "oneOf": [
+        { "$ref": "#/$defs/ClientAudioChunkEvent" },
+        { "$ref": "#/$defs/ClientBargeInEvent" },
+        { "$ref": "#/$defs/ClientTextInputEvent" },
+        { "$ref": "#/$defs/ClientSetLanguageEvent" },
+        { "$ref": "#/$defs/ClientConfirmVisitEvent" },
+        { "$ref": "#/$defs/ClientPersistenceAckEvent" },
+        { "$ref": "#/$defs/ClientPingEvent" },
+        { "$ref": "#/$defs/ClientEndSessionEvent" }
+      ]
+    },
+    "ServerEvent": {
+      "oneOf": [
+        { "$ref": "#/$defs/ServerSessionReadyEvent" },
+        { "$ref": "#/$defs/ServerSessionStateEvent" },
+        { "$ref": "#/$defs/ServerSpeechStartEvent" },
+        { "$ref": "#/$defs/ServerSpeechEndEvent" },
+        { "$ref": "#/$defs/ServerPartialTranscriptEvent" },
+        { "$ref": "#/$defs/ServerFinalTranscriptEvent" },
+        { "$ref": "#/$defs/ServerAssistantResponseEvent" },
+        { "$ref": "#/$defs/ServerTtsStartEvent" },
+        { "$ref": "#/$defs/ServerTtsAudioChunkEvent" },
+        { "$ref": "#/$defs/ServerTtsCompleteEvent" },
+        { "$ref": "#/$defs/ServerBargeInEvent" },
+        { "$ref": "#/$defs/ServerTtsCancelledEvent" },
+        { "$ref": "#/$defs/ServerVisitDraftUpdatedEvent" },
+        { "$ref": "#/$defs/ServerClarificationRequiredEvent" },
+        { "$ref": "#/$defs/ServerReadBackStartedEvent" },
+        { "$ref": "#/$defs/ServerCorrectionAppliedEvent" },
+        { "$ref": "#/$defs/ServerVisitConfirmedEvent" },
+        { "$ref": "#/$defs/ServerPersistenceRequestedEvent" },
+        { "$ref": "#/$defs/ServerVisitCommittedEvent" },
+        { "$ref": "#/$defs/ServerPersistenceRejectedEvent" },
+        { "$ref": "#/$defs/ServerDangerAlertEvent" },
+        { "$ref": "#/$defs/ServerErrorEvent" },
+        { "$ref": "#/$defs/ServerPongEvent" }
+      ]
+    },
+    "AudioFormat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["encoding", "sample_rate", "channels", "frame_ms"],
+      "properties": {
+        "encoding": { "const": "pcm_s16le" },
+        "sample_rate": { "type": "integer", "const": 16000 },
+        "channels": { "type": "integer", "const": 1 },
+        "frame_ms": { "type": "integer", "const": 32 },
+        "frame_samples": { "type": "integer", "const": 512 },
+        "frame_bytes": { "type": "integer", "const": 1024 }
+      }
+    },
+    "ErrorCode": {
+      "type": "string",
+      "enum": [
+        "MISSING_CREDENTIALS",
+        "INVALID_JSON",
+        "STT_STREAM_ERROR",
+        "STT_LOOP_ERROR",
+        "STT_PROVIDER_ERROR",
+        "TTS_STREAM_ERROR",
+        "TURN_PROCESSING_ERROR",
+        "SESSION_INTERNAL_ERROR",
+        "BENEFICIARY_NOT_FOUND",
+        "PERSISTENCE_FAILED",
+        "INVALID_STATE_TRANSITION",
+        "AUDIO_FORMAT_ERROR"
+      ]
+    },
+    "FollowUpAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action_type", "description", "due_date", "priority", "source_phrase"],
+      "properties": {
+        "action_type": {
+          "type": "string",
+          "enum": [
+            "phc_referral",
+            "vaccination_followup",
+            "home_visit",
+            "anc_checkup",
+            "pnc_checkup",
+            "hbnc_visit",
+            "nutrition_counsel",
+            "other"
+          ]
+        },
+        "description": { "type": "string", "minLength": 1 },
+        "due_date": { "type": ["string", "null"], "format": "date" },
+        "priority": { "type": "string", "enum": ["urgent", "high", "normal"] },
+        "source_phrase": { "type": ["string", "null"] }
+      }
+    },
+    "VisitRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "visit_id",
+        "session_id",
+        "worker_id",
+        "beneficiary_id",
+        "beneficiary_name",
+        "visit_type",
+        "weight_kg",
+        "weight_source_text",
+        "vaccinations_completed",
+        "vaccinations_due",
+        "next_visit_date",
+        "next_visit_date_source_text",
+        "danger_signs",
+        "danger_sign_flagged",
+        "follow_up_actions",
+        "status",
+        "confirmed_at",
+        "committed_at",
+        "persistence_record_id",
+        "language",
+        "timezone",
+        "synthetic"
+      ],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "visit_id": { "type": "string", "minLength": 1 },
+        "session_id": { "type": "string", "minLength": 1 },
+        "worker_id": { "type": "string", "minLength": 1 },
+        "beneficiary_id": { "type": ["string", "null"], "pattern": "^BEN-[0-9]{4,}$" },
+        "beneficiary_name": { "type": ["string", "null"] },
+        "visit_type": { "type": ["string", "null"], "enum": ["ANC", "PNC", "Newborn", "Immunisation", null] },
+        "weight_kg": { "type": ["number", "null"], "minimum": 0.3, "maximum": 200.0 },
+        "weight_source_text": { "type": ["string", "null"] },
+        "vaccinations_completed": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "vaccinations_due": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "next_visit_date": { "type": ["string", "null"], "format": "date" },
+        "next_visit_date_source_text": { "type": ["string", "null"] },
+        "danger_signs": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "danger_sign_flagged": { "type": "boolean" },
+        "follow_up_actions": { "type": "array", "items": { "$ref": "#/$defs/FollowUpAction" } },
+        "status": { "type": "string", "enum": ["draft", "confirmed", "committed"] },
+        "confirmed_at": { "type": ["string", "null"], "format": "date-time" },
+        "committed_at": { "type": ["string", "null"], "format": "date-time" },
+        "persistence_record_id": { "type": ["string", "null"] },
+        "language": { "type": "string", "minLength": 2 },
+        "timezone": { "const": "Asia/Kolkata" },
+        "synthetic": { "type": "boolean" }
+      }
+    },
+    "DangerAlert": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "alert_id",
+        "session_id",
+        "visit_id",
+        "beneficiary_id",
+        "canonical_danger_sign_id",
+        "canonical_name",
+        "subject",
+        "category",
+        "supporting_evidence",
+        "match_type",
+        "source_guideline_ref",
+        "detected_at",
+        "status",
+        "acknowledged_by",
+        "acknowledged_at",
+        "escalation_language",
+        "referral_message",
+        "danger_sign_flagged",
+        "priority"
+      ],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "alert_id": { "type": "string", "minLength": 1 },
+        "session_id": { "type": "string", "minLength": 1 },
+        "visit_id": { "type": "string", "minLength": 1 },
+        "beneficiary_id": { "type": ["string", "null"], "pattern": "^BEN-[0-9]{4,}$" },
+        "canonical_danger_sign_id": { "type": "string", "minLength": 1 },
+        "canonical_name": { "type": "string", "minLength": 1 },
+        "subject": { "type": "string", "enum": ["mother", "newborn", "infant"] },
+        "category": { "type": "string", "enum": ["ANC", "Intranatal", "PNC", "Newborn"] },
+        "supporting_evidence": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "match_type": {
+          "type": "string",
+          "enum": ["exact_phrase", "normalized_variant", "code_mixed_pattern", "numeric_threshold", "fuzzy_assisted"]
+        },
+        "source_guideline_ref": { "type": "string", "minLength": 1 },
+        "detected_at": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["active", "acknowledged", "referred", "resolved"] },
+        "acknowledged_by": { "type": ["string", "null"] },
+        "acknowledged_at": { "type": ["string", "null"], "format": "date-time" },
+        "escalation_language": { "type": "string", "minLength": 2 },
+        "referral_message": { "type": "string", "minLength": 1 },
+        "danger_sign_flagged": { "const": true },
+        "priority": { "const": "urgent" }
+      }
+    },
+
+    "ClientAudioChunkEvent": {
+      "title": "ClientAudioChunkEvent",
+      "description": "Client-to-server JSON fallback for streaming base64-encoded 16kHz mono pcm_s16le audio frames (binary WS frames are preferred).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "audio_base64"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "audio_chunk" },
+        "audio_base64": { "type": "string", "minLength": 4 },
+        "seq": { "type": "integer", "minimum": 1 },
+        "encoding": { "const": "pcm_s16le" },
+        "sample_rate": { "type": "integer", "const": 16000 },
+        "channels": { "type": "integer", "const": 1 }
+      }
+    },
+    "ClientBargeInEvent": {
+      "title": "ClientBargeInEvent",
+      "description": "Client-to-server explicit barge-in request to immediately cancel active assistant LLM/TTS playback.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "barge_in" },
+        "reason": { "type": "string", "minLength": 1 },
+        "client_timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "ClientTextInputEvent": {
+      "title": "ClientTextInputEvent",
+      "description": "Client-to-server direct text utterance injected through the same voice orchestration pipeline (testing/accessibility fallback).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "text"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "text_input" },
+        "text": { "type": "string", "minLength": 1 },
+        "language": { "type": "string", "minLength": 2 }
+      }
+    },
+    "ClientSetLanguageEvent": {
+      "title": "ClientSetLanguageEvent",
+      "description": "Client-to-server directive to update the active response language for the session.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "language"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "set_language" },
+        "language": {
+          "type": "string",
+          "enum": ["indic-auto", "hi-IN", "en-IN", "kn-IN", "ta-IN", "te-IN", "mr-IN", "bn-IN", "gu-IN", "ml-IN", "pa-IN"]
+        }
+      }
+    },
+    "ClientConfirmVisitEvent": {
+      "title": "ClientConfirmVisitEvent",
+      "description": "Client-to-server explicit confirmation or rejection of the current read-back visit draft.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "visit_id", "confirmed"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "confirm_visit" },
+        "visit_id": { "type": "string", "minLength": 1 },
+        "confirmed": { "type": "boolean" },
+        "worker_id": { "type": "string", "minLength": 1 },
+        "confirmation_method": { "type": "string", "enum": ["voice", "ui_button"] }
+      }
+    },
+    "ClientPersistenceAckEvent": {
+      "title": "ClientPersistenceAckEvent",
+      "description": "Client/persistence-layer acknowledgement confirming or rejecting durable persistence of a confirmed visit.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "visit_id", "correlation_id", "accepted"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "persistence_ack" },
+        "visit_id": { "type": "string", "minLength": 1 },
+        "correlation_id": { "type": "string", "minLength": 1 },
+        "accepted": { "type": "boolean" },
+        "persistence_record_id": { "type": ["string", "null"] },
+        "committed_at": { "type": ["string", "null"], "format": "date-time" },
+        "error_code": { "type": ["string", "null"] },
+        "error_message": { "type": ["string", "null"] }
+      }
+    },
+    "ClientPingEvent": {
+      "title": "ClientPingEvent",
+      "description": "Client-to-server application heartbeat.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "ping" },
+        "client_timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "ClientEndSessionEvent": {
+      "title": "ClientEndSessionEvent",
+      "description": "Client-to-server graceful session termination request.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "end_session" },
+        "reason": { "type": "string" }
+      }
+    },
+
+    "ServerSessionReadyEvent": {
+      "title": "ServerSessionReadyEvent",
+      "description": "Emitted once after WebSocket upgrade and upstream voice pipeline readiness.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "session_id", "timestamp", "language", "audio_format"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "session_ready" },
+        "session_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "language": { "type": "string", "minLength": 2 },
+        "audio_format": { "$ref": "#/$defs/AudioFormat" },
+        "visit_id": { "type": "string", "minLength": 1 },
+        "supported_languages": { "type": "array", "items": { "type": "string" } },
+        "stt_provider": { "type": "string" },
+        "tts_provider": { "type": "string" },
+        "llm_provider": { "type": "string" },
+        "llm_model": { "type": "string" }
+      }
+    },
+    "ServerSessionStateEvent": {
+      "title": "ServerSessionStateEvent",
+      "description": "Emitted whenever the voice session orchestrator transitions state.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "session_id", "timestamp", "state", "turn_id"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "session_state" },
+        "session_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "state": {
+          "type": "string",
+          "enum": [
+            "idle",
+            "listening",
+            "processing",
+            "speaking",
+            "danger_escalation",
+            "read_back",
+            "awaiting_confirmation",
+            "committing",
+            "committed",
+            "closed"
+          ]
+        },
+        "turn_id": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "ServerSpeechStartEvent": {
+      "title": "ServerSpeechStartEvent",
+      "description": "Emitted when streaming STT detects onset of user speech.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "session_id", "timestamp", "utterance_id"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "speech_start" },
+        "session_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "utterance_id": { "type": ["string", "null"] }
+      }
+    },
+    "ServerSpeechEndEvent": {
+      "title": "ServerSpeechEndEvent",
+      "description": "Emitted when streaming STT detects end of user speech segment.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "session_id", "timestamp", "utterance_id"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "speech_end" },
+        "session_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "utterance_id": { "type": ["string", "null"] }
+      }
+    },
+    "ServerPartialTranscriptEvent": {
+      "title": "ServerPartialTranscriptEvent",
+      "description": "Streaming interim transcript emitted while the ASHA worker is speaking.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "session_id", "timestamp", "text", "language", "is_final"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "partial_transcript" },
+        "session_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "text": { "type": "string" },
+        "stable_text": { "type": "string" },
+        "volatile_text": { "type": "string" },
+        "language": { "type": "string", "minLength": 2 },
+        "utterance_id": { "type": ["string", "null"] },
+        "seq": { "type": ["integer", "null"], "minimum": 0 },
+        "is_final": { "const": false }
+      }
+    },
+    "ServerFinalTranscriptEvent": {
+      "title": "ServerFinalTranscriptEvent",
+      "description": "Finalized transcript for a completed speech segment.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "session_id", "timestamp", "text", "language", "is_final"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "final_transcript" },
+        "session_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "text": { "type": "string", "minLength": 1 },
+        "language": { "type": "string", "minLength": 2 },
+        "utterance_id": { "type": ["string", "null"] },
+        "segment_id": { "type": ["string", "null"] },
+        "latency_ms": { "type": ["number", "null"], "minimum": 0 },
+        "is_final": { "const": true }
+      }
+    },
+    "ServerAssistantResponseEvent": {
+      "title": "ServerAssistantResponseEvent",
+      "description": "Assistant text reply about to be synthesized as TTS for turn_id.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "session_id", "timestamp", "turn_id", "text", "language", "is_danger_escalation"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "assistant_response" },
+        "session_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "turn_id": { "type": "integer", "minimum": 1 },
+        "text": { "type": "string", "minLength": 1 },
+        "language": { "type": "string", "minLength": 2 },
+        "is_danger_escalation": { "type": "boolean" }
+      }
+    },
+    "ServerTtsStartEvent": {
+      "title": "ServerTtsStartEvent",
+      "description": "Marks the beginning of streaming TTS audio chunks for turn_id.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "session_id", "timestamp", "turn_id", "sample_rate", "encoding", "channels"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "tts_start" },
+        "session_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "turn_id": { "type": "integer", "minimum": 1 },
+        "sample_rate": { "type": "integer", "const": 16000 },
+        "encoding": { "const": "pcm_s16le" },
+        "channels": { "type": "integer", "const": 1 }
+      }
+    },
+    "ServerTtsAudioChunkEvent": {
+      "title": "ServerTtsAudioChunkEvent",
+      "description": "Ordered base64 PCM_S16LE audio chunk for turn_id. Clients MUST drop any chunk whose turn_id does not match the latest active turn or has been cancelled.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "session_id", "timestamp", "turn_id", "seq", "audio_base64", "sample_rate"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "tts_audio_chunk" },
+        "session_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "turn_id": { "type": "integer", "minimum": 1 },
+        "seq": { "type": "integer", "minimum": 1 },
+        "audio_base64": { "type": "string", "minLength": 4 },
+        "sample_rate": { "type": "integer", "const": 16000 }
+      }
+    },
+    "ServerTtsCompleteEvent": {
+      "title": "ServerTtsCompleteEvent",
+      "description": "Marks clean completion of all TTS audio chunks for turn_id.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "session_id", "timestamp", "turn_id", "total_chunks", "total_bytes"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "tts_complete" },
+        "session_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "turn_id": { "type": "integer", "minimum": 1 },
+        "total_chunks": { "type": "integer", "minimum": 0 },
+        "total_bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "ServerBargeInEvent": {
+      "title": "ServerBargeInEvent",
+      "description": "Server notification that assistant output for cancelled_turn_id was interrupted and turn counter advanced to new_turn_id.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "session_id", "timestamp", "cancelled_turn_id", "new_turn_id", "trigger"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "barge_in" },
+        "session_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "cancelled_turn_id": { "type": "integer", "minimum": 0 },
+        "new_turn_id": { "type": "integer", "minimum": 1 },
+        "trigger": { "type": "string", "enum": ["vad", "client", "danger_sign", "supersede"] }
+      }
+    },
+    "ServerTtsCancelledEvent": {
+      "title": "ServerTtsCancelledEvent",
+      "description": "Directive for clients to immediately flush local audio playback buffers and discard any remaining chunks for cancelled_turn_id.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "session_id", "timestamp", "cancelled_turn_id", "reason"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "tts_cancelled" },
+        "session_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "cancelled_turn_id": { "type": "integer", "minimum": 0 },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "ServerVisitDraftUpdatedEvent": {
+      "title": "ServerVisitDraftUpdatedEvent",
+      "description": "Emitted whenever backend extraction creates or updates fields in the unconfirmed visit draft.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "session_id", "timestamp", "visit_id", "updated_fields", "missing_required_fields", "draft"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "visit_draft_updated" },
+        "session_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "visit_id": { "type": "string", "minLength": 1 },
+        "updated_fields": { "type": "array", "items": { "type": "string" } },
+        "missing_required_fields": { "type": "array", "items": { "type": "string" } },
+        "draft": { "$ref": "#/$defs/VisitRecord" }
+      }
+    },
+    "ServerClarificationRequiredEvent": {
+      "title": "ServerClarificationRequiredEvent",
+      "description": "Emitted when a beneficiary identity, visit field, or uncertain danger phrase requires clarification before proceeding.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "session_id", "timestamp", "visit_id", "field", "reason", "prompt_text", "language"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "clarification_required" },
+        "session_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "visit_id": { "type": "string", "minLength": 1 },
+        "field": { "type": "string", "minLength": 1 },
+        "reason": {
+          "type": "string",
+          "enum": ["ambiguous_beneficiary", "missing_required", "ambiguous_value", "uncertain_danger_sign", "conflict"]
+        },
+        "prompt_text": { "type": "string", "minLength": 1 },
+        "language": { "type": "string", "minLength": 2 },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "label"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "label": { "type": "string", "minLength": 1 },
+              "detail": { "type": ["string", "null"] }
+            }
+          }
+        }
+      }
+    },
+    "ServerReadBackStartedEvent": {
+      "title": "ServerReadBackStartedEvent",
+      "description": "Emitted when the assistant begins reading back the structured visit draft aloud for explicit worker confirmation.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "session_id", "timestamp", "visit_id", "turn_id", "summary_text", "language", "draft"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "read_back_started" },
+        "session_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "visit_id": { "type": "string", "minLength": 1 },
+        "turn_id": { "type": "integer", "minimum": 1 },
+        "summary_text": { "type": "string", "minLength": 1 },
+        "language": { "type": "string", "minLength": 2 },
+        "draft": { "$ref": "#/$defs/VisitRecord" }
+      }
+    },
+    "ServerCorrectionAppliedEvent": {
+      "title": "ServerCorrectionAppliedEvent",
+      "description": "Emitted when a spoken correction patches only the targeted field(s) while preserving all other accepted fields. Requires re-read-back before confirmation.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "type",
+        "session_id",
+        "timestamp",
+        "visit_id",
+        "corrected_fields",
+        "previous_values",
+        "new_values",
+        "preserved_fields",
+        "requires_re_read_back",
+        "draft"
+      ],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "correction_applied" },
+        "session_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "visit_id": { "type": "string", "minLength": 1 },
+        "corrected_fields": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "previous_values": { "type": "object" },
+        "new_values": { "type": "object" },
+        "preserved_fields": { "type": "array", "items": { "type": "string" } },
+        "requires_re_read_back": { "const": true },
+        "draft": { "$ref": "#/$defs/VisitRecord" }
+      }
+    },
+    "ServerVisitConfirmedEvent": {
+      "title": "ServerVisitConfirmedEvent",
+      "description": "Emitted once the ASHA worker explicitly confirms the read-back visit record. Record is confirmed but NOT yet durably persisted until visit_committed.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "session_id", "timestamp", "visit_id", "confirmed_at", "visit"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "visit_confirmed" },
+        "session_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "visit_id": { "type": "string", "minLength": 1 },
+        "confirmed_at": { "type": "string", "format": "date-time" },
+        "confirmation_utterance": { "type": ["string", "null"] },
+        "visit": { "$ref": "#/$defs/VisitRecord" }
+      }
+    },
+    "ServerPersistenceRequestedEvent": {
+      "title": "ServerPersistenceRequestedEvent",
+      "description": "Emitted after worker confirmation to hand off the confirmed visit and any associated danger alerts to Agent 3's durable persistence layer.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "session_id", "timestamp", "correlation_id", "visit_id", "visit", "danger_alerts"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "persistence_requested" },
+        "session_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "correlation_id": { "type": "string", "minLength": 1 },
+        "visit_id": { "type": "string", "minLength": 1 },
+        "visit": { "$ref": "#/$defs/VisitRecord" },
+        "danger_alerts": { "type": "array", "items": { "$ref": "#/$defs/DangerAlert" } }
+      }
+    },
+    "ServerVisitCommittedEvent": {
+      "title": "ServerVisitCommittedEvent",
+      "description": "Emitted ONLY after Agent 3's persistence layer acknowledges durable storage via persistence_ack or POST /api/v1/sessions/{session_id}/persistence-ack.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "session_id", "timestamp", "visit_id", "persistence_record_id", "committed_at", "visit"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "visit_committed" },
+        "session_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "visit_id": { "type": "string", "minLength": 1 },
+        "persistence_record_id": { "type": "string", "minLength": 1 },
+        "committed_at": { "type": "string", "format": "date-time" },
+        "correlation_id": { "type": ["string", "null"] },
+        "visit": { "$ref": "#/$defs/VisitRecord" }
+      }
+    },
+    "ServerPersistenceRejectedEvent": {
+      "title": "ServerPersistenceRejectedEvent",
+      "description": "Emitted if durable persistence fails or is rejected. Clients MUST keep the confirmed record locally/visibly unsaved and offer retry.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "session_id", "timestamp", "visit_id", "code", "reason", "retryable"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "persistence_rejected" },
+        "session_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "visit_id": { "type": "string", "minLength": 1 },
+        "correlation_id": { "type": ["string", "null"] },
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "reason": { "type": "string", "minLength": 1 },
+        "retryable": { "type": "boolean" }
+      }
+    },
+    "ServerDangerAlertEvent": {
+      "title": "ServerDangerAlertEvent",
+      "description": "High-priority safety-critical event emitted immediately upon deterministic danger-sign detection, independent of visit completion.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "type",
+        "session_id",
+        "timestamp",
+        "priority",
+        "danger_sign_flagged",
+        "interrupts_speech",
+        "alert"
+      ],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "danger_alert" },
+        "session_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "priority": { "const": "urgent" },
+        "danger_sign_flagged": { "const": true },
+        "interrupts_speech": { "type": "boolean" },
+        "alert": { "$ref": "#/$defs/DangerAlert" }
+      }
+    },
+    "ServerErrorEvent": {
+      "title": "ServerErrorEvent",
+      "description": "Structured recoverable or fatal error emitted over WebSocket.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "session_id", "code", "message", "retryable"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "error" },
+        "session_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "message": { "type": "string", "minLength": 1 },
+        "retryable": { "type": "boolean" },
+        "turn_id": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "ServerPongEvent": {
+      "title": "ServerPongEvent",
+      "description": "Server heartbeat response to client ping.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "session_id", "timestamp"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "type": { "const": "pong" },
+        "session_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "client_timestamp": { "type": ["string", "null"], "format": "date-time" }
+      }
+    }
+  }
+}

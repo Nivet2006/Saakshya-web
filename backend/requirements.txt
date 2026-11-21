@@ -1,0 +1,30 @@
+# Pinned compatible dependencies for ASHA Voice Field Register (Agent 1 Backend)
+# Verified on Python 3.12.7 / macOS arm64 (2026-11-21)
+
+fastapi==0.165.0
+uvicorn[standard]==0.54.0
+websockets==15.0.1
+pydantic==2.14.4
+pydantic-settings==2.16.3
+python-dotenv==1.2.4
+httpx==0.28.1
+
+# Gnani official SDK & Pipecat plugin (Pipecat also bundles silero_vad.onnx)
+gnani-vachana==0.11.0
+pipecat-gnani==0.6.1
+pipecat-ai==1.16.0
+
+# LLM providers
+google-genai==3.6.1
+groq==1.7.0
+
+# Audio & Zero-torch ONNX Silero VAD
+numpy==2.5.5
+onnxruntime==1.32.0
+sounddevice==0.5.6
+soundfile==0.13.1
+
+# Testing
+pytest==9.2.0
+pytest-asyncio==1.5.0
+

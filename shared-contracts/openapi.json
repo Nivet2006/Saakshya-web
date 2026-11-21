@@ -1,0 +1,699 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ASHA Voice Field Register — AI Voice & Healthcare Backend API",
+    "version": "1.0.0",
+    "summary": "Versioned v1 technology-independent HTTP contract for Agent 2 (Android) and Agent 3 (Web/Supabase).",
+    "description": "REST control plane and deterministic healthcare endpoints owned by Agent 1. Real-time streaming voice runs over WebSocket `/ws/voice/{session_id}` (see `shared-contracts/voice-events.schema.json` and `docs/VOICE_PROTOCOL.md`). All demonstration beneficiary data is 100% synthetic."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "Local development backend server"
+    }
+  ],
+  "x-contract-version": "v1",
+  "x-websocket-endpoints": {
+    "voice_session": {
+      "path": "/ws/voice/{session_id}",
+      "query_parameters": ["language", "disable_vad"],
+      "event_schema": "./voice-events.schema.json",
+      "protocol_doc": "../docs/VOICE_PROTOCOL.md"
+    }
+  },
+  "tags": [
+    { "name": "System", "description": "Service health and configuration readiness" },
+    { "name": "Sessions", "description": "Voice session lifecycle, visit draft retrieval, and persistence acknowledgement" },
+    { "name": "Beneficiaries", "description": "Synthetic demonstration beneficiary directory lookup" },
+    { "name": "DangerSigns", "description": "Standalone deterministic maternal and newborn danger-sign evaluation" }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["System"],
+        "operationId": "getHealth",
+        "summary": "Check backend readiness and live credential configuration status",
+        "responses": {
+          "200": {
+            "description": "Backend service status",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthResponse" },
+                "example": {
+                  "status": "ok",
+                  "service": "asha-voice-backend",
+                  "schema_version": "v1",
+                  "stt_model": "prisma-v3.0",
+                  "tts_model": "timbre-v3.0",
+                  "llm_provider": "gemini",
+                  "llm_model": "gemini-3.1-flash-lite",
+                  "live_credentials_configured": true,
+                  "missing_env_vars": [],
+                  "synthetic_data_only": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sessions": {
+      "post": {
+        "tags": ["Sessions"],
+        "operationId": "createSession",
+        "summary": "Create a new voice session and obtain its WebSocket path and canonical audio format",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateSessionRequest" },
+              "example": {
+                "language": "indic-auto",
+                "beneficiary_id": "BEN-1042",
+                "worker_id": "ASHA-DEMO-01"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Voice session metadata created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CreateSessionResponse" },
+                "example": {
+                  "schema_version": "v1",
+                  "session_id": "sess_a1b2c3d4e5f6",
+                  "websocket_path": "/ws/voice/sess_a1b2c3d4e5f6",
+                  "language": "indic-auto",
+                  "beneficiary_id": "BEN-1042",
+                  "created_at": "2026-11-21T09:10:00Z",
+                  "audio_format": {
+                    "encoding": "pcm_s16le",
+                    "sample_rate": 16000,
+                    "channels": 1,
+                    "frame_ms": 32
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Requested synthetic beneficiary_id was not found in the synthetic directory",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": {
+                  "schema_version": "v1",
+                  "code": "BENEFICIARY_NOT_FOUND",
+                  "message": "Synthetic beneficiary 'BEN-9999' not found.",
+                  "retryable": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/beneficiaries": {
+      "get": {
+        "tags": ["Beneficiaries"],
+        "operationId": "listBeneficiaries",
+        "summary": "List or search the synthetic demonstration beneficiary directory",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Optional case-insensitive query matching synthetic beneficiary_id, full_name, or spoken aliases.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Synthetic beneficiary entries",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BeneficiaryListResponse" },
+                "example": {
+                  "schema_version": "v1",
+                  "synthetic_data_only": true,
+                  "beneficiaries": [
+                    {
+                      "beneficiary_id": "BEN-1042",
+                      "full_name": "Lakshmi Devi",
+                      "category": "pregnant_woman",
+                      "village": "Rampur Demo Ward 1",
+                      "preferred_language": "hi-IN"
+                    },
+                    {
+                      "beneficiary_id": "BEN-1044",
+                      "full_name": "Baby of Kavitha Rao",
+                      "category": "newborn",
+                      "village": "Shantinagar Demo Ward 2",
+                      "preferred_language": "kn-IN"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sessions/{session_id}/visit": {
+      "get": {
+        "tags": ["Sessions"],
+        "operationId": "getSessionVisit",
+        "summary": "Fetch the latest visit record (draft, confirmed, or committed) and active danger alerts for a session",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "minLength": 1 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current session visit record and danger alerts",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SessionVisitResponse" }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": {
+                  "schema_version": "v1",
+                  "code": "INVALID_STATE_TRANSITION",
+                  "message": "Session 'sess_unknown' not found.",
+                  "retryable": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sessions/{session_id}/persistence-ack": {
+      "post": {
+        "tags": ["Sessions"],
+        "operationId": "acknowledgeVisitPersistence",
+        "summary": "Acknowledge or reject durable persistence of a confirmed visit from Agent 3's persistence layer",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "minLength": 1 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PersistenceAckRequest" },
+              "example": {
+                "schema_version": "v1",
+                "visit_id": "vis_nb_demo_1044",
+                "correlation_id": "corr_demo_9001",
+                "accepted": true,
+                "persistence_record_id": "supa_vis_demo_9001",
+                "committed_at": "2026-11-21T09:20:08Z",
+                "error_code": null,
+                "error_message": null
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Persistence acknowledgement processed; triggers visit_committed or persistence_rejected on active WS session",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PersistenceAckResponse" },
+                "example": {
+                  "schema_version": "v1",
+                  "session_id": "sess_f6e5d4c3b2a1",
+                  "visit_id": "vis_nb_demo_1044",
+                  "status": "committed",
+                  "persistence_record_id": "supa_vis_demo_9001",
+                  "committed_at": "2026-11-21T09:20:08Z"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Visit is not in 'confirmed' state (an unconfirmed draft cannot be committed)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": {
+                  "schema_version": "v1",
+                  "code": "INVALID_STATE_TRANSITION",
+                  "message": "Cannot commit visit 'vis_nb_demo_1044' while status is 'draft'. Explicit worker confirmation is required first.",
+                  "retryable": false
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Persistence acknowledgement rejected or malformed",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": {
+                  "schema_version": "v1",
+                  "code": "PERSISTENCE_FAILED",
+                  "message": "Persistence layer rejected visit record write.",
+                  "retryable": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/danger-signs/check": {
+      "post": {
+        "tags": ["DangerSigns"],
+        "operationId": "checkDangerSigns",
+        "summary": "Standalone deterministic maternal/newborn danger-sign evaluation for QA, tooling, and integration tests",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/DangerSignCheckRequest" },
+              "example": {
+                "schema_version": "v1",
+                "text": "Baby ka chest indrawing ho raha hai aur tez saans chal rahi hai",
+                "language": "hi-IN",
+                "visit_type": "Newborn",
+                "beneficiary_id": "BEN-1044",
+                "subject_hint": "newborn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Deterministic danger-sign evaluation result",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DangerSignCheckResponse" },
+                "example": {
+                  "schema_version": "v1",
+                  "danger_sign_flagged": true,
+                  "requires_clarification": false,
+                  "clarification_prompt": null,
+                  "alerts": [
+                    {
+                      "schema_version": "v1",
+                      "alert_id": "alrt_demo_nb_001",
+                      "session_id": "standalone_check",
+                      "visit_id": "standalone_visit",
+                      "beneficiary_id": "BEN-1044",
+                      "canonical_danger_sign_id": "newborn_chest_indrawing",
+                      "canonical_name": "Severe chest indrawing / difficulty breathing",
+                      "subject": "newborn",
+                      "category": "Newborn",
+                      "supporting_evidence": "baby ka chest indrawing ho raha hai",
+                      "match_type": "code_mixed_pattern",
+                      "source_guideline_ref": "NHM HBNC 2014 Annexure 1c §E, p. 22",
+                      "detected_at": "2026-11-21T09:18:42Z",
+                      "status": "active",
+                      "acknowledged_by": null,
+                      "acknowledged_at": null,
+                      "escalation_language": "hi-IN",
+                      "referral_message": "Chetavni: Navjat shishu mein chest indrawing ek gambhir khatre ka lakshan hai. Kripya bachche ko turant nazdeeki PHC ya SNCU le jayein.",
+                      "danger_sign_flagged": true,
+                      "priority": "urgent"
+                    }
+                  ],
+                  "suppressed_matches": []
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ErrorCode": {
+        "type": "string",
+        "enum": [
+          "MISSING_CREDENTIALS",
+          "INVALID_JSON",
+          "STT_STREAM_ERROR",
+          "STT_LOOP_ERROR",
+          "STT_PROVIDER_ERROR",
+          "TTS_STREAM_ERROR",
+          "TURN_PROCESSING_ERROR",
+          "SESSION_INTERNAL_ERROR",
+          "BENEFICIARY_NOT_FOUND",
+          "PERSISTENCE_FAILED",
+          "INVALID_STATE_TRANSITION",
+          "AUDIO_FORMAT_ERROR"
+        ]
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["schema_version", "code", "message", "retryable"],
+        "properties": {
+          "schema_version": { "const": "v1" },
+          "code": { "$ref": "#/components/schemas/ErrorCode" },
+          "message": { "type": "string", "minLength": 1 },
+          "retryable": { "type": "boolean" },
+          "detail": { "type": ["string", "null"] }
+        }
+      },
+      "AudioFormat": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["encoding", "sample_rate", "channels", "frame_ms"],
+        "properties": {
+          "encoding": { "const": "pcm_s16le" },
+          "sample_rate": { "type": "integer", "const": 16000 },
+          "channels": { "type": "integer", "const": 1 },
+          "frame_ms": { "type": "integer", "const": 32 }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "service",
+          "schema_version",
+          "stt_model",
+          "tts_model",
+          "llm_provider",
+          "llm_model",
+          "live_credentials_configured",
+          "missing_env_vars",
+          "synthetic_data_only"
+        ],
+        "properties": {
+          "status": { "type": "string", "enum": ["ok", "degraded"] },
+          "service": { "type": "string" },
+          "schema_version": { "const": "v1" },
+          "stt_model": { "type": "string" },
+          "tts_model": { "type": "string" },
+          "llm_provider": { "type": "string" },
+          "llm_model": { "type": "string" },
+          "live_credentials_configured": { "type": "boolean" },
+          "missing_env_vars": { "type": "array", "items": { "type": "string" } },
+          "synthetic_data_only": { "type": "boolean" }
+        }
+      },
+      "CreateSessionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "language": {
+            "type": "string",
+            "default": "indic-auto",
+            "description": "Preferred BCP-47 language code (e.g., hi-IN, kn-IN, ta-IN, en-IN) or 'indic-auto'."
+          },
+          "beneficiary_id": {
+            "type": ["string", "null"],
+            "pattern": "^BEN-[0-9]{4,}$",
+            "default": null,
+            "description": "Optional synthetic beneficiary ID."
+          },
+          "worker_id": {
+            "type": "string",
+            "default": "ASHA-DEMO-01",
+            "description": "Synthetic ASHA worker identifier."
+          }
+        }
+      },
+      "CreateSessionResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "session_id",
+          "websocket_path",
+          "language",
+          "beneficiary_id",
+          "created_at",
+          "audio_format"
+        ],
+        "properties": {
+          "schema_version": { "const": "v1" },
+          "session_id": { "type": "string", "minLength": 1 },
+          "websocket_path": { "type": "string", "minLength": 1 },
+          "language": { "type": "string", "minLength": 2 },
+          "beneficiary_id": { "type": ["string", "null"], "pattern": "^BEN-[0-9]{4,}$" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "audio_format": { "$ref": "#/components/schemas/AudioFormat" }
+        }
+      },
+      "BeneficiarySummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["beneficiary_id", "full_name", "category", "village", "preferred_language"],
+        "properties": {
+          "beneficiary_id": { "type": "string", "pattern": "^BEN-[0-9]{4,}$" },
+          "full_name": { "type": "string", "minLength": 1 },
+          "category": { "type": "string", "enum": ["pregnant_woman", "postnatal_mother", "newborn", "infant"] },
+          "village": { "type": "string", "minLength": 1 },
+          "preferred_language": { "type": "string", "minLength": 2 }
+        }
+      },
+      "BeneficiaryListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["schema_version", "synthetic_data_only", "beneficiaries"],
+        "properties": {
+          "schema_version": { "const": "v1" },
+          "synthetic_data_only": { "type": "boolean" },
+          "beneficiaries": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/BeneficiarySummary" }
+          }
+        }
+      },
+      "FollowUpAction": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action_type", "description", "due_date", "priority", "source_phrase"],
+        "properties": {
+          "action_type": {
+            "type": "string",
+            "enum": [
+              "phc_referral",
+              "vaccination_followup",
+              "home_visit",
+              "anc_checkup",
+              "pnc_checkup",
+              "hbnc_visit",
+              "nutrition_counsel",
+              "other"
+            ]
+          },
+          "description": { "type": "string", "minLength": 1 },
+          "due_date": { "type": ["string", "null"], "format": "date" },
+          "priority": { "type": "string", "enum": ["urgent", "high", "normal"] },
+          "source_phrase": { "type": ["string", "null"] }
+        }
+      },
+      "VisitRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "visit_id",
+          "session_id",
+          "worker_id",
+          "beneficiary_id",
+          "beneficiary_name",
+          "visit_type",
+          "weight_kg",
+          "weight_source_text",
+          "vaccinations_completed",
+          "vaccinations_due",
+          "next_visit_date",
+          "next_visit_date_source_text",
+          "danger_signs",
+          "danger_sign_flagged",
+          "follow_up_actions",
+          "status",
+          "confirmed_at",
+          "committed_at",
+          "persistence_record_id",
+          "language",
+          "timezone",
+          "synthetic"
+        ],
+        "properties": {
+          "schema_version": { "const": "v1" },
+          "visit_id": { "type": "string", "minLength": 1 },
+          "session_id": { "type": "string", "minLength": 1 },
+          "worker_id": { "type": "string", "minLength": 1 },
+          "beneficiary_id": { "type": ["string", "null"], "pattern": "^BEN-[0-9]{4,}$" },
+          "beneficiary_name": { "type": ["string", "null"] },
+          "visit_type": { "type": ["string", "null"], "enum": ["ANC", "PNC", "Newborn", "Immunisation", null] },
+          "weight_kg": { "type": ["number", "null"], "minimum": 0.3, "maximum": 200.0 },
+          "weight_source_text": { "type": ["string", "null"] },
+          "vaccinations_completed": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "vaccinations_due": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "next_visit_date": { "type": ["string", "null"], "format": "date" },
+          "next_visit_date_source_text": { "type": ["string", "null"] },
+          "danger_signs": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "danger_sign_flagged": { "type": "boolean" },
+          "follow_up_actions": { "type": "array", "items": { "$ref": "#/components/schemas/FollowUpAction" } },
+          "status": { "type": "string", "enum": ["draft", "confirmed", "committed"] },
+          "confirmed_at": { "type": ["string", "null"], "format": "date-time" },
+          "committed_at": { "type": ["string", "null"], "format": "date-time" },
+          "persistence_record_id": { "type": ["string", "null"] },
+          "language": { "type": "string", "minLength": 2 },
+          "timezone": { "const": "Asia/Kolkata" },
+          "synthetic": { "type": "boolean" }
+        }
+      },
+      "DangerAlert": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "alert_id",
+          "session_id",
+          "visit_id",
+          "beneficiary_id",
+          "canonical_danger_sign_id",
+          "canonical_name",
+          "subject",
+          "category",
+          "supporting_evidence",
+          "match_type",
+          "source_guideline_ref",
+          "detected_at",
+          "status",
+          "acknowledged_by",
+          "acknowledged_at",
+          "escalation_language",
+          "referral_message",
+          "danger_sign_flagged",
+          "priority"
+        ],
+        "properties": {
+          "schema_version": { "const": "v1" },
+          "alert_id": { "type": "string", "minLength": 1 },
+          "session_id": { "type": "string", "minLength": 1 },
+          "visit_id": { "type": "string", "minLength": 1 },
+          "beneficiary_id": { "type": ["string", "null"], "pattern": "^BEN-[0-9]{4,}$" },
+          "canonical_danger_sign_id": { "type": "string", "minLength": 1 },
+          "canonical_name": { "type": "string", "minLength": 1 },
+          "subject": { "type": "string", "enum": ["mother", "newborn", "infant"] },
+          "category": { "type": "string", "enum": ["ANC", "Intranatal", "PNC", "Newborn"] },
+          "supporting_evidence": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "match_type": {
+            "type": "string",
+            "enum": ["exact_phrase", "normalized_variant", "code_mixed_pattern", "numeric_threshold", "fuzzy_assisted"]
+          },
+          "source_guideline_ref": { "type": "string", "minLength": 1 },
+          "detected_at": { "type": "string", "format": "date-time" },
+          "status": { "type": "string", "enum": ["active", "acknowledged", "referred", "resolved"] },
+          "acknowledged_by": { "type": ["string", "null"] },
+          "acknowledged_at": { "type": ["string", "null"], "format": "date-time" },
+          "escalation_language": { "type": "string", "minLength": 2 },
+          "referral_message": { "type": "string", "minLength": 1 },
+          "danger_sign_flagged": { "const": true },
+          "priority": { "const": "urgent" }
+        }
+      },
+      "SessionVisitResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["schema_version", "session_id", "visit", "danger_alerts"],
+        "properties": {
+          "schema_version": { "const": "v1" },
+          "session_id": { "type": "string", "minLength": 1 },
+          "visit": { "$ref": "#/components/schemas/VisitRecord" },
+          "danger_alerts": { "type": "array", "items": { "$ref": "#/components/schemas/DangerAlert" } }
+        }
+      },
+      "PersistenceAckRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["schema_version", "visit_id", "correlation_id", "accepted"],
+        "properties": {
+          "schema_version": { "const": "v1" },
+          "visit_id": { "type": "string", "minLength": 1 },
+          "correlation_id": { "type": "string", "minLength": 1 },
+          "accepted": { "type": "boolean" },
+          "persistence_record_id": { "type": ["string", "null"] },
+          "committed_at": { "type": ["string", "null"], "format": "date-time" },
+          "error_code": { "type": ["string", "null"] },
+          "error_message": { "type": ["string", "null"] }
+        }
+      },
+      "PersistenceAckResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["schema_version", "session_id", "visit_id", "status", "persistence_record_id", "committed_at"],
+        "properties": {
+          "schema_version": { "const": "v1" },
+          "session_id": { "type": "string", "minLength": 1 },
+          "visit_id": { "type": "string", "minLength": 1 },
+          "status": { "type": "string", "enum": ["confirmed", "committed"] },
+          "persistence_record_id": { "type": ["string", "null"] },
+          "committed_at": { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
+      "DangerSignCheckRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["schema_version", "text"],
+        "properties": {
+          "schema_version": { "const": "v1" },
+          "text": { "type": "string", "minLength": 1 },
+          "language": { "type": "string", "default": "hi-IN" },
+          "visit_type": { "type": ["string", "null"], "enum": ["ANC", "PNC", "Newborn", "Immunisation", null] },
+          "beneficiary_id": { "type": ["string", "null"], "pattern": "^BEN-[0-9]{4,}$" },
+          "subject_hint": { "type": ["string", "null"], "enum": ["mother", "newborn", "infant", null] }
+        }
+      },
+      "SuppressedDangerMatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["canonical_danger_sign_id", "reason", "phrase"],
+        "properties": {
+          "canonical_danger_sign_id": { "type": "string", "minLength": 1 },
+          "reason": { "type": "string", "enum": ["negated", "historical", "other_person"] },
+          "phrase": { "type": "string", "minLength": 1 }
+        }
+      },
+      "DangerSignCheckResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "danger_sign_flagged",
+          "requires_clarification",
+          "clarification_prompt",
+          "alerts",
+          "suppressed_matches"
+        ],
+        "properties": {
+          "schema_version": { "const": "v1" },
+          "danger_sign_flagged": { "type": "boolean" },
+          "requires_clarification": { "type": "boolean" },
+          "clarification_prompt": { "type": ["string", "null"] },
+          "alerts": { "type": "array", "items": { "$ref": "#/components/schemas/DangerAlert" } },
+          "suppressed_matches": { "type": "array", "items": { "$ref": "#/components/schemas/SuppressedDangerMatch" } }
+        }
+      }
+    }
+  }
+}

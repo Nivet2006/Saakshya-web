@@ -1,0 +1,155 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --clinical-primary: #0f766e;
+  --clinical-primary-dark: #115e59;
+  --clinical-secondary: #0284c7;
+  --clinical-canvas: #f8fafc;
+  --clinical-card: #ffffff;
+  --clinical-text: #0f172a;
+  --clinical-muted: #475569;
+  --clinical-danger: #dc2626;
+  --target-size: 36px;
+}
+
+@media (pointer: coarse) {
+  :root {
+    --target-size: 44px;
+  }
+}
+
+html {
+  scroll-padding-top: calc(4.5rem + env(safe-area-inset-top, 0px));
+  scroll-padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+body {
+  color: var(--clinical-text);
+  background-color: var(--clinical-canvas);
+  min-height: 100dvh;
+  overflow-wrap: break-word;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Tabular figures for biometric measurements, BP, weights, and dates */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Accessible focus outlines across interactive elements */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid #0f766e;
+  outline-offset: 2px;
+}
+
+/* Coarse pointer touch target baseline */
+:where(button:not(.compact-chip), [role="button"]:not(.compact-chip), input:not([type="checkbox"]):not([type="radio"]), select) {
+  min-block-size: var(--target-size);
+}
+
+/* Mobile bottom navigation safe-area inset */
+.mobile-bottom-nav {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+  padding-left: max(0.5rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.5rem, env(safe-area-inset-right, 0px));
+}
+
+/* Responsive table wrapper supporting container queries */
+.clinical-table-wrapper {
+  overflow-x: auto;
+  max-inline-size: 100%;
+  container-type: inline-size;
+}
+
+@container (max-width: 640px) {
+  .responsive-clinical-table,
+  .responsive-clinical-table thead,
+  .responsive-clinical-table tbody,
+  .responsive-clinical-table th,
+  .responsive-clinical-table td,
+  .responsive-clinical-table tr {
+    display: block;
+  }
+
+  .responsive-clinical-table thead {
+    display: none;
+  }
+
+  .responsive-clinical-table tbody tr {
+    margin-bottom: 0.75rem;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 0.75rem;
+    background: #ffffff;
+    padding: 0.75rem;
+  }
+
+  .responsive-clinical-table tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0;
+    border-bottom: 1px solid #f1f5f9;
+  }
+
+  .responsive-clinical-table tbody td:last-child {
+    border-bottom: 0;
+  }
+
+  .responsive-clinical-table tbody td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: #475569;
+    font-size: 0.75rem;
+    flex-shrink: 0;
+  }
+}
+
+/* Subtle, restrained pulse ring ONLY when actively capturing live audio */
+@keyframes mic-active-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 14px rgba(220, 38, 38, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
+  }
+}
+
+.animate-mic-active {
+  animation: mic-active-pulse 1.6s infinite cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-mic-active {
+    animation: none;
+  }
+}
+
+/* Visually hidden skip links and SR utilities */
+.sr-only-focusable:not(:focus):not(:focus-within) {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* Print / PDF Export clean clinical sheet */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+}

@@ -1,0 +1,749 @@
+import { fastApiClient, FastApiError, getVoiceWsBaseUrl } from '@/lib/api/fastapi-client';
+import type {
+  BackendSessionStateV1,
+  ClarificationCandidateV1,
+  ClarificationReasonV1,
+  ClientWebSocketEventV1,
+  DangerAlertV1,
+  ServerBargeInEventV1,
+  ServerClarificationRequiredEventV1,
+  ServerCorrectionAppliedEventV1,
+  ServerDangerAlertEventV1,
+  ServerErrorEventV1,
+  ServerFinalTranscriptEventV1,
+  ServerPartialTranscriptEventV1,
+  ServerPersistenceRejectedEventV1,
+  ServerPersistenceRequestedEventV1,
+  ServerReadBackStartedEventV1,
+  ServerSessionReadyEventV1,
+  ServerVisitCommittedEventV1,
+  ServerVisitConfirmedEventV1,
+  ServerVisitDraftUpdatedEventV1,
+  VisitRecordV1,
+} from '@/lib/contracts/v1';
+import type { LanguageCode, VoiceInteractionState } from '@/types';
+
+const TARGET_SAMPLE_RATE = 16000;
+const TARGET_FRAME_SAMPLES = 512; // 32ms @ 16kHz = 1024 bytes pcm_s16le
+
+export interface AudioInputDeviceInfo {
+  deviceId: string;
+  label: string;
+}
+
+export interface VoiceClientCallbacks {
+  onStateChange: (state: VoiceInteractionState, backendState?: BackendSessionStateV1) => void;
+  onSessionReady?: (event: ServerSessionReadyEventV1) => void;
+  onConnectionChange?: (connected: boolean, reconnecting?: boolean) => void;
+  onSpeechActivity?: (speaking: boolean, utteranceId: string | null) => void;
+  onPartialTranscript: (event: ServerPartialTranscriptEventV1) => void;
+  onFinalTranscript: (event: ServerFinalTranscriptEventV1) => void;
+  onAssistantResponse: (text: string, turnId: number, isDangerEscalation: boolean, language: string) => void;
+  onTtsPlaybackChange?: (isPlaying: boolean, isPaused: boolean, turnId: number) => void;
+  onBargeIn?: (event: ServerBargeInEventV1) => void;
+  onAudioLevel: (level: number, bands?: number[]) => void;
+  onVisitDraftUpdated: (event: ServerVisitDraftUpdatedEventV1) => void;
+  onClarificationRequired?: (event: ServerClarificationRequiredEventV1) => void;
+  onReadBackStarted?: (event: ServerReadBackStartedEventV1) => void;
+  onCorrectionApplied?: (event: ServerCorrectionAppliedEventV1) => void;
+  onVisitConfirmed?: (event: ServerVisitConfirmedEventV1) => void;
+  onPersistenceRequested?: (event: ServerPersistenceRequestedEventV1) => void;
+  onVisitCommitted?: (event: ServerVisitCommittedEventV1) => void;
+  onPersistenceRejected?: (event: ServerPersistenceRejectedEventV1) => void;
+  onDangerAlert: (event: ServerDangerAlertEventV1) => void;
+  onError: (code: string, message: string, retryable: boolean) => void;
+}
+
+/** Resample arbitrary browser Float32 mono audio to exact 16,000 Hz PCM linear. */
+export function resampleLinear(input: Float32Array, fromRate: number, toRate: number): Float32Array {
+  if (fromRate === toRate || fromRate <= 0) return input;
+  const ratio = fromRate / toRate;
+  const outputLength = Math.floor(input.length / ratio);
+  const output = new Float32Array(outputLength);
+  for (let i = 0; i < outputLength; i++) {
+    const srcIdx = i * ratio;
+    const low = Math.floor(srcIdx);
+    const high = Math.min(low + 1, input.length - 1);
+    const frac = srcIdx - low;
+    output[i] = input[low] * (1 - frac) + input[high] * frac;
+  }
+  return output;
+}
+
+/** Decode base64 raw 16kHz mono signed 16-bit LE PCM to Float32Array for Web Audio playback. */
+export function decodePcmS16LeBase64(base64: string): Float32Array {
+  const binary = atob(base64);
+  const byteLen = binary.length - (binary.length % 2);
+  const view = new DataView(new ArrayBuffer(byteLen));
+  for (let i = 0; i < byteLen; i++) {
+    view.setUint8(i, binary.charCodeAt(i));
+  }
+  const sampleCount = byteLen / 2;
+  const floatData = new Float32Array(sampleCount);
+  for (let i = 0; i < sampleCount; i++) {
+    floatData[i] = view.getInt16(i * 2, true) / 32768.0;
+  }
+  return floatData;
+}
+
+export async function listAudioInputDevices(): Promise<AudioInputDeviceInfo[]> {
+  if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) {
+    return [];
+  }
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices
+      .filter((d) => d.kind === 'audioinput')
+      .map((d, idx) => ({
+        deviceId: d.deviceId,
+        label: d.label || `Microphone ${idx + 1}`,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+export class BrowserVoiceClient {
+  private ws: WebSocket | null = null;
+  private captureContext: AudioContext | null = null;
+  private playbackContext: AudioContext | null = null;
+  private mediaStream: MediaStream | null = null;
+  private processor: ScriptProcessorNode | null = null;
+  private audioSource: MediaStreamAudioSourceNode | null = null;
+  private analyser: AnalyserNode | null = null;
+  private silentGain: GainNode | null = null;
+  private rafId: number | null = null;
+  private pingTimer: ReturnType<typeof setInterval> | null = null;
+
+  private pendingPcmSamples: number[] = [];
+  private activeTurnId = 0;
+  private playingSources: AudioBufferSourceNode[] = [];
+  private nextPlaybackTime = 0;
+  private isPlaybackPaused = false;
+  private isPlayingAudio = false;
+
+  private sessionId = '';
+  private language: LanguageCode = 'hi-IN';
+  private workerId = 'ASHA-DEMO-01';
+  private beneficiaryId: string | null = null;
+  private callbacks: VoiceClientCallbacks;
+  private isClosing = false;
+  private isMicStreaming = true; // false when Push-to-Talk released or muted
+  private lastPartialReceivedAt = 0;
+
+  constructor(callbacks: VoiceClientCallbacks) {
+    this.callbacks = callbacks;
+  }
+
+  getSessionId(): string {
+    return this.sessionId;
+  }
+
+  setMicTransmissionActive(active: boolean): void {
+    this.isMicStreaming = active;
+    if (!active) {
+      this.pendingPcmSamples = [];
+    }
+  }
+
+  /** Starts a full Agent 1 voice session: POST /api/v1/sessions -> WS /ws/voice/{session_id}. */
+  async startSession(config: {
+    language: LanguageCode;
+    workerId: string;
+    beneficiaryId?: string | null;
+    deviceId?: string;
+    handsFree?: boolean;
+    existingSessionId?: string;
+  }): Promise<string | null> {
+    this.cleanupAudioOnly();
+    this.closeSocketOnly();
+
+    this.isClosing = false;
+    this.language = config.language;
+    this.workerId = config.workerId;
+    this.beneficiaryId = config.beneficiaryId ?? null;
+    this.isMicStreaming = config.handsFree ?? true;
+    this.activeTurnId = 0;
+
+    this.callbacks.onStateChange('connecting');
+
+    // 1. Acquire microphone permission
+    try {
+      const audioConstraints: MediaTrackConstraints = {
+        channelCount: 1,
+        sampleRate: { ideal: TARGET_SAMPLE_RATE },
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      };
+      if (config.deviceId && config.deviceId !== 'default') {
+        audioConstraints.deviceId = { exact: config.deviceId };
+      }
+
+      this.mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: audioConstraints,
+      });
+    } catch (err) {
+      const msg =
+        err instanceof Error && err.name === 'NotAllowedError'
+          ? 'Microphone permission denied. Enable microphone access in browser settings to record.'
+          : 'Could not access microphone device. Check hardware and permissions.';
+      this.callbacks.onStateChange('error');
+      this.callbacks.onError('MICROPHONE_PERMISSION_DENIED', msg, true);
+      return null;
+    }
+
+    // 2. Initialize Web Audio Capture + Analyser + Playback contexts from user gesture
+    try {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      this.captureContext = new AudioCtx({ sampleRate: TARGET_SAMPLE_RATE });
+      if (this.captureContext.state === 'suspended') {
+        await this.captureContext.resume();
+      }
+      this.audioSource = this.captureContext.createMediaStreamSource(this.mediaStream);
+      this.analyser = this.captureContext.createAnalyser();
+      this.analyser.fftSize = 64;
+      this.audioSource.connect(this.analyser);
+
+      this.playbackContext = new AudioCtx({ sampleRate: TARGET_SAMPLE_RATE });
+      if (this.playbackContext.state === 'suspended') {
+        await this.playbackContext.resume();
+      }
+
+      this.startWaveformLoop();
+    } catch (err) {
+      this.cleanupAudioOnly();
+      const msg = err instanceof Error ? err.message : 'Failed to initialize Web Audio pipeline';
+      this.callbacks.onStateChange('error');
+      this.callbacks.onError('AUDIO_INIT_ERROR', msg, true);
+      return null;
+    }
+
+    // 3. Create session with Agent 1 FastAPI backend
+    let wsPath = '';
+    try {
+      if (config.existingSessionId) {
+        this.sessionId = config.existingSessionId;
+        wsPath = `/ws/voice/${encodeURIComponent(config.existingSessionId)}`;
+      } else {
+        const created = await fastApiClient.createSession({
+          language: this.language,
+          beneficiary_id: this.beneficiaryId,
+          worker_id: this.workerId,
+        });
+        this.sessionId = created.session_id;
+        wsPath = created.websocket_path;
+      }
+    } catch (err) {
+      this.cleanupAudioOnly();
+      const code = err instanceof FastApiError ? err.code : 'BACKEND_UNREACHABLE';
+      const msg =
+        err instanceof FastApiError
+          ? err.message
+          : 'Voice backend server is unreachable. Check that FastAPI is running on port 8000.';
+      this.callbacks.onStateChange('error');
+      this.callbacks.onConnectionChange?.(false, false);
+      this.callbacks.onError(code, msg, true);
+      return null;
+    }
+
+    // 4. Open WebSocket to /ws/voice/{session_id}?language=...
+    const wsUrl = `${getVoiceWsBaseUrl()}${wsPath}?language=${encodeURIComponent(this.language)}`;
+    this.openWebSocket(wsUrl);
+    return this.sessionId;
+  }
+
+  private openWebSocket(wsUrl: string): void {
+    const ws = new WebSocket(wsUrl);
+    ws.binaryType = 'arraybuffer';
+    this.ws = ws;
+
+    ws.onopen = () => {
+      if (this.isClosing) {
+        ws.close(1000);
+        return;
+      }
+      this.callbacks.onConnectionChange?.(true, false);
+      this.startPcmUplink();
+      this.pingTimer = setInterval(() => {
+        this.sendJson({
+          schema_version: 'v1',
+          type: 'ping',
+          client_timestamp: new Date().toISOString(),
+        });
+      }, 15000);
+    };
+
+    ws.onmessage = (event) => {
+      if (typeof event.data !== 'string') return;
+      try {
+        const payload = JSON.parse(event.data) as Record<string, unknown>;
+        this.handleServerEvent(payload);
+      } catch (err) {
+        console.error('Malformed WebSocket JSON event', err);
+      }
+    };
+
+    ws.onerror = () => {
+      if (!this.isClosing) {
+        this.callbacks.onConnectionChange?.(false, false);
+        this.callbacks.onStateChange('error');
+        this.callbacks.onError(
+          'WS_CONNECTION_ERROR',
+          'WebSocket voice connection interrupted. Retry to reconnect.',
+          true
+        );
+      }
+    };
+
+    ws.onclose = (ev) => {
+      if (this.pingTimer) {
+        clearInterval(this.pingTimer);
+        this.pingTimer = null;
+      }
+      this.callbacks.onConnectionChange?.(false, false);
+      if (!this.isClosing) {
+        if (ev.code === 1011) {
+          this.callbacks.onStateChange('error');
+        } else {
+          this.callbacks.onStateChange('completed');
+        }
+      }
+    };
+  }
+
+  private startPcmUplink(): void {
+    if (!this.captureContext || !this.audioSource) return;
+
+    const inputRate = this.captureContext.sampleRate;
+    this.processor = this.captureContext.createScriptProcessor(1024, 1, 1);
+    this.silentGain = this.captureContext.createGain();
+    this.silentGain.gain.value = 0;
+
+    this.audioSource.connect(this.processor);
+    this.processor.connect(this.silentGain);
+    this.silentGain.connect(this.captureContext.destination);
+
+    this.processor.onaudioprocess = (ev) => {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+      if (!this.isMicStreaming) return;
+
+      const rawFloat = ev.inputBuffer.getChannelData(0);
+      const resampled = resampleLinear(rawFloat, inputRate, TARGET_SAMPLE_RATE);
+
+      for (let i = 0; i < resampled.length; i++) {
+        const clamped = Math.max(-1, Math.min(1, resampled[i]));
+        const sample = clamped < 0 ? Math.round(clamped * 0x8000) : Math.round(clamped * 0x7fff);
+        this.pendingPcmSamples.push(sample);
+      }
+
+      while (this.pendingPcmSamples.length >= TARGET_FRAME_SAMPLES) {
+        const chunk = this.pendingPcmSamples.splice(0, TARGET_FRAME_SAMPLES);
+        const frame = new Int16Array(chunk);
+        this.ws.send(frame.buffer);
+      }
+    };
+  }
+
+  private startWaveformLoop(): void {
+    if (!this.analyser) return;
+    const bins = new Uint8Array(this.analyser.frequencyBinCount);
+
+    const tick = () => {
+      if (!this.analyser) return;
+      if (!this.isMicStreaming) {
+        this.callbacks.onAudioLevel(0, new Array(16).fill(0));
+      } else {
+        this.analyser.getByteFrequencyData(bins);
+        let sum = 0;
+        const bands: number[] = [];
+        const step = Math.max(1, Math.floor(bins.length / 16));
+        for (let i = 0; i < bins.length; i++) {
+          sum += bins[i];
+          if (i % step === 0 && bands.length < 16) {
+            bands.push(Math.min(1, bins[i] / 180));
+          }
+        }
+        const level = Math.min(1, sum / (bins.length * 110));
+        this.callbacks.onAudioLevel(level, bands);
+      }
+      this.rafId = requestAnimationFrame(tick);
+    };
+
+    this.rafId = requestAnimationFrame(tick);
+  }
+
+  private handleServerEvent(raw: Record<string, unknown>): void {
+    const type = raw.type as string;
+    switch (type) {
+      case 'session_ready': {
+        const ev = raw as unknown as ServerSessionReadyEventV1;
+        this.callbacks.onSessionReady?.(ev);
+        this.callbacks.onStateChange('listening', 'listening');
+        break;
+      }
+      case 'session_state': {
+        const backendState = raw.state as BackendSessionStateV1;
+        const mapped = mapBackendStateToUiState(backendState);
+        this.callbacks.onStateChange(mapped, backendState);
+        break;
+      }
+      case 'speech_start': {
+        this.callbacks.onSpeechActivity?.(true, (raw.utterance_id as string | null) ?? null);
+        break;
+      }
+      case 'speech_end': {
+        this.callbacks.onSpeechActivity?.(false, (raw.utterance_id as string | null) ?? null);
+        break;
+      }
+      case 'partial_transcript': {
+        const ev = raw as unknown as ServerPartialTranscriptEventV1;
+        this.lastPartialReceivedAt = Date.now();
+        this.callbacks.onStateChange('transcribing');
+        this.callbacks.onPartialTranscript(ev);
+        break;
+      }
+      case 'final_transcript': {
+        const ev = raw as unknown as ServerFinalTranscriptEventV1;
+        this.callbacks.onFinalTranscript(ev);
+        this.callbacks.onStateChange('processing');
+        break;
+      }
+      case 'assistant_response': {
+        const turnId = Number(raw.turn_id || 1);
+        this.callbacks.onStateChange('responding');
+        this.callbacks.onAssistantResponse(
+          String(raw.text || ''),
+          turnId,
+          Boolean(raw.is_danger_escalation),
+          String(raw.language || this.language)
+        );
+        break;
+      }
+      case 'tts_start': {
+        const turnId = Number(raw.turn_id || 1);
+        if (turnId > this.activeTurnId) {
+          this.activeTurnId = turnId;
+        }
+        this.isPlaybackPaused = false;
+        this.isPlayingAudio = true;
+        this.callbacks.onStateChange('speaking', 'speaking');
+        this.callbacks.onTtsPlaybackChange?.(true, false, turnId);
+        break;
+      }
+      case 'tts_audio_chunk': {
+        const turnId = Number(raw.turn_id || 0);
+        if (turnId !== this.activeTurnId) {
+          // Zero-stale-audio rule: silently drop stale chunks
+          return;
+        }
+        this.enqueuePcmPlayback(String(raw.audio_base64 || ''), Number(raw.sample_rate || 16000));
+        break;
+      }
+      case 'tts_complete': {
+        const turnId = Number(raw.turn_id || this.activeTurnId);
+        this.isPlayingAudio = false;
+        this.callbacks.onTtsPlaybackChange?.(false, false, turnId);
+        this.callbacks.onStateChange('listening', 'listening');
+        break;
+      }
+      case 'barge_in': {
+        const ev = raw as unknown as ServerBargeInEventV1;
+        this.activeTurnId = ev.new_turn_id;
+        this.flushAudioPlayback();
+        this.callbacks.onBargeIn?.(ev);
+        this.callbacks.onStateChange('interrupted');
+        break;
+      }
+      case 'tts_cancelled': {
+        const cancelledTurnId = Number(raw.cancelled_turn_id || 0);
+        if (cancelledTurnId >= this.activeTurnId) {
+          this.activeTurnId = cancelledTurnId + 1;
+        }
+        this.flushAudioPlayback();
+        this.callbacks.onTtsPlaybackChange?.(false, false, cancelledTurnId);
+        this.callbacks.onStateChange('interrupted');
+        break;
+      }
+      case 'visit_draft_updated': {
+        this.callbacks.onVisitDraftUpdated(raw as unknown as ServerVisitDraftUpdatedEventV1);
+        break;
+      }
+      case 'clarification_required': {
+        this.callbacks.onClarificationRequired?.(raw as unknown as ServerClarificationRequiredEventV1);
+        break;
+      }
+      case 'read_back_started': {
+        this.callbacks.onReadBackStarted?.(raw as unknown as ServerReadBackStartedEventV1);
+        break;
+      }
+      case 'correction_applied': {
+        this.callbacks.onCorrectionApplied?.(raw as unknown as ServerCorrectionAppliedEventV1);
+        break;
+      }
+      case 'visit_confirmed': {
+        this.callbacks.onVisitConfirmed?.(raw as unknown as ServerVisitConfirmedEventV1);
+        break;
+      }
+      case 'persistence_requested': {
+        this.callbacks.onPersistenceRequested?.(raw as unknown as ServerPersistenceRequestedEventV1);
+        break;
+      }
+      case 'visit_committed': {
+        this.callbacks.onVisitCommitted?.(raw as unknown as ServerVisitCommittedEventV1);
+        this.callbacks.onStateChange('completed', 'committed');
+        break;
+      }
+      case 'persistence_rejected': {
+        this.callbacks.onPersistenceRejected?.(raw as unknown as ServerPersistenceRejectedEventV1);
+        break;
+      }
+      case 'danger_alert': {
+        this.callbacks.onDangerAlert(raw as unknown as ServerDangerAlertEventV1);
+        break;
+      }
+      case 'error': {
+        const err = raw as unknown as ServerErrorEventV1;
+        this.callbacks.onStateChange('error');
+        this.callbacks.onError(err.code, err.message, err.retryable);
+        break;
+      }
+      case 'pong':
+      default:
+        break;
+    }
+  }
+
+  private enqueuePcmPlayback(base64: string, sampleRate: number): void {
+    if (!base64 || !this.playbackContext) return;
+    try {
+      const floatSamples = decodePcmS16LeBase64(base64);
+      if (floatSamples.length === 0) return;
+
+      const audioBuffer = this.playbackContext.createBuffer(1, floatSamples.length, sampleRate);
+      audioBuffer.getChannelData(0).set(floatSamples);
+
+      const source = this.playbackContext.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(this.playbackContext.destination);
+
+      const now = this.playbackContext.currentTime;
+      const startAt = Math.max(now + 0.015, this.nextPlaybackTime);
+      this.nextPlaybackTime = startAt + audioBuffer.duration;
+
+      this.playingSources.push(source);
+      source.onended = () => {
+        this.playingSources = this.playingSources.filter((s) => s !== source);
+      };
+      source.start(startAt);
+    } catch (err) {
+      console.warn('PCM playback decode warning:', err);
+    }
+  }
+
+  flushAudioPlayback(): void {
+    this.playingSources.forEach((src) => {
+      try {
+        src.stop();
+        src.disconnect();
+      } catch {
+        // already stopped
+      }
+    });
+    this.playingSources = [];
+    this.nextPlaybackTime = 0;
+    this.isPlayingAudio = false;
+    this.isPlaybackPaused = false;
+  }
+
+  async pausePlayback(): Promise<void> {
+    if (this.playbackContext && this.playbackContext.state === 'running') {
+      await this.playbackContext.suspend();
+      this.isPlaybackPaused = true;
+      this.callbacks.onTtsPlaybackChange?.(this.isPlayingAudio, true, this.activeTurnId);
+    }
+  }
+
+  async resumePlayback(): Promise<void> {
+    if (this.playbackContext && this.playbackContext.state === 'suspended') {
+      await this.playbackContext.resume();
+      this.isPlaybackPaused = false;
+      this.callbacks.onTtsPlaybackChange?.(this.isPlayingAudio, false, this.activeTurnId);
+    }
+  }
+
+  triggerBargeIn(reason = 'user_tap'): void {
+    this.flushAudioPlayback();
+    this.callbacks.onStateChange('interrupted');
+    this.sendJson({
+      schema_version: 'v1',
+      type: 'barge_in',
+      reason,
+      client_timestamp: new Date().toISOString(),
+    });
+  }
+
+  sendTextInput(text: string, language?: string): boolean {
+    if (!text.trim()) return false;
+    return this.sendJson({
+      schema_version: 'v1',
+      type: 'text_input',
+      text: text.trim(),
+      language: language || this.language,
+    });
+  }
+
+  setLanguage(language: LanguageCode): void {
+    this.language = language;
+    this.sendJson({
+      schema_version: 'v1',
+      type: 'set_language',
+      language,
+    });
+  }
+
+  sendConfirmVisit(visitId: string, confirmed: boolean): boolean {
+    return this.sendJson({
+      schema_version: 'v1',
+      type: 'confirm_visit',
+      visit_id: visitId,
+      confirmed,
+      worker_id: this.workerId,
+      confirmation_method: 'ui_button',
+    });
+  }
+
+  sendPersistenceAck(payload: {
+    visitId: string;
+    correlationId: string;
+    accepted: boolean;
+    persistenceRecordId?: string | null;
+    committedAt?: string | null;
+    errorCode?: string | null;
+    errorMessage?: string | null;
+  }): boolean {
+    return this.sendJson({
+      schema_version: 'v1',
+      type: 'persistence_ack',
+      visit_id: payload.visitId,
+      correlation_id: payload.correlationId,
+      accepted: payload.accepted,
+      persistence_record_id: payload.persistenceRecordId ?? null,
+      committed_at: payload.committedAt ?? null,
+      error_code: payload.errorCode ?? null,
+      error_message: payload.errorMessage ?? null,
+    });
+  }
+
+  isConnected(): boolean {
+    return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
+  }
+
+  getLastPartialTimestamp(): number {
+    return this.lastPartialReceivedAt;
+  }
+
+  private sendJson(msg: ClientWebSocketEventV1): boolean {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+    this.ws.send(JSON.stringify(msg));
+    return true;
+  }
+
+  private cleanupAudioOnly(): void {
+    this.flushAudioPlayback();
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+    if (this.processor) {
+      this.processor.disconnect();
+      this.processor = null;
+    }
+    if (this.silentGain) {
+      this.silentGain.disconnect();
+      this.silentGain = null;
+    }
+    if (this.audioSource) {
+      this.audioSource.disconnect();
+      this.audioSource = null;
+    }
+    if (this.mediaStream) {
+      this.mediaStream.getTracks().forEach((t) => t.stop());
+      this.mediaStream = null;
+    }
+    if (this.captureContext) {
+      this.captureContext.close().catch(() => {});
+      this.captureContext = null;
+    }
+    if (this.playbackContext) {
+      this.playbackContext.close().catch(() => {});
+      this.playbackContext = null;
+    }
+    this.analyser = null;
+    this.pendingPcmSamples = [];
+  }
+
+  private closeSocketOnly(): void {
+    if (this.pingTimer) {
+      clearInterval(this.pingTimer);
+      this.pingTimer = null;
+    }
+    if (this.ws) {
+      try {
+        if (this.ws.readyState === WebSocket.OPEN) {
+          this.sendJson({
+            schema_version: 'v1',
+            type: 'end_session',
+            reason: 'client_stop',
+          });
+        }
+        this.ws.close(1000, 'Session ended');
+      } catch {
+        // ignore close error
+      }
+      this.ws = null;
+    }
+  }
+
+  stopSession(): void {
+    this.isClosing = true;
+    this.closeSocketOnly();
+    this.cleanupAudioOnly();
+    this.callbacks.onConnectionChange?.(false, false);
+    this.callbacks.onStateChange('idle');
+  }
+}
+
+export function mapBackendStateToUiState(state: BackendSessionStateV1): VoiceInteractionState {
+  switch (state) {
+    case 'idle':
+      return 'idle';
+    case 'listening':
+      return 'listening';
+    case 'processing':
+      return 'processing';
+    case 'speaking':
+    case 'read_back':
+      return 'speaking';
+    case 'danger_escalation':
+      return 'responding';
+    case 'awaiting_confirmation':
+      return 'listening';
+    case 'committing':
+      return 'processing';
+    case 'committed':
+    case 'closed':
+      return 'completed';
+    default:
+      return 'idle';
+  }
+}
+
+export type {
+  VisitRecordV1,
+  DangerAlertV1,
+  ClarificationReasonV1,
+  ClarificationCandidateV1,
+};

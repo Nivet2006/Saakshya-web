@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://asha-voice.local/schemas/v1/danger-alert.schema.json",
+  "title": "AshaDangerAlert",
+  "description": "Versioned v1 safety-critical maternal or newborn danger-sign alert. Emitted immediately by Agent 1's deterministic engine independent of visit completion or confirmation. Clients MUST render urgently and MUST NOT suppress or downgrade alerts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "alert_id",
+    "session_id",
+    "visit_id",
+    "beneficiary_id",
+    "canonical_danger_sign_id",
+    "canonical_name",
+    "subject",
+    "category",
+    "supporting_evidence",
+    "match_type",
+    "source_guideline_ref",
+    "detected_at",
+    "status",
+    "acknowledged_by",
+    "acknowledged_at",
+    "escalation_language",
+    "referral_message",
+    "danger_sign_flagged",
+    "priority"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "v1",
+      "description": "Contract schema version."
+    },
+    "alert_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique identifier for this danger-sign alert."
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Voice session correlation identifier."
+    },
+    "visit_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Visit draft/record identifier associated with the alert."
+    },
+    "beneficiary_id": {
+      "type": ["string", "null"],
+      "pattern": "^BEN-[0-9]{4,}$",
+      "description": "Resolved synthetic beneficiary identifier, or null if danger sign was detected before beneficiary identification."
+    },
+    "canonical_danger_sign_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable machine-readable identifier mapped to an official NHM/MoHFW danger sign (e.g., newborn_chest_indrawing, anc_vaginal_bleeding)."
+    },
+    "canonical_name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Standardised clinical danger-sign label from official Indian public-health guidelines."
+    },
+    "subject": {
+      "type": "string",
+      "enum": ["mother", "newborn", "infant"],
+      "description": "Patient subject category affected by the danger sign."
+    },
+    "category": {
+      "type": "string",
+      "enum": ["ANC", "Intranatal", "PNC", "Newborn"],
+      "description": "Care phase category from NHM/MoHFW maternal and newborn guidelines."
+    },
+    "supporting_evidence": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "Short matched phrase providing minimal clinical audit evidence. MUST NOT contain raw full audio or full conversation transcripts."
+    },
+    "match_type": {
+      "type": "string",
+      "enum": [
+        "exact_phrase",
+        "normalized_variant",
+        "code_mixed_pattern",
+        "numeric_threshold",
+        "fuzzy_assisted"
+      ],
+      "description": "Deterministic matching mechanism that triggered this alert."
+    },
+    "source_guideline_ref": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Exact verified official Indian public-health guideline citation (document, section, page) from docs/DANGER_SIGN_GUIDELINES.md."
+    },
+    "detected_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC ISO-8601 timestamp when the danger sign was detected."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["active", "acknowledged", "referred", "resolved"],
+      "description": "Alert handling lifecycle state."
+    },
+    "acknowledged_by": {
+      "type": ["string", "null"],
+      "description": "Synthetic identifier of the ASHA worker or supervisor who acknowledged the alert, or null."
+    },
+    "acknowledged_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "UTC ISO-8601 timestamp when the alert was acknowledged, or null."
+    },
+    "escalation_language": {
+      "type": "string",
+      "minLength": 2,
+      "description": "BCP-47 language tag used for the spoken urgent referral message (e.g., hi-IN, kn-IN, ta-IN, en-IN)."
+    },
+    "referral_message": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Urgent referral guidance in escalation_language directing the worker to the nearest PHC immediately. Never contains a diagnosis, prescription, home remedy, or fabricated facility address/phone."
+    },
+    "danger_sign_flagged": {
+      "const": true,
+      "description": "Always true on a verified danger alert."
+    },
+    "priority": {
+      "const": "urgent",
+      "description": "Always 'urgent' for verified danger-sign escalations."
+    }
+  },
+  "examples": [
+    {
+      "schema_version": "v1",
+      "alert_id": "alrt_demo_nb_001",
+      "session_id": "sess_f6e5d4c3b2a1",
+      "visit_id": "vis_nb_demo_1044",
+      "beneficiary_id": "BEN-1044",
+      "canonical_danger_sign_id": "newborn_chest_indrawing",
+      "canonical_name": "Severe chest indrawing / difficulty breathing",
+      "subject": "newborn",
+      "category": "Newborn",
+      "supporting_evidence": "baby ka chest indrawing ho raha hai",
+      "match_type": "code_mixed_pattern",
+      "source_guideline_ref": "NHM HBNC 2014 Annexure 1c §E, p. 22",
+      "detected_at": "2026-11-21T09:18:42Z",
+      "status": "active",
+      "acknowledged_by": null,
+      "acknowledged_at": null,
+      "escalation_language": "hi-IN",
+      "referral_message": "Chetavni: Navjat shishu mein chest indrawing ek gambhir khatre ka lakshan hai. Kripya bachche ko turant nazdeeki PHC ya SNCU le jayein.",
+      "danger_sign_flagged": true,
+      "priority": "urgent"
+    },
+    {
+      "schema_version": "v1",
+      "alert_id": "alrt_demo_anc_002",
+      "session_id": "sess_112233445566",
+      "visit_id": "vis_anc_demo_1045",
+      "beneficiary_id": "BEN-1045",
+      "canonical_danger_sign_id": "anc_vaginal_bleeding",
+      "canonical_name": "Vaginal bleeding in pregnancy",
+      "subject": "mother",
+      "category": "ANC",
+      "supporting_evidence": "pregnancy mein bleeding ho rahi hai",
+      "match_type": "code_mixed_pattern",
+      "source_guideline_ref": "ASHA Module 6 Part B §4, p. 30",
+      "detected_at": "2026-11-21T09:25:10Z",
+      "status": "acknowledged",
+      "acknowledged_by": "ASHA-DEMO-01",
+      "acknowledged_at": "2026-11-21T09:25:30Z",
+      "escalation_language": "en-IN",
+      "referral_message": "Urgent alert: Vaginal bleeding during pregnancy is a danger sign. Please refer the mother to the nearest PHC immediately.",
+      "danger_sign_flagged": true,
+      "priority": "urgent"
+    }
+  ]
+}
