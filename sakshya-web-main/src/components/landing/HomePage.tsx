@@ -13,7 +13,6 @@ import {
   ChevronDown,
   AlertCircle,
   WifiOff,
-  Sparkles,
 } from 'lucide-react';
 import { AmbientBackground } from '@/components/animations/AmbientBackground';
 import { HealthWave } from '@/components/animations/HealthWave';
@@ -313,12 +312,9 @@ export const HomePage: React.FC<HomePageProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span className="font-extrabold text-lg tracking-tight text-slate-900">Sakshya</span>
-              <span className="text-[10px] font-bold uppercase tracking-wider bg-teal-50 text-teal-700 border border-teal-200 px-2 py-0.5 rounded-full">
-                NHM Rural Care
-              </span>
             </div>
             <p className="text-xs text-slate-500 font-medium hidden sm:block">
-              Offline-First Voice Field Register &amp; Risk Flagging Platform
+              Voice field register
             </p>
           </div>
         </div>
@@ -355,22 +351,14 @@ export const HomePage: React.FC<HomePageProps> = ({
         >
           {/* Left Column: Heading, Wave & Role Cards */}
           <div className="lg:col-span-7 flex flex-col justify-center">
-            {/* Tagline Pill */}
-            <motion.div variants={itemUp(0.05)} className="mb-3 flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-xs">
-                <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                Zero Typing Needed · Multi-Language AI Assistant
-              </span>
-            </motion.div>
-
             {/* Main Headline */}
             <motion.h1
               variants={itemUp(0.1)}
               className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-slate-900 tracking-tight leading-[1.15]"
             >
-              Every rural mother &amp; child visited.{' '}
+              Zero missed visits.{' '}
               <span className="bg-gradient-to-r from-teal-700 to-emerald-600 bg-clip-text text-transparent">
-                Safer community healthcare.
+                Safer rural healthcare.
               </span>
             </motion.h1>
 
