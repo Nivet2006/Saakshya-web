@@ -1,4 +1,16 @@
-export type LanguageCode = 'hi-IN' | 'kn-IN' | 'ta-IN' | 'en-IN';
+export type PrismaLanguageCode =
+  | 'hi-IN' // Hindi
+  | 'kn-IN' // Kannada
+  | 'ta-IN' // Tamil
+  | 'te-IN' // Telugu
+  | 'ml-IN' // Malayalam
+  | 'bn-IN' // Bengali
+  | 'mr-IN' // Marathi
+  | 'gu-IN' // Gujarati
+  | 'pa-IN' // Punjabi
+  | 'en-IN'; // Indian English
+
+export type LanguageCode = PrismaLanguageCode | string;
 
 export type UserRole = 'ASHA_WORKER' | 'PHC_SUPERVISOR' | 'ADMIN';
 

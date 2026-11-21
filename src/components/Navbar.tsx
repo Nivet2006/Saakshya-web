@@ -1,11 +1,12 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { UserProfile, LanguageCode } from '@/types';
 import { SYNTHETIC_PROFILES } from '@/lib/mock-data';
 import { OfflineSyncBadge } from '@/components/OfflineSyncBadge';
-import { TRANSLATIONS } from '@/lib/translations';
-import { Globe, UserCheck, ShieldAlert, HeartPulse } from 'lucide-react';
+import { GoogleTranslateWidget } from '@/components/GoogleTranslateWidget';
+import { PRISMA_LANGUAGES, TRANSLATIONS, isGnaniVoiceSupported } from '@/lib/translations';
+import { Globe, UserCheck, HeartPulse, Sparkles, Languages } from 'lucide-react';
 
 interface NavbarProps {
   currentProfile: UserProfile;
@@ -26,10 +27,22 @@ export const Navbar: React.FC<NavbarProps> = ({
   onTabChange,
   unresolvedAlertCount,
 }) => {
-  const t = TRANSLATIONS[currentLanguage] || TRANSLATIONS['hi-IN'];
+  const t = TRANSLATIONS[currentLanguage] || TRANSLATIONS['hi-IN'] || TRANSLATIONS['en-IN'];
+  const [showTranslateWidget, setShowTranslateWidget] = useState(false);
+
+  const handleSelectChange = (val: string) => {
+    if (val === 'GOOGLE_TRANSLATE') {
+      setShowTranslateWidget(true);
+      // Trigger google translate dropdown if present
+      const elem = document.querySelector('.goog-te-combo') as HTMLSelectElement | null;
+      if (elem) elem.focus();
+    } else {
+      onLanguageChange(val);
+    }
+  };
 
   return (
-    <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-sm">
+    <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-sm notranslate">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Brand Logo & Portal Switcher */}
@@ -81,24 +94,37 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           </div>
 
-          {/* Right Controls: Language Selector, Sync Badge, Profile Switcher */}
-          <div className="flex items-center gap-3">
+          {/* Right Controls: Language Selector, Google Translate, Sync Badge, Profile Switcher */}
+          <div className="flex items-center gap-2.5">
             <OfflineSyncBadge language={currentLanguage} />
 
-            {/* Language Selector */}
+            {/* Language Selector Dropdown with 10 Gnani Prisma Languages + Google Translate */}
             <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
-              <Globe className="h-4 w-4 text-slate-500 mr-1.5 hidden sm:block" />
+              <Globe className="h-4 w-4 text-brand-600 mr-1.5 hidden sm:block" />
               <select
-                value={currentLanguage}
-                onChange={(e) => onLanguageChange(e.target.value as LanguageCode)}
-                className="bg-transparent text-xs font-medium text-slate-700 focus:outline-none cursor-pointer"
+                value={isGnaniVoiceSupported(currentLanguage) ? currentLanguage : 'GOOGLE_TRANSLATE'}
+                onChange={(e) => handleSelectChange(e.target.value)}
+                className="bg-transparent text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer max-w-[140px] sm:max-w-none"
                 aria-label="Select Language"
               >
-                <option value="hi-IN">हिन्दी (Hindi)</option>
-                <option value="kn-IN">ಕನ್ನಡ (Kannada)</option>
-                <option value="ta-IN">தமிழ் (Tamil)</option>
-                <option value="en-IN">English</option>
+                <optgroup label="Gnani Prisma Voice (10 Indic Languages)">
+                  {PRISMA_LANGUAGES.map((lang) => (
+                    <option key={lang.code} value={lang.code}>
+                      {lang.nativeName} ({lang.name})
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Global Languages">
+                  <option value="GOOGLE_TRANSLATE">
+                    🌐 All Other Languages (Google Translate)
+                  </option>
+                </optgroup>
               </select>
+            </div>
+
+            {/* Google Translate Inline Gadget */}
+            <div className={`transition-all ${showTranslateWidget ? 'block' : 'inline-block'}`}>
+              <GoogleTranslateWidget />
             </div>
 
             {/* Profile Selector (Demo Mode) */}
@@ -110,7 +136,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   const p = SYNTHETIC_PROFILES.find((prof) => prof.id === e.target.value);
                   if (p) onProfileChange(p);
                 }}
-                className="bg-transparent text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer max-w-[130px] sm:max-w-none"
+                className="bg-transparent text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer max-w-[120px] sm:max-w-none"
                 aria-label="Current User Profile"
               >
                 {SYNTHETIC_PROFILES.map((p) => (
