@@ -1,4 +1,5 @@
 import { fastApiClient } from '@/lib/api/fastapi-client';
+import { firestoreService } from '@/lib/firebase/firestore-service';
 import {
   SYNTHETIC_AUDIT_LOGS,
   SYNTHETIC_BENEFICIARIES,
@@ -90,6 +91,7 @@ class DataService {
         // ignore
       }
     }
+    firestoreService.clearAllDangerAlerts().catch(() => {});
     this.persistLocalStorage();
   }
 
@@ -107,6 +109,7 @@ class DataService {
       }
     }
     await clearWorkerLocalData();
+    await firestoreService.clearAllVisits().catch(() => {});
     this.persistLocalStorage();
   }
 
@@ -169,6 +172,19 @@ class DataService {
       const cached = await getCachedBeneficiariesLocally();
       if (cached.length > 0) {
         this.beneficiaries = cached;
+      }
+    }
+
+    // Check Firebase Firestore live beneficiaries
+    if (firestoreService.isConfigured()) {
+      try {
+        const firestoreBens = await firestoreService.getBeneficiaries();
+        if (firestoreBens.length > 0) {
+          this.beneficiaries = firestoreBens;
+          await cacheBeneficiariesLocally(this.beneficiaries).catch(() => {});
+        }
+      } catch {
+        // Fallback to local cache / backend
       }
     }
 
@@ -255,6 +271,7 @@ class DataService {
     };
 
     this.beneficiaries = [created, ...this.beneficiaries];
+    firestoreService.addBeneficiary(created).catch(() => {});
     if (typeof window !== 'undefined') {
       try {
         const raw = localStorage.getItem(STORAGE_CUSTOM_BENEFICIARIES_KEY);
@@ -409,6 +426,11 @@ class DataService {
       created_at: new Date().toISOString(),
     });
 
+    // Persist updated status to Firebase Firestore
+    if (firestoreService.isConfigured()) {
+      firestoreService.saveDangerAlert(target).catch(() => {});
+    }
+
     if (supabase && isRealSupabaseConfigured) {
       const referralStatus =
         nextStatus === 'resolved'
@@ -445,6 +467,11 @@ class DataService {
       this.visits.unshift(visit);
     }
 
+    // Persist visit to Firebase Firestore
+    if (firestoreService.isConfigured()) {
+      firestoreService.saveVisit(visit).catch(() => {});
+    }
+
     for (const alert of visit.danger_alerts) {
       this.registerDangerAlert(alert);
     }
@@ -453,7 +480,7 @@ class DataService {
     visit.follow_up_actions.forEach((act, idx) => {
       const taskId = `fu_${visit.visit_id}_${idx}`;
       if (!this.followUps.some((f) => f.id === taskId)) {
-        this.followUps.unshift({
+        const newTask: FollowUpTask = {
           id: taskId,
           beneficiary_uuid: visit.beneficiary_uuid,
           beneficiary_id: visit.beneficiary_id || 'UNASSIGNED',
@@ -468,7 +495,11 @@ class DataService {
           status: 'PENDING',
           notes: act.source_phrase || undefined,
           created_at: new Date().toISOString(),
-        });
+        };
+        this.followUps.unshift(newTask);
+        if (firestoreService.isConfigured()) {
+          firestoreService.saveFollowUp(newTask).catch(() => {});
+        }
       }
     });
 
@@ -492,8 +523,36 @@ class DataService {
     if (!task) return undefined;
     task.status = task.status === 'COMPLETED' ? 'PENDING' : 'COMPLETED';
     task.completed_at = task.status === 'COMPLETED' ? new Date().toISOString() : undefined;
+    if (firestoreService.isConfigured()) {
+      firestoreService.updateFollowUpStatus(taskId, task.status).catch(() => {});
+    }
     this.persistLocalStorage();
     return { ...task };
+  }
+
+  /** Syncs all data from Firebase Firestore (visits, alerts, followups, beneficiaries). */
+  async syncAllFromFirebase(): Promise<void> {
+    if (!firestoreService.isConfigured()) return;
+    try {
+      const [bens, vis, alerts, fu] = await Promise.all([
+        firestoreService.getBeneficiaries(),
+        firestoreService.getVisits(),
+        firestoreService.getDangerAlerts(),
+        firestoreService.getFollowUps(),
+      ]);
+
+      if (bens && bens.length > 0) {
+        this.beneficiaries = bens;
+        await cacheBeneficiariesLocally(bens).catch(() => {});
+      }
+      if (vis && vis.length > 0) this.visits = vis;
+      if (alerts && alerts.length > 0) this.dangerAlerts = alerts;
+      if (fu && fu.length > 0) this.followUps = fu;
+
+      this.persistLocalStorage();
+    } catch (err) {
+      console.warn('[Firebase] Sync failed, maintaining offline local store:', err);
+    }
   }
 
   /** Subscribes to Supabase Realtime danger_alerts if configured. */

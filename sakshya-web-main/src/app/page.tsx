@@ -71,6 +71,7 @@ export default function HomePage() {
     useState<Beneficiary | null>(null);
 
   const refreshAllData = useCallback(async () => {
+    await dataService.syncAllFromFirebase();
     setBeneficiaries(dataService.getBeneficiaries());
     setWorkers(dataService.getProfiles());
     setVisits(dataService.getVisits());

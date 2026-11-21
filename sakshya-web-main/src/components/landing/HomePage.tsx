@@ -20,6 +20,8 @@ import { HealthWave } from '@/components/animations/HealthWave';
 import { SYNTHETIC_PROFILES } from '@/lib/mock-data';
 import { useTranslation } from '@/lib/i18n/LanguageContext';
 import { isRealSupabaseConfigured, supabase } from '@/lib/supabase/client';
+import { auth, isFirebaseConfigured } from '@/lib/firebase/client';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { PRISMA_LANGUAGES } from '@/lib/translations';
 import type { LanguageCode, UserProfile } from '@/types';
 
@@ -533,15 +535,47 @@ export const HomePage: React.FC<HomePageProps> = ({
       return;
     }
 
-    if (!supabase || !isRealSupabaseConfigured) {
-      setAuthError(
-        'Supabase Auth is not configured in .env.local. Choose one of the role entry buttons above to enter directly.'
-      );
-      return;
-    }
-
     setIsLoading(true);
     try {
+      if (isFirebaseConfigured) {
+        try {
+          const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+          if (userCredential.user) {
+            const matchingProfile =
+              SYNTHETIC_PROFILES.find(
+                (p) =>
+                  p.phone_number?.includes(email) ||
+                  p.worker_code.toLowerCase().includes(email.toLowerCase())
+              ) || doctorProfile;
+            onAuthenticated({
+              ...matchingProfile,
+              auth_user_id: userCredential.user.uid,
+              preferred_language: selectedLanguage,
+            });
+            return;
+          }
+        } catch (firebaseErr: unknown) {
+          const errObj = firebaseErr as { code?: string; message?: string };
+          if (
+            errObj?.code === 'auth/configuration-not-found' ||
+            errObj?.message?.includes('CONFIGURATION_NOT_FOUND')
+          ) {
+            setAuthError(
+              'Firebase Auth is ready on sakshya-aasha, but Email/Password provider is not yet enabled in the Firebase console. Choose one of the 3 role buttons above to enter directly.'
+            );
+            return;
+          }
+          throw firebaseErr;
+        }
+      }
+
+      if (!supabase || !isRealSupabaseConfigured) {
+        setAuthError(
+          'Please select one of the 3 role entry cards above to enter the portal directly.'
+        );
+        return;
+      }
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
@@ -819,15 +853,19 @@ export const HomePage: React.FC<HomePageProps> = ({
                   >
                     <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-md">
                       <div className="flex items-center justify-between mb-3">
-                        <span className="text-xs font-bold text-slate-800">Supabase Staff Login</span>
+                        <span className="text-xs font-bold text-slate-800">Staff Portal Login</span>
                         <span
                           className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                            isRealSupabaseConfigured
+                            isFirebaseConfigured || isRealSupabaseConfigured
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                               : 'bg-slate-100 text-slate-600 border border-slate-200'
                           }`}
                         >
-                          {isRealSupabaseConfigured ? 'Supabase Connected' : 'Local Mock'}
+                          {isFirebaseConfigured
+                            ? 'Firebase: sakshya-aasha'
+                            : isRealSupabaseConfigured
+                            ? 'Supabase Connected'
+                            : 'Local Mock'}
                         </span>
                       </div>
 
