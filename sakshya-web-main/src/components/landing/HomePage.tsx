@@ -29,177 +29,462 @@ interface HomePageProps {
   onAuthenticated: (profile: UserProfile) => void;
 }
 
-/* ── Custom Animated ASHA Community SVG Illustration ── */
+/* ── Custom Animated Medical-Tech Field Register Illustration ── */
 function AshaCommunityIllustration() {
   return (
     <svg
-      viewBox="0 0 340 380"
+      viewBox="0 0 420 440"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
-      className="w-full max-w-[340px] drop-shadow-md select-none"
+      className="w-full max-w-[420px] drop-shadow-xl select-none"
     >
-      {/* Ambient background circles */}
-      <circle cx="170" cy="200" r="140" fill="rgba(13,148,136,0.06)" />
-      <circle cx="170" cy="200" r="105" fill="rgba(13,148,136,0.05)" />
+      <defs>
+        {/* Gradients */}
+        <linearGradient id="tabletBezel" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#1E293B" />
+          <stop offset="100%" stopColor="#0F172A" />
+        </linearGradient>
+        <linearGradient id="tabletScreen" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#FFFFFF" />
+          <stop offset="100%" stopColor="#F8FAFC" />
+        </linearGradient>
+        <linearGradient id="tealGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#0D9488" />
+          <stop offset="100%" stopColor="#059669" />
+        </linearGradient>
+        <linearGradient id="emeraldGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#10B981" />
+          <stop offset="100%" stopColor="#047857" />
+        </linearGradient>
+        <linearGradient id="roseGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#F43F5E" />
+          <stop offset="100%" stopColor="#E11D48" />
+        </linearGradient>
+        <linearGradient id="hudCardGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#F0FDFA" />
+          <stop offset="100%" stopColor="#E6FFFA" />
+        </linearGradient>
+        <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="8" result="blur" />
+          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
+        <filter id="cardShadow" x="-15%" y="-15%" width="130%" height="130%">
+          <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor="#0F172A" floodOpacity="0.08" />
+        </filter>
+      </defs>
 
-      {/* Community connection nodes (pulsing) */}
+      {/* ── 1. Ambient Background Sonar / Radar Rings ── */}
       <motion.circle
-        animate={{ opacity: [0.3, 0.9, 0.3], scale: [0.9, 1.2, 0.9] }}
-        transition={{ duration: 3, repeat: Infinity }}
-        cx="80"
-        cy="100"
-        r="10"
+        cx="210"
+        cy="220"
+        r="170"
+        fill="rgba(13,148,136,0.03)"
+        stroke="rgba(13,148,136,0.08)"
+        strokeWidth="1.5"
+        strokeDasharray="6 6"
+        animate={{ rotate: 360 }}
+        transition={{ duration: 60, repeat: Infinity, ease: 'linear' }}
+        style={{ transformOrigin: '210px 220px' }}
+      />
+      <motion.circle
+        cx="210"
+        cy="220"
+        r="135"
+        fill="rgba(13,148,136,0.03)"
+        stroke="rgba(13,148,136,0.12)"
+        strokeWidth="1"
+        animate={{ scale: [0.97, 1.03, 0.97] }}
+        transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+        style={{ transformOrigin: '210px 220px' }}
+      />
+
+      {/* ── 2. Telemetry Connection Lines & Pulsing Data Photons ── */}
+      {/* Node 1: Top-Left (Mother & Child) -> Device */}
+      <line x1="75" y1="85" x2="160" y2="150" stroke="#0D9488" strokeWidth="1.5" strokeDasharray="4 4" opacity="0.4" />
+      <motion.circle
+        r="3.5"
         fill="#0D9488"
-        opacity="0.5"
+        animate={{ cx: [75, 160], cy: [85, 150], opacity: [0, 1, 0] }}
+        transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
       />
+
+      {/* Node 2: Top-Right (PHC Hospital) -> Device */}
+      <line x1="345" y1="85" x2="260" y2="150" stroke="#0D9488" strokeWidth="1.5" strokeDasharray="4 4" opacity="0.4" />
       <motion.circle
-        animate={{ opacity: [0.25, 0.85, 0.25], scale: [0.9, 1.25, 0.9] }}
-        transition={{ duration: 4, repeat: Infinity, delay: 0.5 }}
-        cx="270"
-        cy="120"
-        r="8"
-        fill="#047857"
-        opacity="0.4"
+        r="3.5"
+        fill="#10B981"
+        animate={{ cx: [345, 260], cy: [85, 150], opacity: [0, 1, 0] }}
+        transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut', delay: 0.6 }}
       />
+
+      {/* Node 3: Bottom-Left (10 Indic Dialects) -> Device */}
+      <line x1="75" y1="355" x2="160" y2="290" stroke="#0D9488" strokeWidth="1.5" strokeDasharray="4 4" opacity="0.4" />
       <motion.circle
-        animate={{ opacity: [0.4, 1, 0.4], scale: [0.9, 1.15, 0.9] }}
-        transition={{ duration: 3.5, repeat: Infinity, delay: 1 }}
-        cx="60"
-        cy="270"
-        r="12"
+        r="3.5"
         fill="#0D9488"
-        opacity="0.35"
+        animate={{ cx: [75, 160], cy: [355, 290], opacity: [0, 1, 0] }}
+        transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut', delay: 1.2 }}
       />
+
+      {/* Node 4: Bottom-Right (Zero Data Loss DB) -> Device */}
+      <line x1="345" y1="355" x2="260" y2="290" stroke="#0D9488" strokeWidth="1.5" strokeDasharray="4 4" opacity="0.4" />
       <motion.circle
-        animate={{ opacity: [0.3, 0.9, 0.3], scale: [0.85, 1.2, 0.85] }}
-        transition={{ duration: 5, repeat: Infinity, delay: 0.3 }}
-        cx="290"
-        cy="280"
-        r="9"
-        fill="#059669"
-        opacity="0.4"
+        r="3.5"
+        fill="#10B981"
+        animate={{ cx: [345, 260], cy: [355, 290], opacity: [0, 1, 0] }}
+        transition={{ duration: 3.8, repeat: Infinity, ease: 'easeInOut', delay: 1.8 }}
       />
 
-      {/* Connection lines from ASHA worker to community households */}
-      <motion.line
-        animate={{ opacity: [0.15, 0.5, 0.15] }}
-        transition={{ duration: 4, repeat: Infinity }}
-        x1="150"
-        y1="165"
-        x2="80"
-        y2="100"
-        stroke="#0D9488"
-        strokeWidth="1.5"
-        strokeDasharray="4 4"
-      />
-      <motion.line
-        animate={{ opacity: [0.12, 0.45, 0.12] }}
-        transition={{ duration: 4, repeat: Infinity, delay: 1 }}
-        x1="190"
-        y1="165"
-        x2="270"
-        y2="120"
-        stroke="#0D9488"
-        strokeWidth="1.5"
-        strokeDasharray="4 4"
-      />
-      <motion.line
-        animate={{ opacity: [0.12, 0.4, 0.12] }}
-        transition={{ duration: 5, repeat: Infinity, delay: 0.5 }}
-        x1="150"
-        y1="210"
-        x2="60"
-        y2="270"
-        stroke="#0D9488"
-        strokeWidth="1.5"
-        strokeDasharray="4 4"
-      />
-      <motion.line
-        animate={{ opacity: [0.12, 0.4, 0.12] }}
-        transition={{ duration: 4, repeat: Infinity, delay: 1.5 }}
-        x1="195"
-        y1="210"
-        x2="290"
-        y2="280"
-        stroke="#0D9488"
-        strokeWidth="1.5"
-        strokeDasharray="4 4"
-      />
-
-      {/* ASHA Worker Character */}
+      {/* ── 3. Central Smart Voice Field Register Device (Floating) ── */}
       <motion.g
         animate={{ y: [0, -7, 0] }}
         transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
+        style={{ transformOrigin: '210px 220px' }}
       >
-        {/* Torso / Kurta */}
-        <rect x="130" y="185" width="80" height="95" rx="18" fill="#0D9488" />
-        {/* Collar detail */}
-        <path d="M165,185 L170,200 L175,185" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" fill="none" />
-        {/* Arms */}
-        <rect x="100" y="190" width="34" height="18" rx="9" fill="#0D9488" />
-        <rect x="206" y="190" width="34" height="18" rx="9" fill="#0D9488" />
-        {/* Hands */}
-        <circle cx="100" cy="199" r="10" fill="#E8B298" />
-        <circle cx="240" cy="199" r="10" fill="#E8B298" />
-
-        {/* Tablet / Field Register Device in hand */}
-        <rect x="224" y="185" width="32" height="50" rx="5" fill="#1E293B" />
-        <rect x="227" y="189" width="26" height="38" rx="3" fill="#F0FDF4" />
-        {/* Screen health waveform */}
-        <polyline
-          points="230,215 235,208 240,218 245,203 250,210"
-          stroke="#0D9488"
-          strokeWidth="1.5"
-          fill="none"
-          strokeLinecap="round"
+        {/* Device Outer Frame (Dark Slate Bezel) */}
+        <rect
+          x="110"
+          y="85"
+          width="200"
+          height="270"
+          rx="24"
+          fill="url(#tabletBezel)"
+          stroke="#334155"
+          strokeWidth="2"
+          filter="url(#cardShadow)"
         />
-        <circle cx="250" cy="210" r="2" fill="#E11D48" />
 
-        {/* Head & Hair */}
-        <circle cx="170" cy="165" r="32" fill="#E8B298" />
-        <path
-          d="M140,158 Q145,135 170,133 Q195,133 200,158 Q195,145 170,143 Q145,145 140,158Z"
-          fill="#291D17"
-        />
-        {/* Dupatta drape */}
-        <path d="M138,173 Q130,160 125,155 Q135,158 142,165" fill="#0F766E" opacity="0.8" />
-        {/* Eyes & Smile */}
-        <circle cx="160" cy="168" r="3" fill="#291D17" />
-        <circle cx="180" cy="168" r="3" fill="#291D17" />
-        <path d="M162,178 Q170,184 178,178" stroke="#291D17" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+        {/* Top Speaker Ear-piece slit & camera */}
+        <rect x="185" y="94" width="50" height="3" rx="1.5" fill="#475569" />
+        <circle cx="170" cy="95.5" r="2.5" fill="#0D9488" opacity="0.8" />
 
-        {/* Official ASHA badge */}
-        <rect x="148" y="210" width="44" height="20" rx="4" fill="rgba(255,255,255,0.25)" />
-        <text x="170" y="224" textAnchor="middle" fontSize="8" fill="white" fontFamily="sans-serif" fontWeight="700">
-          ASHA
-        </text>
+        {/* Screen Bezel Inset */}
+        <rect x="118" y="104" width="184" height="240" rx="16" fill="url(#tabletScreen)" />
+
+        {/* Screen Status Bar */}
+        <g transform="translate(126, 114)">
+          {/* Signal / Battery / Status */}
+          <circle cx="4" cy="4" r="3" fill="#10B981" />
+          <text x="12" y="7" fontSize="7" fontWeight="700" fill="#0F172A" fontFamily="sans-serif">
+            Sakshya Register
+          </text>
+
+          {/* Local DB Pill */}
+          <rect x="116" y="-1" width="52" height="11" rx="4" fill="#ECFDF5" stroke="#A7F3D0" strokeWidth="0.8" />
+          <circle cx="121" cy="4.5" r="2" fill="#059669" />
+          <text x="126" y="7" fontSize="5.5" fontWeight="700" fill="#047857" fontFamily="sans-serif">
+            LOCAL DB
+          </text>
+        </g>
+
+        {/* ── Voice Capture HUD Box ── */}
+        <g transform="translate(126, 128)">
+          <rect
+            x="0"
+            y="0"
+            width="168"
+            height="58"
+            rx="10"
+            fill="url(#hudCardGrad)"
+            stroke="#99F6E4"
+            strokeWidth="1"
+          />
+
+          {/* Concentric Mic Sound Radar Waves */}
+          <motion.circle
+            cx="24"
+            cy="29"
+            r="18"
+            fill="none"
+            stroke="#0D9488"
+            strokeWidth="1"
+            animate={{ scale: [0.85, 1.25, 0.85], opacity: [0.6, 0.1, 0.6] }}
+            transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+            style={{ transformOrigin: '24px 29px' }}
+          />
+          <motion.circle
+            cx="24"
+            cy="29"
+            r="13"
+            fill="none"
+            stroke="#0D9488"
+            strokeWidth="1"
+            animate={{ scale: [0.9, 1.15, 0.9], opacity: [0.7, 0.2, 0.7] }}
+            transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+            style={{ transformOrigin: '24px 29px' }}
+          />
+
+          {/* Mic Button Circle */}
+          <circle cx="24" cy="29" r="10" fill="url(#tealGrad)" />
+          {/* Mic Icon Vector */}
+          <rect x="22.5" y="25" width="3" height="5.5" rx="1.5" fill="#FFFFFF" />
+          <path d="M21 27.5 C21 30 27 30 27 27.5" stroke="#FFFFFF" strokeWidth="0.9" fill="none" strokeLinecap="round" />
+          <line x1="24" y1="30" x2="24" y2="32.5" stroke="#FFFFFF" strokeWidth="0.9" />
+
+          {/* Live Listening Text */}
+          <text x="44" y="19" fontSize="7" fontWeight="700" fill="#0F766E" fontFamily="sans-serif">
+            Listening (10 Indic Dialects)
+          </text>
+
+          {/* Speech Equalizer Bars (Live Decibel Pulse) */}
+          <g transform="translate(44, 25)">
+            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => {
+              const baseHeight = [7, 12, 17, 10, 15, 19, 13, 20, 14, 9, 15, 8][i];
+              return (
+                <motion.rect
+                  key={i}
+                  x={i * 9.5}
+                  y={12 - baseHeight / 2}
+                  width="3.5"
+                  height={baseHeight}
+                  rx="1.75"
+                  fill="#0D9488"
+                  animate={{
+                    height: [baseHeight * 0.5, baseHeight * 1.25, baseHeight * 0.5],
+                    y: [12 - (baseHeight * 0.5) / 2, 12 - (baseHeight * 1.25) / 2, 12 - (baseHeight * 0.5) / 2],
+                    opacity: [0.6, 1, 0.6],
+                  }}
+                  transition={{
+                    duration: 1.2 + (i % 3) * 0.3,
+                    repeat: Infinity,
+                    delay: i * 0.08,
+                    ease: 'easeInOut',
+                  }}
+                />
+              );
+            })}
+          </g>
+
+          <text x="44" y="49" fontSize="6" fill="#0D9488" opacity="0.9" fontFamily="sans-serif" fontStyle="italic">
+            &quot;वजन ५४ किलो, कोई खतरे का लक्षण नहीं&quot;
+          </text>
+        </g>
+
+        {/* ── Extracted Visit Structured Record Card ── */}
+        <g transform="translate(126, 194)">
+          <rect
+            x="0"
+            y="0"
+            width="168"
+            height="90"
+            rx="10"
+            fill="#FFFFFF"
+            stroke="#E2E8F0"
+            strokeWidth="1"
+            filter="url(#cardShadow)"
+          />
+
+          {/* Patient Header */}
+          <text x="10" y="15" fontSize="7.5" fontWeight="700" fill="#0F172A" fontFamily="sans-serif">
+            Lakshmi Devi · BEN-1042
+          </text>
+          <rect x="114" y="7" width="44" height="10" rx="3" fill="#F1F5F9" />
+          <text x="136" y="14.5" textAnchor="middle" fontSize="5.5" fontWeight="700" fill="#475569" fontFamily="sans-serif">
+            ANC VISIT
+          </text>
+
+          {/* Vitals Pills Row */}
+          <g transform="translate(10, 23)">
+            {/* Weight Pill */}
+            <rect x="0" y="0" width="46" height="15" rx="4" fill="#F8FAFC" stroke="#E2E8F0" strokeWidth="0.8" />
+            <text x="5" y="10.5" fontSize="5.5" fontWeight="600" fill="#64748B" fontFamily="sans-serif">
+              Weight: <tspan fontWeight="700" fill="#0F172A">54.0 kg</tspan>
+            </text>
+
+            {/* BP Pill */}
+            <rect x="50" y="0" width="46" height="15" rx="4" fill="#F8FAFC" stroke="#E2E8F0" strokeWidth="0.8" />
+            <text x="55" y="10.5" fontSize="5.5" fontWeight="600" fill="#64748B" fontFamily="sans-serif">
+              BP: <tspan fontWeight="700" fill="#0F172A">118/76</tspan>
+            </text>
+
+            {/* Next Visit */}
+            <rect x="100" y="0" width="48" height="15" rx="4" fill="#F8FAFC" stroke="#E2E8F0" strokeWidth="0.8" />
+            <text x="104" y="10.5" fontSize="5.5" fontWeight="600" fill="#64748B" fontFamily="sans-serif">
+              Due: <tspan fontWeight="700" fill="#0F172A">05 Dec</tspan>
+            </text>
+          </g>
+
+          {/* Deterministic Clinical Risk Assessment Banner */}
+          <g transform="translate(10, 45)">
+            <rect x="0" y="0" width="148" height="17" rx="5" fill="#DCFCE7" stroke="#86EFAC" strokeWidth="0.8" />
+            {/* Shield Checkmark icon */}
+            <path
+              d="M10 4.5 L14 6.5 L14 10.5 C14 13 10 14.5 10 14.5 C10 14.5 6 13 6 10.5 L6 6.5 Z"
+              fill="#16A34A"
+            />
+            <path d="M8.5 9 L9.5 10 L12 7.5" stroke="#FFFFFF" strokeWidth="0.8" fill="none" />
+            <text x="18" y="11.5" fontSize="6" fontWeight="700" fill="#15803D" fontFamily="sans-serif">
+              Risk Model: NORMAL · No Danger Signs
+            </text>
+          </g>
+
+          {/* Action Row: Read-Back & Confirm */}
+          <g transform="translate(10, 68)">
+            <rect x="0" y="0" width="148" height="15" rx="4" fill="url(#tealGrad)" />
+            <text x="74" y="10" textAnchor="middle" fontSize="6.5" fontWeight="700" fill="#FFFFFF" fontFamily="sans-serif">
+              ✓ Voice Verified · Ready to Sync
+            </text>
+          </g>
+        </g>
+
+        {/* Bottom Hardware Home Indicator */}
+        <rect x="175" y="347" width="70" height="2.5" rx="1.25" fill="#334155" />
       </motion.g>
 
-      {/* Floating healthcare cross */}
+      {/* ── 4. Floating Satellite Nodes ── */}
+
+      {/* Node 1: Top-Left (Mother & Child / ANC-PNC) */}
       <motion.g
-        animate={{ y: [0, -10, 0], rotate: [0, 4, 0] }}
-        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut', delay: 0.8 }}
-        style={{ transformOrigin: '85px 60px' }}
+        animate={{ y: [0, -8, 0] }}
+        transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut', delay: 0.3 }}
       >
-        <rect x="79" y="50" width="12" height="32" rx="3" fill="#0D9488" opacity="0.8" />
-        <rect x="70" y="59" width="30" height="12" rx="3" fill="#0D9488" opacity="0.8" />
+        <g transform="translate(28, 45)">
+          <rect
+            x="0"
+            y="0"
+            width="90"
+            height="62"
+            rx="12"
+            fill="#FFFFFF"
+            stroke="#99F6E4"
+            strokeWidth="1.2"
+            filter="url(#cardShadow)"
+          />
+          <circle cx="20" cy="22" r="12" fill="#CCFBF1" />
+          {/* Heart / Mother icon */}
+          <path
+            d="M20 26 C16 23 14 20 14 18 C14 16.3 15.3 15 17 15 C18 15 19.2 15.7 20 16.7 C20.8 15.7 22 15 23 15 C24.7 15 26 16.3 26 18 C26 20 24 23 20 26 Z"
+            fill="#0D9488"
+          />
+          <text x="36" y="19" fontSize="6.5" fontWeight="700" fill="#0F172A" fontFamily="sans-serif">
+            Maternal Care
+          </text>
+          <text x="36" y="27" fontSize="5.5" fontWeight="600" fill="#0D9488" fontFamily="sans-serif">
+            ANC · PNC · HBNC
+          </text>
+          <rect x="8" y="38" width="74" height="16" rx="4" fill="#F0FDFA" />
+          <text x="45" y="49" textAnchor="middle" fontSize="5.5" fontWeight="600" fill="#047857" fontFamily="sans-serif">
+            Zero Missed Visits
+          </text>
+        </g>
       </motion.g>
 
-      {/* Floating green leaf */}
+      {/* Node 2: Top-Right (PHC Hospital & Emergency Referral) */}
       <motion.g
-        animate={{ y: [0, -9, 0], rotate: [0, -5, 0] }}
-        transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut', delay: 1.5 }}
-        style={{ transformOrigin: '280px 75px' }}
+        animate={{ y: [0, -9, 0] }}
+        transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 0.9 }}
       >
-        <path d="M270,75 Q280,55 295,65 Q285,80 270,75Z" fill="#10B981" opacity="0.6" />
-        <line x1="270" y1="75" x2="290" y2="62" stroke="#10B981" strokeWidth="1" opacity="0.4" />
+        <g transform="translate(302, 45)">
+          <rect
+            x="0"
+            y="0"
+            width="90"
+            height="62"
+            rx="12"
+            fill="#FFFFFF"
+            stroke="#FECDD3"
+            strokeWidth="1.2"
+            filter="url(#cardShadow)"
+          />
+          <circle cx="20" cy="22" r="12" fill="#FFE4E6" />
+          {/* Medical Cross Icon */}
+          <rect x="18" y="16" width="4" height="12" rx="1.5" fill="#E11D48" />
+          <rect x="14" y="20" width="12" height="4" rx="1.5" fill="#E11D48" />
+
+          <text x="36" y="19" fontSize="6.5" fontWeight="700" fill="#0F172A" fontFamily="sans-serif">
+            PHC Referral
+          </text>
+          <text x="36" y="27" fontSize="5.5" fontWeight="600" fill="#E11D48" fontFamily="sans-serif">
+            Instant Triage
+          </text>
+          <rect x="8" y="38" width="74" height="16" rx="4" fill="#FFF1F2" />
+          <text x="45" y="49" textAnchor="middle" fontSize="5.5" fontWeight="600" fill="#BE123C" fontFamily="sans-serif">
+            108 SOS Protocol
+          </text>
+        </g>
       </motion.g>
 
-      {/* Health vitals wave below character */}
-      <g transform="translate(40,315)">
-        <HealthWave width={260} height={40} color="#0D9488" opacity={0.35} />
-      </g>
+      {/* Node 3: Bottom-Left (10 Indic Dialects Voice AI) */}
+      <motion.g
+        animate={{ y: [0, -7, 0] }}
+        transition={{ duration: 4.8, repeat: Infinity, ease: 'easeInOut', delay: 1.4 }}
+      >
+        <g transform="translate(24, 325)">
+          <rect
+            x="0"
+            y="0"
+            width="96"
+            height="58"
+            rx="12"
+            fill="#FFFFFF"
+            stroke="#E2E8F0"
+            strokeWidth="1.2"
+            filter="url(#cardShadow)"
+          />
+          <text x="10" y="16" fontSize="7" fontWeight="700" fill="#0F172A" fontFamily="sans-serif">
+            10 Indic Dialects
+          </text>
+          <text x="10" y="27" fontSize="6" fontWeight="600" fill="#0D9488" fontFamily="sans-serif">
+            हिन्दी · தமிழ் · ಕನ್ನಡ · తెలుగు
+          </text>
+          <rect x="8" y="35" width="80" height="15" rx="4" fill="#F8FAFC" />
+          <text x="48" y="45.5" textAnchor="middle" fontSize="5.5" fontWeight="700" fill="#475569" fontFamily="sans-serif">
+            Natural Code-Mixing
+          </text>
+        </g>
+      </motion.g>
+
+      {/* Node 4: Bottom-Right (Offline-First Local DB) */}
+      <motion.g
+        animate={{ y: [0, -8, 0] }}
+        transition={{ duration: 5.2, repeat: Infinity, ease: 'easeInOut', delay: 1.8 }}
+      >
+        <g transform="translate(300, 325)">
+          <rect
+            x="0"
+            y="0"
+            width="96"
+            height="58"
+            rx="12"
+            fill="#FFFFFF"
+            stroke="#A7F3D0"
+            strokeWidth="1.2"
+            filter="url(#cardShadow)"
+          />
+          <circle cx="20" cy="19" r="10" fill="#ECFDF5" />
+          {/* Database Disk Icon */}
+          <path
+            d="M15 15 C15 13.5 25 13.5 25 15 C25 16.5 15 16.5 15 15 Z"
+            stroke="#059669"
+            strokeWidth="1"
+            fill="none"
+          />
+          <path
+            d="M15 15 L15 23 C15 24.5 25 24.5 25 23 L25 15"
+            stroke="#059669"
+            strokeWidth="1"
+            fill="none"
+          />
+          <path
+            d="M15 19 C15 20.5 25 20.5 25 19"
+            stroke="#059669"
+            strokeWidth="1"
+            fill="none"
+          />
+
+          <text x="34" y="17" fontSize="6.5" fontWeight="700" fill="#0F172A" fontFamily="sans-serif">
+            Local DB Store
+          </text>
+          <text x="34" y="26" fontSize="5.5" fontWeight="600" fill="#059669" fontFamily="sans-serif">
+            IndexedDB Engine
+          </text>
+          <rect x="8" y="35" width="80" height="15" rx="4" fill="#F0FDF4" />
+          <text x="48" y="45.5" textAnchor="middle" fontSize="5.5" fontWeight="700" fill="#047857" fontFamily="sans-serif">
+            Zero Data Loss Sync
+          </text>
+        </g>
+      </motion.g>
     </svg>
   );
 }
