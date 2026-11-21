@@ -62,9 +62,15 @@ async def voice_session_ws(
 
     meta = get_session_metadata(session_id) or {}
     stt_lang = language or meta.get("language") or "indic-auto"
-    tts_default_lang = (
-        settings.default_language if stt_lang == "indic-auto" else stt_lang
-    )
+    ben_id = meta.get("beneficiary_id")
+    ben_obj = SyntheticBeneficiaryDirectory().get_by_id(ben_id) if ben_id else None
+
+    if stt_lang != "indic-auto":
+        tts_default_lang = stt_lang
+    elif ben_obj and ben_obj.preferred_language:
+        tts_default_lang = ben_obj.preferred_language
+    else:
+        tts_default_lang = settings.default_language
 
     send_lock = asyncio.Lock()
 
@@ -75,8 +81,6 @@ async def voice_session_ws(
             except Exception:
                 pass
 
-    ben_id = meta.get("beneficiary_id")
-    ben_obj = SyntheticBeneficiaryDirectory().get_by_id(ben_id) if ben_id else None
     stt_ctx = build_contextual_stt_options(
         beneficiary_name=ben_obj.full_name if ben_obj else None,
         beneficiary_id=ben_obj.beneficiary_id if ben_obj else ben_id,

@@ -360,6 +360,18 @@ def generate_readback_preference_question(language: str) -> str:
         return "ನಿಮ್ಮ ಭೇಟಿಯ ಮಾಹಿತಿಯನ್ನು ನವೀಕರಿಸಲಾಗಿದೆ. ಸಂಪೂರ್ಣ ಭೇಟಿಯ ಸಾರಾಂಶವನ್ನು ಓದಿ ಹೇಳಲೇ?"
     if lang == "ta-IN":
         return "உங்கள் பார்வைத் தகவல் புதுப்பிக்கப்பட்டுள்ளது. முழு பார்வை சுருக்கத்தையும் படித்துக் காட்டலாமா?"
+    if lang == "te-IN":
+        return "మీ సందర్శన సమాచారం నవీకరించబడింది. నేను పూర్తి సందర్శన సారాంశాన్ని చదివి వినిపించాలా?"
+    if lang == "ml-IN":
+        return "സന്ദർശന വിവരങ്ങൾ അപ്ഡേറ്റ് ചെയ്തിട്ടുണ്ട്. പൂർണ്ണ സന്ദർശന സംഗ്രഹം ഞാൻ വായിച്ചു കേൾപ്പിക്കണമോ?"
+    if lang == "mr-IN":
+        return "आपल्या भेटीची माहिती अद्यतनित झाली आहे. मी संपूर्ण भेटीचा सारांश वाचून दाखवू का?"
+    if lang == "bn-IN":
+        return "পরিদর্শনের তথ্য আপডেট হয়েছে। আমি কি সম্পূর্ণ সারাংশ পড়ে শোনাব?"
+    if lang == "gu-IN":
+        return "તમારી વિઝિટ માહિતી અપડેટ થઈ ગઈ છે. શું હું સંપૂર્ણ સારાંશ વાંચી સંભળાવું?"
+    if lang == "pa-IN":
+        return "ਤੁਹਾਡੇ ਦੌਰੇ ਦੀ ਜਾਣਕਾਰੀ ਅੱਪਡੇਟ ਹੋ ਗਈ ਹੈ। ਕੀ ਮੈਂ ਪੂਰਾ ਸਾਰ ਪੜ੍ਹ ਕੇ ਸੁਣਾਵਾਂ?"
     return "Your visit information has been updated. Would you like me to read the complete visit summary aloud?"
 
 
@@ -371,6 +383,18 @@ def generate_unclear_readback_preference_question(language: str) -> str:
         return "ಕ್ಷಮಿಸಿ, ಸಾರಾಂಶವನ್ನು ಓದಿ ಹೇಳಲೇ? ದಯವಿಟ್ಟು ಹೌದು ಅಥವಾ ಇಲ್ಲ ಎಂದು ಹೇಳಿ."
     if lang == "ta-IN":
         return "மன்னிக்கவும், சுருக்கத்தை படித்துக் காட்டலாமா? தயவுசெய்து ஆம் அல்லது இல்லை என்று சொல்லுங்கள்."
+    if lang == "te-IN":
+        return "క్షమించండి, సారాంశాన్ని చదివి వినిపించాలా? దయచేసి అవును లేదా కాదు అని చెప్పండి."
+    if lang == "ml-IN":
+        return "ക്ഷമിക്കണം, സംഗ്രഹം വായിച്ചു കേൾപ്പിക്കണമോ? ദയവായി അതെ അല്ലെങ്കിൽ അല്ല എന്ന് പറയുക."
+    if lang == "mr-IN":
+        return "माफ करा, मी सारांश वाचून दाखवू का? कृपया हो किंवा नाही बोला."
+    if lang == "bn-IN":
+        return "দুঃখিত, আমি কি সারাংশ পড়ে শোনাব? দয়া করে হ্যাঁ অথবা না বলুন।"
+    if lang == "gu-IN":
+        return "માફ કરશો, શું હું સારાંશ વાંચી સંભળાવું? કૃપા કરીને હા કે ના કહો."
+    if lang == "pa-IN":
+        return "ਮਾਫ਼ ਕਰਨਾ, ਕੀ ਮੈਂ ਸਾਰ ਪੜ੍ਹ ਕੇ ਸੁਣਾਵਾਂ? ਕਿਰਪਾ ਕਰਕੇ ਹਾਂ ਜਾਂ ਨਾਂਹ ਕਹੋ।"
     return "Sorry, should I read the summary aloud? Please say yes or no."
 
 
@@ -382,6 +406,18 @@ def generate_submission_confirmation_question(language: str) -> str:
         return "ಸರಿ. ಈ ಭೇಟಿಯನ್ನು ಈಗ ಸಲ್ಲಿಸಿ ಉಳಿಸಬೇಕೇ?"
     if lang == "ta-IN":
         return "சரி. இந்தப் பார்வையை இப்போது சமர்ப்பித்து சேமிக்கலாமா?"
+    if lang == "te-IN":
+        return "సరే. మీరు ఈ సందర్శనను ఇప్పుడే సమర్పించి భద్రపరచాలనుకుంటున్నారా?"
+    if lang == "ml-IN":
+        return "ശരി. ഈ സന്ദർശനം ഇപ്പോൾ സമർപ്പിച്ച് സേവ് ചെയ്യണമോ?"
+    if lang == "mr-IN":
+        return "ठीक आहे. आपण ही भेट आता सबमिट आणि सेव्ह करू इच्छिता का?"
+    if lang == "bn-IN":
+        return "ঠিক আছে। আপনি কি এই পরিদর্শন এখনই জমা দিয়ে সেভ করতে চান?"
+    if lang == "gu-IN":
+        return "બરાબર. શું તમે આ વિઝિટ અત્યારે સબમિટ અને સેવ કરવા માંગો છો?"
+    if lang == "pa-IN":
+        return "ਠੀਕ ਹੈ। ਕੀ ਤੁਸੀਂ ਇਹ ਦੌਰਾ ਹੁਣੇ ਸਬਮਿਟ ਅਤੇ ਸੇਵ ਕਰਨਾ ਚਾਹੁੰਦੇ ਹੋ?"
     return "Okay. Would you like to submit and save this visit now?"
 
 
@@ -393,6 +429,18 @@ def generate_unclear_submission_question(language: str) -> str:
         return "ಕ್ಷಮಿಸಿ, ಈ ಭೇಟಿಯನ್ನು ಸಲ್ಲಿಸಿ ಉಳಿಸಬೇಕೇ? ದಯವಿಟ್ಟು ಹೌದು ಅಥವಾ ಇಲ್ಲ ಎಂದು ಹೇಳಿ."
     if lang == "ta-IN":
         return "மன்னிக்கவும், இந்தப் பார்வையை சமர்ப்பித்து சேமிக்கலாமா? தயவுசெய்து ஆம் அல்லது இல்லை என்று சொல்லுங்கள்."
+    if lang == "te-IN":
+        return "క్షమించండి, ఈ సందర్శనను సమర్పించి భద్రపరచాలా? దయచేసి అవును లేదా కాదు అని చెప్పండి."
+    if lang == "ml-IN":
+        return "ക്ഷമിക്കണം, ഈ സന്ദർശനം സമർപ്പിച്ച് സേവ് ചെയ്യണമോ? ദയവായി അതെ അല്ലെങ്കിൽ അല്ല എന്ന് പറയുക."
+    if lang == "mr-IN":
+        return "माफ करा, मी ही भेट सबमिट आणि सेव्ह करू का? कृपया हो किंवा नाही बोला."
+    if lang == "bn-IN":
+        return "দুঃখিত, আমি কি এই পরিদর্শন জমা দিয়ে সেভ করে দেব? দয়া করে হ্যাঁ অথবা না বলুন।"
+    if lang == "gu-IN":
+        return "માફ કરશો, શું હું આ વિઝિટ સબમિટ અને સેવ કરું? કૃપા કરીને હા કે ના કહો."
+    if lang == "pa-IN":
+        return "ਮਾਫ਼ ਕਰਨਾ, ਕੀ ਮੈਂ ਇਹ ਦੌਰਾ ਸਬਮਿਟ ਅਤੇ ਸੇਵ ਕਰ ਦੇਵਾਂ? ਕਿਰਪਾ ਕਰਕੇ ਹਾਂ ਜਾਂ ਨਾਂਹ ਕਹੋ।"
     return "Sorry, would you like to submit and save this visit now? Please say yes or no."
 
 
@@ -404,6 +452,18 @@ def generate_submission_declined_text(language: str) -> str:
         return "ಸರಿ, ಈ ಭೇಟಿಯನ್ನು ಸಲ್ಲಿಸದ ಡ್ರಾಫ್ಟ್ ಆಗಿ ಉಳಿಸಲಾಗಿದೆ. ನೀವು ಬದಲಾವಣೆಗಳನ್ನು ಮಾಡಬಹುದು ಅಥವಾ ನಂತರ ಸಲ್ಲಿಸಬಹುದು."
     if lang == "ta-IN":
         return "சரி, இந்தப் பார்வை சமர்ப்பிக்கப்படாத வரைவாக வைக்கப்பட்டுள்ளது. நீங்கள் மாற்றங்களைச் செய்யலாம் அல்லது பின்னர் சமர்ப்பிக்கலாம்."
+    if lang == "te-IN":
+        return "సరే, ఈ సందర్శన ప్రస్తుతం డ్రాఫ్ట్‌గా ఉంచబడింది. మీరు మరిన్ని మార్పులు చేయవచ్చు లేదా తర్వాత సమర్పించవచ్చు."
+    if lang == "ml-IN":
+        return "ശരി, ഈ സന്ദർശനം ഇപ്പോൾ ഡ്രാഫ്റ്റായി സൂക്ഷിച്ചിരിക്കുന്നു. നിങ്ങൾക്ക് മാറ്റങ്ങൾ വരുത്തുകയോ പിന്നീട് സമർപ്പിക്കുകയോ ചെയ്യാം."
+    if lang == "mr-IN":
+        return "ठीक आहे, ही भेट सध्या मसुदा म्हणून ठेवली आहे. आपण बदल करू शकता किंवा नंतर सबमिट करू शकता."
+    if lang == "bn-IN":
+        return "ঠিক আছে, এই পরিদর্শন খসড়া হিসেবে রাখা হয়েছে। আপনি আরও পরিবর্তন করতে পারেন বা পরে জমা দিতে পারেন।"
+    if lang == "gu-IN":
+        return "બરાબર, આ વિઝિટ અત્યારે ડ્રાફ્ટ તરીકે રાખવામાં આવી છે. તમે વધુ ફેરફાર કરી શકો છો અથવા પછી સબમિટ કરી શકો છો."
+    if lang == "pa-IN":
+        return "ਠੀਕ ਹੈ, ਇਹ ਦੌਰਾ ਹਾਲੇ ਡਰਾਫਟ ਵਜੋਂ ਰੱਖਿਆ ਗਿਆ ਹੈ। ਤੁਸੀਂ ਹੋਰ ਬਦਲਾਅ ਕਰ ਸਕਦੇ ਹੋ ਜਾਂ ਬਾਅਦ ਵਿੱਚ ਸਬਮਿਟ ਕਰ ਸਕਦੇ ਹੋ।"
     return "Okay, I have kept this visit as an unsubmitted draft. You can make more changes or submit later."
 
 
@@ -415,6 +475,12 @@ def generate_complete_summary_with_submit_prompt(visit: VisitRecordState, langua
         ("क्या मैं यह रिकॉर्ड कन्फर्म कर दूँ?", "क्या आप यह विज़िट अभी सबमिट और सेव करना चाहती हैं?"),
         ("ಈ ದಾಖಲೆಯನ್ನು ದೃಢೀಕರಿಸಲೇ?", "ಈ ಭೇಟಿಯನ್ನು ಈಗ ಸಲ್ಲಿಸಿ ಉಳಿಸಬೇಕೇ?"),
         ("இந்தப் பதிவை உறுதிப்படுத்தலாமா?", "இந்தப் பார்வையை இப்போது சமர்ப்பித்து சேமிக்கலாமா?"),
+        ("ఈ రికార్డును నిర్ధారించాలా?", "మీరు ఈ సందర్శనను ఇప్పుడే సమర్పించి భద్రపరచాలనుకుంటున్నారా?"),
+        ("ഈ റെക്കോർഡ് സ്ഥിരീകരിക്കാമോ?", "ഈ സന്ദർശനം ഇപ്പോൾ സമർപ്പിച്ച് സേവ് ചെയ്യണമോ?"),
+        ("मी ही नोंद निश्चित करू का?", "आपण ही भेट आता सबमिट आणि सेव्ह करू इच्छिता का?"),
+        ("আমি কি এই রেকর্ড নিশ্চিত করব?", "আপনি কি এই পরিদর্শন এখনই জমা দিয়ে সেভ করতে চান?"),
+        ("શું હું આ રેકોર્ડ કન્ફર્મ કરું?", "શું તમે આ વિઝિટ અત્યારે સબમિટ અને સેવ કરવા માંગો છો?"),
+        ("ਕੀ ਮੈਂ ਇਹ ਰਿਕਾਰਡ ਪੁਸ਼ਟੀ ਕਰਾਂ?", "ਕੀ ਤੁਸੀਂ ਇਹ ਦੌਰਾ ਹੁਣੇ ਸਬਮਿਟ ਅਤੇ ਸੇਵ ਕਰਨਾ ਚਾਹੁੰਦੇ ਹੋ?"),
         ("Should I confirm this record?", "Would you like to submit and save this visit now?"),
     ):
         if base.endswith(old_q):
@@ -487,6 +553,42 @@ def generate_beneficiary_greeting_text(
                 f"பயனாளி ஐடி: {beneficiary_id}. "
                 "தயவுசெய்து உறுதிப்படுத்தவும், இது சரியான பயனாளியா? ஆம் அல்லது இல்லை என்று சொல்லுங்கள்."
             )
+        if lang == "te-IN":
+            return (
+                f"నమస్కారం! మీరు ఈరోజు {beneficiary_name} ని కలుస్తున్నారా? "
+                f"లబ్ధిదారుని ఐడి: {beneficiary_id}. "
+                "దయచేసి నిర్ధారించండి, ఇది సరైన లబ్ధిదారుడా? అవును లేదా కాదు అని చెప్పండి."
+            )
+        if lang == "ml-IN":
+            return (
+                f"നമസ്കാരം! നിങ്ങൾ ഇന്ന് {beneficiary_name} എന്നവരെയാണോ സന്ദർശിക്കുന്നത്? "
+                f"ഗുണഭോക്താവ് ഐഡി: {beneficiary_id}. "
+                "ദയവായി സ്ഥിരീകരിക്കുക, ഇത് ശരിയായ ഗുണഭോക്താവാണോ? അതെ അല്ലെങ്കിൽ അല്ല എന്ന് പറയുക."
+            )
+        if lang == "mr-IN":
+            return (
+                f"नमस्ते! आपण आज {beneficiary_name} यांना भेट देत आहात का? "
+                f"लाभार्थी आयडी: {beneficiary_id}। "
+                "कृपया पुष्टी करा, हे योग्य लाभार्थी आहेत का? हो किंवा नाही बोला."
+            )
+        if lang == "bn-IN":
+            return (
+                f"নমস্কার! আপনি কি আজ {beneficiary_name}-এর কাছে এসেছেন? "
+                f"উপভোক্তা আইডি: {beneficiary_id}। "
+                "দয়া করে নিশ্চিত করুন, এটি কি সঠিক উপভোক্তা? হ্যাঁ অথবা না বলুন।"
+            )
+        if lang == "gu-IN":
+            return (
+                f"નમસ્તે! શું તમે આજે {beneficiary_name} ની મુલાકાતે આવ્યા છો? "
+                f"લાભાર્થી આઈડી: {beneficiary_id}. "
+                "કૃપા કરીને ખાતરી કરો, શું આ સાચો લાભાર્થી છે? હા કે ના કહો."
+            )
+        if lang == "pa-IN":
+            return (
+                f"ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ! ਕੀ ਤੁਸੀਂ ਅੱਜ {beneficiary_name} ਨੂੰ ਮਿਲ ਰਹੇ ਹੋ? "
+                f"ਲਾਭਪਾਤਰੀ ਆਈਡੀ: {beneficiary_id}। "
+                "ਕਿਰਪਾ ਕਰਕੇ ਪੁਸ਼ਟੀ ਕਰੋ, ਕੀ ਇਹ ਸਹੀ ਲਾਭਪਾਤਰੀ ਹੈ? ਹਾਂ ਜਾਂ ਨਾਂਹ ਕਹੋ।"
+            )
         return (
             f"Namaste! Are you visiting {beneficiary_name} today? "
             f"Beneficiary ID: {beneficiary_id}. "
@@ -499,6 +601,18 @@ def generate_beneficiary_greeting_text(
         return "ನಮಸ್ಕಾರ! ಇಂದಿನ ಭೇಟಿಗಾಗಿ ದಯವಿಟ್ಟು ಫಲಾನುಭವಿಯ ಹೆಸರು ಅಥವಾ ಫಲಾನುಭವಿ ಐಡಿ ತಿಳಿಸಿ."
     if lang == "ta-IN":
         return "வணக்கம்! இன்றைய பார்வைக்காக பயனாளியின் பெயர் அல்லது பயனாளி ஐடியைக் கூறுங்கள்."
+    if lang == "te-IN":
+        return "నమస్కారం! నేటి సందర్శన కోసం దయచేసి లబ్ధిదారుని పేరు లేదా లబ్ధిదారుని ఐడిని చెప్పండి."
+    if lang == "ml-IN":
+        return "നമസ്കാരം! ഇന്നത്തെ സന്ദർശനത്തിനായി ഗുണഭോക്താവിന്റെ പേരോ ഗുണഭോക്താവ് ഐഡിയോ പറയുക."
+    if lang == "mr-IN":
+        return "नमस्ते! आजच्या भेटीसाठी कृपया लाभार्थीचे नाव किंवा लाभार्थी आयडी सांगा."
+    if lang == "bn-IN":
+        return "নমস্কার! আজকের পরিদর্শনের জন্য দয়া করে উপভোক্তার নাম বা আইডি বলুন।"
+    if lang == "gu-IN":
+        return "નમસ્તે! આજના મુલાકાત માટે કૃપા કરીને લાભાર્થીનું નામ અથવા આઈડી કહો."
+    if lang == "pa-IN":
+        return "ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ! ਅੱਜ ਦੇ ਦੌਰੇ ਲਈ ਕਿਰਪਾ ਕਰਕੇ ਲਾਭਪਾਤਰੀ ਦਾ ਨਾਮ ਜਾਂ ਆਈਡੀ ਦੱਸੋ।"
     return "Namaste! Please tell me the beneficiary's name or beneficiary ID for today's visit."
 
 
@@ -520,6 +634,36 @@ def generate_identity_confirmed_text(beneficiary_name: str, language: str) -> st
             f"நன்றி. {beneficiary_name} உறுதிப்படுத்தப்பட்டது. "
             "தயவுசெய்து இன்றைய பார்வையைப் பற்றி கூறுங்கள். உங்கள் மொழியில் இயல்பாகப் பேசலாம்."
         )
+    if lang == "te-IN":
+        return (
+            f"ధన్యవాదాలు. {beneficiary_name} నిర్ధారించబడింది. "
+            "దయచేసి నేటి సందర్శన వివరాలు చెప్పండి. మీరు మీ భాషలో సహజంగా మాట్లాడవచ్చు."
+        )
+    if lang == "ml-IN":
+        return (
+            f"നന്ദി. {beneficiary_name} സ്ഥിരീകരിച്ചു. "
+            "ദയവായി ഇന്നത്തെ സന്ദർശനത്തെക്കുറിച്ച് പറയുക. നിങ്ങളുടെ ഭാഷയിൽ സ്വാഭാവികമായി സംസാരിക്കാം."
+        )
+    if lang == "mr-IN":
+        return (
+            f"धन्यवाद. {beneficiary_name} निश्चित झाले आहेत. "
+            "कृपया आजच्या भेटीबद्दल सांगा. आपण आपल्या भाषेत सहजपणे बोलू शकता."
+        )
+    if lang == "bn-IN":
+        return (
+            f"ধন্যবাদ। {beneficiary_name} নিশ্চিত হয়েছে। "
+            "দয়া করে আজকের পরিদর্শনের বিষয়ে বলুন। আপনি আপনার ভাষায় স্বাভাবিকভাবে বলতে পারেন।"
+        )
+    if lang == "gu-IN":
+        return (
+            f"આભાર. {beneficiary_name} કન્ફર્મ થઈ ગયા છે. "
+            "કૃપા કરીને આજના મુલાકાત વિશે જણાવો. તમે તમારી ભાષામાં સામાન્ય રીતે બોલી શકો છો."
+        )
+    if lang == "pa-IN":
+        return (
+            f"ਧੰਨਵਾਦ। {beneficiary_name} ਪੁਸ਼ਟੀ ਹੋ ਗਏ ਹਨ। "
+            "ਕਿਰਪਾ ਕਰਕੇ ਅੱਜ ਦੇ ਦੌਰੇ ਬਾਰੇ ਦੱਸੋ। ਤੁਸੀਂ ਆਪਣੀ ਭਾਸ਼ਾ ਵਿੱਚ ਆਮ ਵਾਂਗ ਬੋਲ ਸਕਦੇ ਹੋ।"
+        )
     return (
         f"Thank you. {beneficiary_name} is confirmed. "
         "Please tell me about today's visit. You can speak naturally in your language."
@@ -535,6 +679,18 @@ def generate_identity_correction_prompt(language: str) -> str:
         return "ಸರಿ. ದಯವಿಟ್ಟು ಸರಿಯಾದ ಫಲಾನುಭವಿಯ ಹೆಸರು ಅಥವಾ ಫಲಾನುಭವಿ ಐಡಿ ತಿಳಿಸಿ."
     if lang == "ta-IN":
         return "சரி. தயவுசெய்து சரியான பயனாளியின் பெயர் அல்லது பயனாளி ஐடியைக் கூறுங்கள்."
+    if lang == "te-IN":
+        return "సరే. దయచేసి సరైన లబ్ధిదారుని పేరు లేదా లబ్ధిదారుని ఐడి చెప్పండి."
+    if lang == "ml-IN":
+        return "ശരി. ദയവായി ശരിയായ ഗുണഭോക്താവിന്റെ പേരോ ഗുണഭോക്താവ് ഐഡിയോ പറയുക."
+    if lang == "mr-IN":
+        return "ठीक आहे. कृपया योग्य लाभार्थीचे नाव किंवा लाभार्थी आयडी सांगा."
+    if lang == "bn-IN":
+        return "ঠিক আছে। দয়া করে সঠিক উপভোক্তার নাম বা আইডি বলুন।"
+    if lang == "gu-IN":
+        return "બરાબર. કૃપા કરીને સાચા લાભાર્થીનું નામ અથવા આઈડી કહો."
+    if lang == "pa-IN":
+        return "ਠੀਕ ਹੈ। ਕਿਰਪਾ ਕਰਕੇ ਸਹੀ ਲਾਭਪਾਤਰੀ ਦਾ ਨਾਮ ਜਾਂ ਆਈਡੀ ਦੱਸੋ।"
     return "Okay. Please tell me the correct beneficiary's name or beneficiary ID."
 
 
@@ -560,6 +716,36 @@ def generate_candidate_confirmation_text(
             f"{beneficiary_name}, பயனாளி ஐடி {beneficiary_id} கிடைத்தது. "
             "இது சரியா? தயவுசெய்து ஆம் அல்லது இல்லை என்று சொல்லுங்கள்."
         )
+    if lang == "te-IN":
+        return (
+            f"నాకు {beneficiary_name}, లబ్ధిదారుని ఐడి {beneficiary_id} లభించింది. "
+            "ఇది సరైనదేనా? దయచేసి అవును లేదా కాదు అని చెప్పండి."
+        )
+    if lang == "ml-IN":
+        return (
+            f"എനിക്ക് {beneficiary_name}, ഗുണഭോക്താവ് ഐഡി {beneficiary_id} ലഭിച്ചു. "
+            "ഇത് ശരിയാണോ? ദയവായി അതെ അല്ലെങ്കിൽ അല്ല എന്ന് പറയുക."
+        )
+    if lang == "mr-IN":
+        return (
+            f"मला {beneficiary_name}, लाभार्थी आयडी {beneficiary_id} सापडले आहेत. "
+            "हे बरोबर आहे का? कृपया हो किंवा नाही बोला."
+        )
+    if lang == "bn-IN":
+        return (
+            f"আমি {beneficiary_name}, আইডি {beneficiary_id} পেয়েছি। "
+            "এটি কি ঠিক? দয়া করে হ্যাঁ অথবা না বলুন।"
+        )
+    if lang == "gu-IN":
+        return (
+            f"મને {beneficiary_name}, લાભાર્થી આઈડી {beneficiary_id} મળ્યા છે. "
+            "શું આ સાચું છે? કૃપા કરીને હા કે ના કહો."
+        )
+    if lang == "pa-IN":
+        return (
+            f"ਮੈਨੂੰ {beneficiary_name}, ਲਾਭਪਾਤਰੀ ਆਈਡੀ {beneficiary_id} ਮਿਲਿਆ ਹੈ। "
+            "ਕੀ ਇਹ ਸਹੀ ਹੈ? ਕਿਰਪਾ ਕਰਕੇ ਹਾਂ ਜਾਂ ਨਾਂਹ ਕਹੋ।"
+        )
     return f"I found {beneficiary_name}, beneficiary ID {beneficiary_id}. Is this correct?"
 
 
@@ -577,6 +763,18 @@ def generate_multiple_beneficiaries_text(
         return f"ಒಂದಕ್ಕಿಂತ ಹೆಚ್ಚು ಹೊಂದಾಣಿಕೆಯಾಗುವ ಫಲಾನುಭವಿಗಳು ಕಂಡುಬಂದಿದ್ದಾರೆ{suffix}. ದಯವಿಟ್ಟು ಫಲಾನುಭವಿ ಐಡಿ ತಿಳಿಸಿ."
     if lang == "ta-IN":
         return f"ஒன்றுக்கும் மேற்பட்ட பொருந்தும் பயனாளிகள் கண்டறியப்பட்டனர்{suffix}. தயவுசெய்து பயனாளி ஐடியைக் கூறுங்கள்."
+    if lang == "te-IN":
+        return f"ఒకటి కంటే ఎక్కువ సరిపోలే లబ్ధిదారులు కనుగొనబడ్డారు{suffix}. దయచేసి లబ్ధిదారుని ఐడి చెప్పండి."
+    if lang == "ml-IN":
+        return f"ഒന്നിൽക്കൂടുതൽ ഗുണഭോക്താക്കൾ പൊരുത്തപ്പെടുന്നുണ്ട്{suffix}. ദയവായി ഗുണഭോക്താവ് ഐഡി പറയുക."
+    if lang == "mr-IN":
+        return f"एकापेक्षा जास्त जुळणारे लाभार्थी आढळले आहेत{suffix}। कृपया लाभार्थी आयडी सांगा."
+    if lang == "bn-IN":
+        return f"একাধিক মিলে যাওয়া উপভোক্তা পাওয়া গেছে{suffix}। দয়া করে উপভোক্তা আইডি বলুন।"
+    if lang == "gu-IN":
+        return f"એકથી વધુ મળતા આવતા લાભાર્થી મળ્યા છે{suffix}. કૃપા કરીને લાભાર્થી આઈડી કહો."
+    if lang == "pa-IN":
+        return f"ਇੱਕ ਤੋਂ ਵੱਧ ਮੇਲ ਖਾਂਦੇ ਲਾਭਪਾਤਰੀ ਮਿਲੇ ਹਨ{suffix}। ਕਿਰਪਾ ਕਰਕੇ ਲਾਭਪਾਤਰੀ ਆਈਡੀ ਦੱਸੋ।"
     return f"I found more than one matching beneficiary{suffix}. Please tell me the beneficiary ID."
 
 
@@ -589,6 +787,18 @@ def generate_beneficiary_not_found_text(language: str) -> str:
         return "ಆ ಫಲಾನುಭವಿ ಕಂಡುಬಂದಿಲ್ಲ. ದಯವಿಟ್ಟು ಹೆಸರನ್ನು ಮತ್ತೆ ಹೇಳಿ ಅಥವಾ ಫಲಾನುಭವಿ ಐಡಿ ತಿಳಿಸಿ."
     if lang == "ta-IN":
         return "அந்தப் பயனாளியைக் கண்டுபிடிக்க முடியவில்லை. தயவுசெய்து பெயரை மீண்டும் கூறவும் அல்லது பயனாளி ஐடியைச் சொல்லவும்."
+    if lang == "te-IN":
+        return "ఆ లబ్ధిదారుడు కనుగొనబడలేదు. దయచేసి పేరును మళ్ళీ చెప్పండి లేదా లబ్ధిదారుని ఐడి చెప్పండి."
+    if lang == "ml-IN":
+        return "ആ ഗുണഭോക്താവിനെ കണ്ടെത്താനായില്ല. ദയവായി പേര് വീണ്ടും പറയുകയോ ഗുണഭോക്താവ് ഐഡി പറയുകയോ ചെയ്യുക."
+    if lang == "mr-IN":
+        return "ते लाभार्थी सापडले नाहीत. कृपया नाव पुन्हा सांगा किंवा लाभार्थी आयडी सांगा."
+    if lang == "bn-IN":
+        return "সেই উপভোক্তাকে পাওয়া যায়নি। দয়া করে নাম আবার বলুন বা উপভোক্তা আইডি বলুন।"
+    if lang == "gu-IN":
+        return "તે લાભાર્થી મળ્યા નથી. કૃપા કરીને ફરી નામ બોલો અથવા લાભાર્થી આઈડી કહો."
+    if lang == "pa-IN":
+        return "ਉਹ ਲਾਭਪਾਤਰੀ ਨਹੀਂ ਮਿਲਿਆ। ਕਿਰਪਾ ਕਰਕੇ ਨਾਮ ਦੁਬਾਰਾ ਬੋਲੋ ਜਾਂ ਲਾਭਪਾਤਰੀ ਆਈਡੀ ਦੱਸੋ।"
     return "I couldn't find that beneficiary. Please repeat the name or tell me the beneficiary ID."
 
 
@@ -601,6 +811,18 @@ def generate_unclear_identity_confirmation_text(language: str) -> str:
         return "ಕ್ಷಮಿಸಿ, ನನಗೆ ಅರ್ಥವಾಗಲಿಲ್ಲ. ಇದು ಸರಿಯಾದ ಫಲಾನುಭವಿಯೇ? ದಯವಿಟ್ಟು ಹೌದು ಅಥವಾ ಇಲ್ಲ ಎಂದು ಹೇಳಿ."
     if lang == "ta-IN":
         return "மன்னிக்கவும், எனக்குப் புரியவில்லை. இது சரியான பயனாளியா? தயவுசெய்து ஆம் அல்லது இல்லை என்று சொல்லுங்கள்."
+    if lang == "te-IN":
+        return "క్షమించండి, నాకు అర్థం కాలేదు. ఇది సరైన లబ్ధిదారుడా? దయచేసి అవును లేదా కాదు అని చెప్పండి."
+    if lang == "ml-IN":
+        return "ക്ഷമിക്കണം, എനിക്ക് മനസ്സിലായില്ല. ഇത് ശരിയായ ഗുണഭോക്താവാണോ? ദയവായി അതെ അല്ലെങ്കിൽ അല്ല എന്ന് പറയുക."
+    if lang == "mr-IN":
+        return "माफ करा, मला समजले नाही. हे योग्य लाभार्थी आहेत का? कृपया हो किंवा नाही बोला."
+    if lang == "bn-IN":
+        return "দুঃখিত, আমি বুঝতে পারিনি। এটি কি সঠিক উপভোক্তা? দয়া করে হ্যাঁ অথবা না বলুন।"
+    if lang == "gu-IN":
+        return "માફ કરશો, મને સમજાયું નહીં. શું આ સાચો લાભાર્થી છે? કૃપા કરીને હા કે ના કહો."
+    if lang == "pa-IN":
+        return "ਮਾਫ਼ ਕਰਨਾ, ਮੈਨੂੰ ਸਮਝ ਨਹੀਂ ਆਈ। ਕੀ ਇਹ ਸਹੀ ਲਾਭਪਾਤਰੀ ਹੈ? ਕਿਰਪਾ ਕਰਕੇ ਹਾਂ ਜਾਂ ਨਾਂਹ ਕਹੋ।"
     return "Sorry, I couldn't understand. Is this the correct beneficiary? Please say yes or no."
 
 
@@ -625,6 +847,36 @@ _URGENT_REFERRAL_MESSAGES: dict[str, str] = {
         "தயவுசெய்து பயனாளியை உடனடியாக அருகிலுள்ள ஆரம்ப சுகாதார நிலையத்திற்கு அனுப்பவும். "
         "தாமதிக்க வேண்டாம்."
     ),
+    "te-IN": (
+        "అత్యవసర హెచ్చరిక! ప్రమాద లక్షణం గుర్తించబడింది. "
+        "దయచేసి లబ్ధిదారుని వెంటనే సమీప ప్రాథమిక ఆరోగ్య కేంద్రానికి పంపండి. "
+        "ఆలస్యం చేయవద్దు."
+    ),
+    "ml-IN": (
+        "അടിയന്തര മുന്നറിയിപ്പ്! അപായ ലക്ഷണം കണ്ടെത്തിയിരിക്കുന്നു. "
+        "ഗുണഭോക്താവിനെ ഉടൻ തന്നെ അടുത്തുള്ള പി.എച്ച്.സിയിലേക്ക് റഫർ ചെയ്യുക. "
+        "ഒട്ടും വൈകരുത്."
+    ),
+    "mr-IN": (
+        "तातडीचा इशारा! धोक्याचे लक्षण आढळले आहे. "
+        "कृपया लाभार्थ्याला त्वरित जवळच्या प्राथमिक आरोग्य केंद्रात पाठवा. "
+        "उशीर करू नका."
+    ),
+    "bn-IN": (
+        "জরুরি সতর্কতা! বিপদের লক্ষণ শনাক্ত হয়েছে। "
+        "দয়া করে উপভোক্তাকে অবিলম্বে নিকটবর্তী স্বাস্থ্যকেন্দ্রে পাঠান। "
+        "দেরি করবেন না।"
+    ),
+    "gu-IN": (
+        "તાત્કાલિક ચેતવણી! જોખમનું લક્ષણ જણાયું છે. "
+        "કૃપા કરીને લાભાર્થીને તરત જ નજીકના પ્રાથમિક આરોગ્ય કેન્દ્રમાં રીફર કરો. "
+        "વિલંબ કરશો નહીં."
+    ),
+    "pa-IN": (
+        "ਐਮਰਜੈਂਸੀ ਅਲਰਟ! ਖ਼ਤਰੇ ਦਾ ਲੱਛਣ ਮਿਲਿਆ ਹੈ। "
+        "ਕਿਰਪਾ ਕਰਕੇ ਲਾਭਪਾਤਰੀ ਨੂੰ ਤੁਰੰਤ ਨਜ਼ਦੀਕੀ ਪੀਐਚਸੀ ਵਿਖੇ ਰੈਫਰ ਕਰੋ। "
+        "ਦੇਰੀ ਨਾ ਕਰੋ."
+    ),
 }
 
 _CONFIRMATION_PENDING_MESSAGES: dict[str, str] = {
@@ -632,6 +884,12 @@ _CONFIRMATION_PENDING_MESSAGES: dict[str, str] = {
     "hi-IN": "रिकॉर्ड कन्फर्म हो गया है। अब विज़िट रिकॉर्ड सेव किया जा रहा है।",
     "kn-IN": "ದಾಖಲೆ ದೃಢೀಕರಿಸಲಾಗಿದೆ. ಈಗ ಭೇಟಿಯ ದಾಖಲೆಯನ್ನು ಉಳಿಸಲಾಗುತ್ತಿದೆ.",
     "ta-IN": "பதிவு உறுதிப்படுத்தப்பட்டது. இப்போது பார்வை பதிவு சேமிக்கப்படுகிறது.",
+    "te-IN": "రికార్డు నిర్ధారించబడింది. ఇప్పుడు సందర్శన రికార్డును భద్రపరుస్తున్నాము.",
+    "ml-IN": "റെക്കോർഡ് സ്ഥിരീകരിച്ചു. സന്ദർശന റെക്കോർഡ് ഇപ്പോൾ സേവ് ചെയ്യുന്നു.",
+    "mr-IN": "नोंद निश्चित झाली आहे. आता भेट नोंद सेव्ह केली जात आहे.",
+    "bn-IN": "রেকর্ড নিশ্চিত হয়েছে। পরিদর্শনের তথ্য এখন সেভ করা হচ্ছে।",
+    "gu-IN": "રેકોર્ડ કન્ફર્મ થયો છે. હવે વિઝિટ રેકોર્ડ સેવ થઈ રહ્યો છે.",
+    "pa-IN": "ਰਿਕਾਰਡ ਦੀ ਪੁਸ਼ਟੀ ਹੋ ਗਈ ਹੈ। ਹੁਣ ਦੌਰੇ ਦਾ ਰਿਕਾਰਡ ਸੇਵ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ।",
 }
 
 _COMMITTED_MESSAGES: dict[str, str] = {
@@ -639,6 +897,12 @@ _COMMITTED_MESSAGES: dict[str, str] = {
     "hi-IN": "आपकी विज़िट सफलतापूर्वक सेव हो गई है। धन्यवाद।",
     "kn-IN": "ನಿಮ್ಮ ಭೇಟಿಯನ್ನು ಯಶಸ್ವಿಯಾಗಿ ಉಳಿಸಲಾಗಿದೆ. ಧನ್ಯವಾದಗಳು.",
     "ta-IN": "உங்கள் பார்வை வெற்றிகரமாக சேமிக்கப்பட்டது. நன்றி.",
+    "te-IN": "మీ సందర్శన విజయవంతంగా భద్రపరచబడింది. ధನ್ಯవాదాలు.",
+    "ml-IN": "നിങ്ങളുടെ സന്ദർശനം വിജയകരമായി സേവ് ചെയ്തു. നന്ദി.",
+    "mr-IN": "आपली भेट यशस्वीरित्या सेव्ह झाली आहे. धन्यवाद.",
+    "bn-IN": "আপনার পরিদর্শন সফলভাবে সেভ হয়েছে। ধন্যবাদ।",
+    "gu-IN": "તમારી વિઝિટ સફળતાપૂર્વક સેવ થઈ ગઈ છે. આભાર.",
+    "pa-IN": "ਤੁਹਾਡਾ ਦੌਰਾ ਸਫਲਤਾਪੂਰਵਕ ਸੇਵ ਹੋ ਗਿਆ ਹੈ। ਧੰਨਵਾਦ।",
 }
 
 _PERSISTENCE_FAILED_MESSAGES: dict[str, str] = {
@@ -658,6 +922,30 @@ _PERSISTENCE_FAILED_MESSAGES: dict[str, str] = {
         "இந்தப் பதிவு உள்ளூரில் உறுதிப்படுத்தப்பட்டுள்ளது, ஆனால் இன்னும் சர்வரில் சேமிக்க முடியவில்லை. "
         "தயவுசெய்து இணைப்பு கிடைத்ததும் மீண்டும் முயற்சிக்கவும்."
     ),
+    "te-IN": (
+        "ఈ రికార్డు స్థానికంగా నిర్ధారించబడింది, కానీ ఇంకా సర్వర్‌లో భద్రపరచబడలేదు. "
+        "దయచేసి నెట్‌వర్క్ ఉన్నప్పుడు మళ్లీ ప్రయత్నించండి."
+    ),
+    "ml-IN": (
+        "ഈ റെക്കോർഡ് ലോക്കലായി സ്ഥിരീകരിച്ചിട്ടുണ്ട്, എന്നാൽ സെർവറിൽ സേവ് ചെയ്യാൻ കഴിഞ്ഞില്ല. "
+        "കണക്റ്റിവിറ്റി ലഭ്യമാകുമ്പോൾ വീണ്ടും ശ്രമിക്കുക."
+    ),
+    "mr-IN": (
+        "ही नोंद स्थानिक पातळीवर निश्चित झाली आहे, परंतु अद्याप सर्व्हरवर सेव्ह होऊ शकलेली नाही. "
+        "कृपया नेटवर्क उपलब्ध झाल्यावर पुन्हा प्रयत्न करा."
+    ),
+    "bn-IN": (
+        "এই রেকর্ড স্থানীয়ভাবে নিশ্চিত করা হয়েছে, কিন্তু সার্ভারে সেভ করা যায়নি। "
+        "কানেক্টিভিটি পেলে আবার চেষ্টা করুন।"
+    ),
+    "gu-IN": (
+        "આ રેકોર્ડ સ્થાનિક રીતે કન્ફર્મ થઈ ગયો છે, પરંતુ હજુ સર્વર પર સેવ થઈ શક્યો નથી. "
+        "કૃપા કરીને નેટવર્ક મળવા પર ફરી પ્રયાસ કરો."
+    ),
+    "pa-IN": (
+        "ਇਹ ਰਿਕਾਰਡ ਲੋਕਲ ਪੱਧਰ 'ਤੇ ਪੁਸ਼ਟੀ ਹੋ ਗਿਆ ਹੈ, ਪਰ ਅਜੇ ਸਰਵਰ 'ਤੇ ਸੇਵ ਨਹੀਂ ਹੋ ਸਕਿਆ। "
+        "ਕਿਰਪਾ ਕਰਕੇ ਨੈੱਟਵਰਕ ਮਿਲਣ 'ਤੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।"
+    ),
 }
 
 _REJECT_WITHOUT_FIELD_MESSAGES: dict[str, str] = {
@@ -665,6 +953,12 @@ _REJECT_WITHOUT_FIELD_MESSAGES: dict[str, str] = {
     "hi-IN": "ठीक है, रिकॉर्ड कन्फर्म नहीं किया गया है। आप कौन सी जानकारी बदलना चाहती हैं?",
     "kn-IN": "ಸರಿ, ದಾಖಲೆಯನ್ನು ದೃಢೀಕರಿಸಿಲ್ಲ. ಯಾವ ಮಾಹಿತಿಯನ್ನು ಬದಲಾಯಿಸಬೇಕು?",
     "ta-IN": "சரி, பதிவை உறுதிப்படுத்தவில்லை. எந்தத் தகவலை மாற்ற வேண்டும்?",
+    "te-IN": "సరే, రికార్డు నిర్ధారించబడలేదు. మీరు ఏ వివరాలను మార్చాలనుకుంటున్నారు?",
+    "ml-IN": "ശരി, റെക്കോർഡ് സ്ഥിരീകരിച്ചിട്ടില്ല. ഏത് വിവരമാണ് മാറ്റേണ്ടത്?",
+    "mr-IN": "ठीक आहे, नोंद निश्चित केली नाही. आपण कोणती माहिती बदलू इच्छिता?",
+    "bn-IN": "ঠিক আছে, রেকর্ড নিশ্চিত করা হয়নি। আপনি কোন তথ্য পরিবর্তন করতে চান?",
+    "gu-IN": "બરાબર, રેકોર્ડ કન્ફર્મ નથી થયો. તમે કઈ વિગત બદલવા માંગો છો?",
+    "pa-IN": "ਠੀਕ ਹੈ, ਰਿਕਾਰਡ ਪੁਸ਼ਟੀ ਨਹੀਂ ਹੋਇਆ। ਤੁਸੀਂ ਕਿਹੜੀ ਜਾਣਕਾਰੀ ਬਦਲਣਾ ਚਾਹੁੰਦੇ ਹੋ?",
 }
 
 _UNCLEAR_CONFIRMATION_MESSAGES: dict[str, str] = {
@@ -672,6 +966,12 @@ _UNCLEAR_CONFIRMATION_MESSAGES: dict[str, str] = {
     "hi-IN": "कृपया रिकॉर्ड सेव करने के लिए कन्फर्म बोलें, या बताएं कौन सी जानकारी बदलनी है।",
     "kn-IN": "ಈ ದಾಖಲೆಯನ್ನು ಉಳಿಸಲು ಹೌದು ಎಂದು ಹೇಳಿ, ಅಥವಾ ಯಾವ ಮಾಹಿತಿಯನ್ನು ಬದಲಾಯಿಸಬೇಕು ಎಂದು ತಿಳಿಸಿ.",
     "ta-IN": "இந்தப் பதிவை சேமிக்க சரி என்று சொல்லுங்கள், அல்லது எந்தத் தகவலை மாற்ற வேண்டும் என்று கூறுங்கள்.",
+    "te-IN": "ఈ రికార్డును భద్రపరచడానికి నిర్ధారించండి అని చెప్పండి, లేదా ఏ వివరాలు మార్చాలో చెప్పండి.",
+    "ml-IN": "ഈ റെക്കോർഡ് സേവ് ചെയ്യാൻ സ്ഥിരീകരിച്ചു എന്ന് പറയുക, അല്ലെങ്കിൽ ഏത് വിവരമാണ് മാറ്റേണ്ടതെന്ന് പറയുക.",
+    "mr-IN": "कृपया नोंद सेव्ह करण्यासाठी कन्फर्म बोला, किंवा कोणती माहिती बदलायची आहे ते सांगा.",
+    "bn-IN": "রেকর্ড সেভ করতে নিশ্চিত বলুন, বা কোন তথ্য পরিবর্তন করতে হবে বলুন।",
+    "gu-IN": "કૃપા કરીને રેકોર્ડ સેવ કરવા કન્ફર્મ કહો, અથવા કઈ માહિતી બદલવી છે તે જણાવો.",
+    "pa-IN": "ਕਿਰਪਾ ਕਰਕੇ ਰਿਕਾਰਡ ਸੇਵ ਕਰਨ ਲਈ ਪੁਸ਼ਟੀ ਬੋਲੋ, ਜਾਂ ਦੱਸੋ ਕਿ ਕਿਹੜੀ ਜਾਣਕਾਰੀ ਬਦਲਣੀ ਹੈ।",
 }
 
 _CLARIFICATION_TEMPLATES: dict[str, dict[str, str]] = {
@@ -711,6 +1011,60 @@ _CLARIFICATION_TEMPLATES: dict[str, dict[str, str]] = {
         "vaccinations_due": "எந்தத் தடுப்பூசிகள் நிலுவையில் உள்ளன?",
         "default": "தயவுசெய்து {field} விவரத்தைத் தெளிவுபடுத்தவும்.",
     },
+    "te-IN": {
+        "beneficiary_id": "దయచేసి లబ్ధిదారుని పేరు లేదా ఐడిని నిర్ధారించండి.",
+        "visit_type": "సందర్శన రకం ఏమిటి: ANC, PNC, Newborn, లేదా Immunisation?",
+        "clinical_observation": "దయచేసి బరువు, టీకాలు లేదా తదుపరి సందర్శన తేదీ వంటి కనీసం ఒక వివరాలను చెప్పండి.",
+        "weight_kg": "దయచేసి బరువును కిలోల్లో నిర్ధారించండి.",
+        "next_visit_date": "దయచేసి తదుపరి సందర్శన తేదీని స్పష్టం చేయండి.",
+        "vaccinations_due": "ఏ టీకాలు బాకీ ఉన్నాయి?",
+        "default": "దయచేసి {field} సమాచారాన్ని స్పష్టం చేయండి.",
+    },
+    "ml-IN": {
+        "beneficiary_id": "ദയവായി ഗുണഭോക്താവിന്റെ പേരോ ഐഡിയോ സ്ഥിരീകരിക്കുക.",
+        "visit_type": "സന്ദർശന തരം ഏതാണ്: ANC, PNC, Newborn, അല്ലെങ്കിൽ Immunisation?",
+        "clinical_observation": "തൂക്കം, വാക്സിനുകൾ, അല്ലെങ്കിൽ അടുത്ത സന്ദർശന തീയതി എന്നിവയിൽ ഏതെങ്കിലും ഒരു വിവരം പറയുക.",
+        "weight_kg": "ദയവായി തൂക്കം കിലോഗ്രാമിൽ വ്യക്തമാക്കുക.",
+        "next_visit_date": "ദയവായി അടുത്ത സന്ദർശന തീയതി വ്യക്തമാക്കുക.",
+        "vaccinations_due": "ഏതൊക്കെ വാക്സിനുകളാണ് ബാക്കിയുള്ളത്?",
+        "default": "ദയവായി {field} സംബന്ധിച്ച വിവരം വ്യക്തമാക്കുക.",
+    },
+    "mr-IN": {
+        "beneficiary_id": "कृपया लाभार्थीचे नाव किंवा आयडी स्पष्ट करा.",
+        "visit_type": "भेटीचा प्रकार कोणता आहे: ANC, PNC, Newborn, किंवा Immunisation?",
+        "clinical_observation": "कृपया वजन, लसीकरण किंवा पुढील भेटीची तारीख यासारखी किमान एक माहिती सांगा.",
+        "weight_kg": "कृपया वजन किलोमध्ये स्पष्ट करा.",
+        "next_visit_date": "कृपया पुढील भेटीची तारीख स्पष्ट करा.",
+        "vaccinations_due": "कोणत्या लसी बाकी आहेत?",
+        "default": "कृपया {field} स्पष्ट करा.",
+    },
+    "bn-IN": {
+        "beneficiary_id": "দয়া করে উপভোক্তার নাম বা আইডি বলুন।",
+        "visit_type": "পরিদর্শনের ধরন কী: ANC, PNC, Newborn, বা Immunisation?",
+        "clinical_observation": "ওজন, টিকা বা পরবর্তী পরিদর্শনের তারিখের মতো অন্তত একটি তথ্য বলুন।",
+        "weight_kg": "দয়া করে ওজন কেজিতে স্পষ্ট করুন।",
+        "next_visit_date": "দয়া করে পরবর্তী পরিদর্শনের তারিখ স্পষ্ট করুন।",
+        "vaccinations_due": "কোন টিকা বাকি আছে?",
+        "default": "দয়া করে {field} স্পষ্ট করুন।",
+    },
+    "gu-IN": {
+        "beneficiary_id": "કૃપા કરીને લાભાર્થીનું નામ અથવા આઈડી કહો.",
+        "visit_type": "વિઝિટનો પ્રકાર કયો છે: ANC, PNC, Newborn, કે Immunisation?",
+        "clinical_observation": "કૃપા કરીને વજન, રસી કે આગલી વિઝિટ તારીખ જેવી ઓછામાં ઓછી એક વિગત જણાવો.",
+        "weight_kg": "કૃપા કરીને વજન કિલોમાં સ્પષ્ટ કરો.",
+        "next_visit_date": "કૃપા કરીને આગલી વિઝિટની તારીખ સ્પષ્ટ કરો.",
+        "vaccinations_due": "કઈ રસી બાકી છે?",
+        "default": "કૃપા કરીને {field} સ્પષ્ટ કરો.",
+    },
+    "pa-IN": {
+        "beneficiary_id": "ਕਿਰਪਾ ਕਰਕੇ ਲਾਭਪਾਤਰੀ ਦਾ ਨਾਮ ਜਾਂ ਆਈਡੀ ਦੱਸੋ।",
+        "visit_type": "ਦੌਰੇ ਦੀ ਕਿਸਮ ਕੀ ਹੈ: ANC, PNC, Newborn, ਜਾਂ Immunisation?",
+        "clinical_observation": "ਕਿਰਪਾ ਕਰਕੇ ਭਾਰ, ਟੀਕਾਕਰਨ ਜਾਂ ਅਗਲੇ ਦੌਰੇ ਦੀ ਮਿਤੀ ਵਰਗਾ ਘੱਟੋ-ਘੱਟ ਇੱਕ ਵੇਰਵਾ ਦੱਸੋ।",
+        "weight_kg": "ਕਿਰਪਾ ਕਰਕੇ ਭਾਰ ਕਿਲੋ ਵਿੱਚ ਸਪਸ਼ਟ ਕਰੋ।",
+        "next_visit_date": "ਕਿਰਪਾ ਕਰਕੇ ਅਗਲੇ ਦੌਰੇ ਦੀ ਮਿਤੀ ਸਪਸ਼ਟ ਕਰੋ।",
+        "vaccinations_due": "ਕਿਹੜੇ ਟੀਕੇ ਬਾਕੀ ਹਨ?",
+        "default": "ਕਿਰਪਾ ਕਰਕੇ {field} ਸਪਸ਼ਟ ਕਰੋ।",
+    },
 }
 
 
@@ -719,7 +1073,7 @@ def generate_urgent_referral_text(language: str, alert: DangerAlertInput | None 
     lang = normalize_language(language)
     if alert is not None and alert.escalation_message and alert.escalation_message.strip():
         return alert.escalation_message.strip()
-    return _URGENT_REFERRAL_MESSAGES[lang]
+    return _URGENT_REFERRAL_MESSAGES.get(lang, _URGENT_REFERRAL_MESSAGES["en-IN"])
 
 
 def generate_read_back_text(visit: VisitRecordState, language: str) -> str:
@@ -806,6 +1160,150 @@ def generate_read_back_text(visit: VisitRecordState, language: str) -> str:
                 "உடனடியாக அருகிலுள்ள ஆரம்ப சுகாதார நிலையத்திற்கு அனுப்பவும்."
             )
         parts.append("இந்தப் பதிவை உறுதிப்படுத்தலாமா?")
+
+    elif lang == "te-IN":
+        parts.append("సందర్శన రికార్డును చదివి వినిపిస్తున్నాను.")
+        if ben_name:
+            parts.append(f"లబ్ధిదారుడు {ben_name}, ఐడి {ben_id}.")
+        else:
+            parts.append(f"లబ్ధిదారుని ఐడి {ben_id}.")
+        parts.append(f"సందర్శన రకం: {vtype}.")
+        if weight_str is not None:
+            parts.append(f"బరువు: {weight_str} కిలోలు.")
+        if visit.vaccinations_completed:
+            parts.append(f"పూర్తయిన టీకాలు: {_join_list(visit.vaccinations_completed)}.")
+        if visit.vaccinations_due:
+            parts.append(f"బాకీ ఉన్న టీకాలు: {_join_list(visit.vaccinations_due)}.")
+        if visit.follow_up_actions:
+            parts.append(f"తదుపరి చర్యలు: {_join_list(visit.follow_up_actions)}.")
+        if date_str:
+            parts.append(f"తదుపరి సందర్శన తేదీ: {date_str}.")
+        if visit.danger_sign_flagged:
+            flag_detail = f" ({signs_str})" if signs_str else ""
+            parts.append(
+                f"హెచ్చరిక: ప్రమాద లక్షణం గుర్తించబడింది{flag_detail}. వెంటనే సమీప ప్రాథమిక ఆరోగ్య కేంద్రానికి పంపండి."
+            )
+        parts.append("ఈ రికార్డును నిర్ధారించాలా?")
+
+    elif lang == "ml-IN":
+        parts.append("സന്ദർശന വിവരങ്ങൾ വായിച്ചു കേൾപ്പിക്കുന്നു.")
+        if ben_name:
+            parts.append(f"ഗുണഭോക്താവ് {ben_name}, ഐഡി {ben_id}.")
+        else:
+            parts.append(f"ഗുണഭോക്താവ് ഐഡി {ben_id}.")
+        parts.append(f"സന്ദർശന തരം: {vtype}.")
+        if weight_str is not None:
+            parts.append(f"തൂക്കം: {weight_str} കിലോഗ്രാം.")
+        if visit.vaccinations_completed:
+            parts.append(f"പൂർത്തിയായ വാക്സിനുകൾ: {_join_list(visit.vaccinations_completed)}.")
+        if visit.vaccinations_due:
+            parts.append(f"ബാക്കിയുള്ള വാക്സിനുകൾ: {_join_list(visit.vaccinations_due)}.")
+        if visit.follow_up_actions:
+            parts.append(f"തുടർനടപടികൾ: {_join_list(visit.follow_up_actions)}.")
+        if date_str:
+            parts.append(f"അടുത്ത സന്ദർശന തീയതി: {date_str}.")
+        if visit.danger_sign_flagged:
+            flag_detail = f" ({signs_str})" if signs_str else ""
+            parts.append(
+                f"മുന്നറിയിപ്പ്: അപായ ലക്ഷണം രേഖപ്പെടുത്തിയിരിക്കുന്നു{flag_detail}. ഉടൻ അടുത്തുള്ള പി.എച്ച്.സിയിലേക്ക് റഫർ ചെയ്യുക."
+            )
+        parts.append("ഈ റെക്കോർഡ് സ്ഥിരീകരിക്കാമോ?")
+
+    elif lang == "mr-IN":
+        parts.append("मी या भेटीचा रेकॉर्ड वाचून दाखवत आहे.")
+        if ben_name:
+            parts.append(f"लाभार्थी {ben_name}, आयडी {ben_id}.")
+        else:
+            parts.append(f"लाभार्थी आयडी {ben_id}.")
+        parts.append(f"भेटीचा प्रकार: {vtype}.")
+        if weight_str is not None:
+            parts.append(f"वजन: {weight_str} किलो.")
+        if visit.vaccinations_completed:
+            parts.append(f"पूर्ण झालेल्या लसी: {_join_list(visit.vaccinations_completed)}.")
+        if visit.vaccinations_due:
+            parts.append(f"बाकी असलेल्या लसी: {_join_list(visit.vaccinations_due)}.")
+        if visit.follow_up_actions:
+            parts.append(f"पुढील कृती: {_join_list(visit.follow_up_actions)}.")
+        if date_str:
+            parts.append(f"पुढील भेटीची तारीख: {date_str}.")
+        if visit.danger_sign_flagged:
+            flag_detail = f" ({signs_str})" if signs_str else ""
+            parts.append(
+                f"इशारा: धोक्याचे लक्षण नोंदवले गेले आहे{flag_detail}. त्वरित जवळच्या प्राथमिक आरोग्य केंद्रात पाठवा."
+            )
+        parts.append("मी ही नोंद निश्चित करू का?")
+
+    elif lang == "bn-IN":
+        parts.append("আমি এই পরিদর্শনের রেকর্ড পড়ে শোনাচ্ছি।")
+        if ben_name:
+            parts.append(f"উপভোক্তা {ben_name}, আইডি {ben_id}।")
+        else:
+            parts.append(f"উপভোক্তা আইডি {ben_id}।")
+        parts.append(f"পরিদর্শনের ধরন: {vtype}।")
+        if weight_str is not None:
+            parts.append(f"ওজন: {weight_str} কেজি।")
+        if visit.vaccinations_completed:
+            parts.append(f"সম্পূর্ণ হওয়া টিকা: {_join_list(visit.vaccinations_completed)}।")
+        if visit.vaccinations_due:
+            parts.append(f"বাকি থাকা টিকা: {_join_list(visit.vaccinations_due)}।")
+        if visit.follow_up_actions:
+            parts.append(f"পরবর্তী পদক্ষেপ: {_join_list(visit.follow_up_actions)}।")
+        if date_str:
+            parts.append(f"পরবর্তী পরিদর্শনের তারিখ: {date_str}।")
+        if visit.danger_sign_flagged:
+            flag_detail = f" ({signs_str})" if signs_str else ""
+            parts.append(
+                f"সতর্কতা: বিপদের লক্ষণ চিহ্নিত হয়েছে{flag_detail}। অবিলম্বে নিকটবর্তী স্বাস্থ্যকেন্দ্রে পাঠান।"
+            )
+        parts.append("আমি কি এই রেকর্ড নিশ্চিত করব?")
+
+    elif lang == "gu-IN":
+        parts.append("હું આ વિઝિટનો રેકોર્ડ વાંચી સંભળાવી રહી છું.")
+        if ben_name:
+            parts.append(f"લાભાર્થી {ben_name}, આઈડી {ben_id}.")
+        else:
+            parts.append(f"લાભાર્થી આઈડી {ben_id}.")
+        parts.append(f"વિઝિટનો પ્રકાર: {vtype}.")
+        if weight_str is not None:
+            parts.append(f"વજન: {weight_str} કિલો.")
+        if visit.vaccinations_completed:
+            parts.append(f"પૂર્ણ થયેલી રસીઓ: {_join_list(visit.vaccinations_completed)}.")
+        if visit.vaccinations_due:
+            parts.append(f"બાકી રસીઓ: {_join_list(visit.vaccinations_due)}.")
+        if visit.follow_up_actions:
+            parts.append(f"આગળની કાર્યવાહી: {_join_list(visit.follow_up_actions)}.")
+        if date_str:
+            parts.append(f"આગલી વિઝિટની તારીખ: {date_str}.")
+        if visit.danger_sign_flagged:
+            flag_detail = f" ({signs_str})" if signs_str else ""
+            parts.append(
+                f"ચેતવણી: જોખમનું લક્ષણ નોંધાયું છે{flag_detail}. તરત જ નજીકના પ્રાથમિક આરોગ્ય કેન્દ્રમાં રીફર કરો."
+            )
+        parts.append("શું હું આ રેકોર્ડ કન્ફર્મ કરું?")
+
+    elif lang == "pa-IN":
+        parts.append("ਮੈਂ ਇਸ ਦੌਰੇ ਦਾ ਰਿਕਾਰਡ ਪੜ੍ਹ ਕੇ ਸੁਣਾ ਰਹੀ ਹਾਂ।")
+        if ben_name:
+            parts.append(f"ਲਾਭਪਾਤਰੀ {ben_name}, ਆਈਡੀ {ben_id}।")
+        else:
+            parts.append(f"ਲਾਭਪਾਤਰੀ ਆਈਡੀ {ben_id}।")
+        parts.append(f"ਦੌਰੇ ਦੀ ਕਿਸਮ: {vtype}।")
+        if weight_str is not None:
+            parts.append(f"ਭਾਰ: {weight_str} ਕਿਲੋ।")
+        if visit.vaccinations_completed:
+            parts.append(f"ਪੂਰੇ ਹੋਏ ਟੀਕੇ: {_join_list(visit.vaccinations_completed)}।")
+        if visit.vaccinations_due:
+            parts.append(f"ਬਾਕੀ ਟੀਕੇ: {_join_list(visit.vaccinations_due)}।")
+        if visit.follow_up_actions:
+            parts.append(f"ਅਗਲੀ ਕਾਰਵਾਈ: {_join_list(visit.follow_up_actions)}।")
+        if date_str:
+            parts.append(f"ਅਗਲੇ ਦੌਰੇ ਦੀ ਮਿਤੀ: {date_str}।")
+        if visit.danger_sign_flagged:
+            flag_detail = f" ({signs_str})" if signs_str else ""
+            parts.append(
+                f"ਚੇਤਾਵਨੀ: ਖ਼ਤਰੇ ਦਾ ਲੱਛਣ ਦਰਜ ਹੈ{flag_detail}। ਤੁਰੰਤ ਨਜ਼ਦੀਕੀ ਪੀਐਚਸੀ ਵਿਖੇ ਰੈਫਰ ਕਰੋ।"
+            )
+        parts.append("ਕੀ ਮੈਂ ਇਹ ਰਿਕਾਰਡ ਪੁਸ਼ਟੀ ਕਰਾਂ?")
 
     else:  # en-IN
         parts.append("Let me read back the visit record.")

@@ -1936,10 +1936,17 @@ class SessionRegistry:
             "worker_id": worker_id,
             "created_at": created_at,
         }
+        ben_pref = None
+        if beneficiary_id:
+            from app.services.beneficiaries import SyntheticBeneficiaryDirectory
+            b = SyntheticBeneficiaryDirectory().get_by_id(beneficiary_id)
+            if b and b.preferred_language:
+                ben_pref = b.preferred_language
+        effective_lang = language if language != "indic-auto" else (ben_pref or get_settings().default_language)
         pipeline = HealthcareSessionPipeline(
             session_id=session_id,
             worker_id=worker_id,
-            language=language if language != "indic-auto" else get_settings().default_language,
+            language=effective_lang,
             beneficiary_id=beneficiary_id,
         )
         self._pipelines[session_id] = pipeline
@@ -1957,7 +1964,12 @@ class SessionRegistry:
         worker_id: str = "ASHA-DEMO-01",
     ) -> HealthcareSessionPipeline:
         if session_id in self._pipelines:
-            return self._pipelines[session_id]
+            pipe = self._pipelines[session_id]
+            if language and language != "indic-auto":
+                norm_lang = normalize_language(language)
+                pipe.language = norm_lang
+                pipe.sm.set_language(norm_lang)
+            return pipe
         meta = self._meta.get(session_id, {})
         return self.create_session(
             session_id=session_id,
