@@ -14,6 +14,7 @@ import {
   VoiceRecorder,
 } from '@/components/voice/VoiceRecorderAndTranscript';
 import { useVoiceVisitSession } from '@/hooks/useVoiceVisitSession';
+import { HealthWave } from '@/components/animations/HealthWave';
 import type { Beneficiary, LanguageCode } from '@/types';
 import { AlertCircle, CheckCircle2, Clock, ShieldCheck, Volume2 } from 'lucide-react';
 
@@ -123,6 +124,9 @@ export const BasicVisitView: React.FC<BasicVisitViewProps> = ({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              <div className="hidden sm:block overflow-hidden py-0.5">
+                <HealthWave width={150} height={24} color="#0D9488" opacity={0.7} />
+              </div>
               {voice.latencyMetrics && (
                 <div
                   className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-white/90 border border-slate-200 text-[11px] font-mono text-slate-700"

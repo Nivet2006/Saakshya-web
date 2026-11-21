@@ -154,6 +154,9 @@ def test_exact_decimal_multilingual_number_parsing(phrase: str, expected_decimal
         ("ತೂಕ ಎರಡು ಕೆಜಿ ಎಂಟು ನೂರು ಗ್ರಾಂ", Decimal("2.8"), "compound_kg_g"),
         ("எடை இரண்டு புள்ளி எட்டு கிலோ", Decimal("2.8"), "kg"),
         ("वजन 2 किलो 800 ग्राम", Decimal("2.8"), "compound_kg_g"),
+        ("बच्चे का वजन २.५ किलो है", Decimal("2.5"), "kg"),
+        ("वजन २.५ किलो", Decimal("2.5"), "kg"),
+        ("वजन २५०० ग्राम", Decimal("2.5"), "g"),
     ],
 )
 def test_weight_unit_and_mixed_language_exact_decimal(

@@ -8,6 +8,7 @@ import type {
 } from '@/lib/contracts/v1';
 import { saveDraftLocally } from '@/lib/offline/indexeddb-store';
 import { syncManager } from '@/lib/sync/sync-manager';
+import { extractWeightFromIndicText, normalizeDigits } from '@/utils/devanagari';
 import {
   BrowserVoiceClient,
   listAudioInputDevices,
@@ -370,6 +371,7 @@ export function useVoiceVisitSession(params: {
         setPartialVolatile('');
         finalLinesRef.current.push(ev.text);
         const fullTranscript = finalLinesRef.current.join(' ').trim();
+        const weightExt = extractWeightFromIndicText(ev.text);
         setTranscriptHistory((prev) => [
           ...prev,
           {
@@ -383,9 +385,19 @@ export function useVoiceVisitSession(params: {
           },
         ]);
         if (fullTranscript) {
-          setVisitDraft((prev) =>
-            prev ? { ...prev, raw_transcript_summary: fullTranscript } : prev
-          );
+          setVisitDraft((prev) => {
+            if (!prev) return prev;
+            const updated = { ...prev, raw_transcript_summary: fullTranscript };
+            if (weightExt.weightKg !== null && prev.weight_kg === null) {
+              updated.weight_kg = weightExt.weightKg;
+              updated.weight_source_text = weightExt.rawMatched;
+              updated.field_statuses = {
+                ...updated.field_statuses,
+                weight_kg: 'extracted',
+              };
+            }
+            return updated;
+          });
         }
       },
       onAssistantResponse: (text, _turnId, isDangerEscalation, respLang) => {
@@ -802,7 +814,8 @@ export function useVoiceVisitSession(params: {
 
   const submitVoiceTextInput = useCallback((text: string) => {
     if (!text.trim()) return false;
-    return clientRef.current?.sendTextInput(text.trim(), language) ?? false;
+    const normalized = normalizeDigits(text.trim());
+    return clientRef.current?.sendTextInput(normalized, language) ?? false;
   }, [language]);
 
   const confirmAndSaveVisit = useCallback(async () => {

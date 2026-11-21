@@ -1,10 +1,13 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
+import { HealthWave } from '@/components/animations/HealthWave';
 import { useTranslation } from '@/lib/i18n/LanguageContext';
 import type { AudioInputDeviceInfo } from '@/lib/voice/voice-client';
 import type { TranscriptLine, VoiceInteractionState } from '@/types';
 import {
+  Activity,
   AlertCircle,
   CheckCircle2,
   FastForward,
@@ -15,6 +18,7 @@ import {
   Radio,
   RefreshCw,
   Send,
+  Sparkles,
   Square,
   Volume2,
 } from 'lucide-react';
@@ -230,58 +234,91 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
 
         {/* Primary Microphone Action */}
         {!isSessionActive ? (
-          <button
-            type="button"
-            onClick={onStartRecording}
-            className="w-full sm:w-auto min-w-[240px] min-h-[64px] px-8 py-4 rounded-2xl bg-clinical-primary hover:bg-clinical-primary-dark text-white font-bold text-base sm:text-lg shadow-lg transition-all active:scale-95 flex items-center justify-center gap-3"
-          >
-            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-              <Mic className="h-6 w-6" aria-hidden="true" />
+          <div className="flex flex-col items-center gap-3 w-full">
+            <button
+              type="button"
+              onClick={onStartRecording}
+              className="w-full sm:w-auto min-w-[240px] min-h-[64px] px-8 py-4 rounded-2xl bg-clinical-primary hover:bg-clinical-primary-dark text-white font-bold text-base sm:text-lg shadow-lg transition-all active:scale-95 flex items-center justify-center gap-3 group"
+            >
+              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Mic className="h-6 w-6" aria-hidden="true" />
+              </div>
+              <span>{ui.startRecording}</span>
+            </button>
+
+            {/* Ambient HealthWave & Indic numeral hint in idle state */}
+            <div className="w-full max-w-sm flex flex-col items-center gap-1.5 pt-2">
+              <HealthWave width={300} height={32} color="#0D9488" opacity={0.35} />
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50 border border-slate-200 text-[11px] font-semibold text-slate-600">
+                <Sparkles className="h-3 w-3 text-teal-600 shrink-0" />
+                <span>Indic Numerals: &ldquo;वजन २.५ किलो&rdquo; or &ldquo;2.5 kg&rdquo; normalized cleanly</span>
+              </div>
             </div>
-            <span>{ui.startRecording}</span>
-          </button>
+          </div>
         ) : (
           <div className="flex flex-col items-center gap-4 w-full">
-            {/* Live Mic / Push-to-Talk Circle */}
-            <div className="flex items-center justify-center gap-4 flex-wrap">
+            {/* Live Mic / Push-to-Talk Circle with Concentric Radar Pulse */}
+            <div className="flex items-center justify-center gap-5 flex-wrap">
               {handsFree ? (
-                <div
-                  className={`w-20 h-20 rounded-full flex items-center justify-center transition-colors ${
-                    interactionState === 'speaking'
-                      ? 'bg-clinical-secondary text-white'
-                      : interactionState === 'error'
-                      ? 'bg-clinical-danger text-white'
-                      : 'bg-clinical-danger text-white animate-mic-active'
-                  }`}
-                  aria-label="Live microphone active"
-                >
-                  {interactionState === 'speaking' ? (
-                    <Volume2 className="h-9 w-9" aria-hidden="true" />
-                  ) : (
-                    <Mic className="h-9 w-9" aria-hidden="true" />
-                  )}
+                <div className="relative flex items-center justify-center">
+                  {/* Concentric Animated Radar Rings */}
+                  <motion.div
+                    className="absolute w-24 h-24 rounded-full border-2 border-emerald-500/40 pointer-events-none"
+                    animate={{ scale: [1, 1.45, 1.8], opacity: [0.8, 0.3, 0] }}
+                    transition={{ duration: 2.0, repeat: Infinity, ease: 'easeOut' }}
+                  />
+                  <motion.div
+                    className="absolute w-20 h-20 rounded-full bg-emerald-400/20 blur-sm pointer-events-none"
+                    animate={{ scale: [1, 1.25, 1], opacity: [0.3, 0.7, 0.3] }}
+                    transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+                  />
+                  <div
+                    className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all shadow-md ${
+                      interactionState === 'speaking'
+                        ? 'bg-indigo-600 text-white'
+                        : interactionState === 'error'
+                        ? 'bg-clinical-danger text-white'
+                        : 'bg-emerald-600 text-white animate-mic-active'
+                    }`}
+                    aria-label="Live microphone active"
+                  >
+                    {interactionState === 'speaking' ? (
+                      <Volume2 className="h-9 w-9" aria-hidden="true" />
+                    ) : (
+                      <Mic className="h-9 w-9" aria-hidden="true" />
+                    )}
+                  </div>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  onPointerDown={onPttDown}
-                  onPointerUp={onPttUp}
-                  onPointerCancel={onPttUp}
-                  onPointerLeave={onPttUp}
-                  aria-pressed={pttPressed}
-                  className={`w-24 h-24 rounded-full flex flex-col items-center justify-center font-bold text-xs transition-all select-none ${
-                    pttPressed
-                      ? 'bg-clinical-danger text-white scale-95 animate-mic-active'
-                      : 'bg-slate-800 hover:bg-slate-700 text-white'
-                  }`}
-                >
-                  {pttPressed ? (
-                    <Mic className="h-8 w-8 mb-1" aria-hidden="true" />
-                  ) : (
-                    <MicOff className="h-7 w-7 mb-1" aria-hidden="true" />
+                <div className="relative flex items-center justify-center">
+                  {pttPressed && (
+                    <motion.div
+                      className="absolute w-28 h-28 rounded-full border-2 border-red-500/40 pointer-events-none"
+                      animate={{ scale: [1, 1.4, 1.7], opacity: [0.8, 0.3, 0] }}
+                      transition={{ duration: 1.6, repeat: Infinity, ease: 'easeOut' }}
+                    />
                   )}
-                  <span>{pttPressed ? 'Speaking' : 'Hold to Talk'}</span>
-                </button>
+                  <button
+                    type="button"
+                    onPointerDown={onPttDown}
+                    onPointerUp={onPttUp}
+                    onPointerCancel={onPttUp}
+                    onPointerLeave={onPttUp}
+                    aria-pressed={pttPressed}
+                    className={`relative w-24 h-24 rounded-full flex flex-col items-center justify-center font-bold text-xs transition-all select-none shadow-md ${
+                      pttPressed
+                        ? 'bg-clinical-danger text-white scale-95 animate-mic-active'
+                        : 'bg-slate-800 hover:bg-slate-700 text-white'
+                    }`}
+                  >
+                    {pttPressed ? (
+                      <Mic className="h-8 w-8 mb-1" aria-hidden="true" />
+                    ) : (
+                      <MicOff className="h-7 w-7 mb-1" aria-hidden="true" />
+                    )}
+                    <span>{pttPressed ? 'Speaking' : 'Hold to Talk'}</span>
+                  </button>
+                </div>
               )}
 
               {/* Interrupt / Barge-In Button */}
@@ -289,7 +326,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
                 <button
                   type="button"
                   onClick={onBargeIn}
-                  className="px-4 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-sm shadow-md flex items-center gap-2"
+                  className="px-4 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-sm shadow-md flex items-center gap-2 active:scale-95 transition-all"
                 >
                   <FastForward className="h-4 w-4" aria-hidden="true" />
                   <span>Interrupt / Speak Now</span>
@@ -300,32 +337,70 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
               <button
                 type="button"
                 onClick={onStopRecording}
-                className="px-4 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 font-bold text-sm flex items-center gap-2"
+                className="px-4 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 font-bold text-sm flex items-center gap-2 active:scale-95 transition-all"
               >
                 <Square className="h-4 w-4 fill-current" aria-hidden="true" />
                 <span>Stop Recording</span>
               </button>
             </div>
 
-            {/* Real Web Audio Waveform Visualizer (only reacts to live mic amplitude) */}
-            <div
-              className="w-full max-w-md h-12 bg-slate-50 border border-slate-200 rounded-xl px-3 flex items-center justify-center gap-1.5"
-              aria-hidden="true"
-            >
-              {waveformBands.map((band, idx) => {
-                const heightPct = isConnected
-                  ? Math.max(12, Math.min(92, Math.round((band * 0.7 + audioLevel * 0.3) * 100)))
-                  : 10;
-                return (
-                  <span
-                    key={idx}
-                    className={`w-1.5 rounded-full transition-all duration-75 ${
-                      audioLevel > 0.08 ? 'bg-clinical-primary' : 'bg-slate-300'
-                    }`}
-                    style={{ height: `${heightPct}%` }}
-                  />
-                );
-              })}
+            {/* Animated Vitals HealthWave Card with dynamic color & micro-interaction */}
+            <div className="w-full max-w-md p-3.5 rounded-2xl bg-gradient-to-r from-teal-50/80 via-emerald-50/60 to-cyan-50/80 border border-teal-200/90 shadow-sm flex flex-col items-center gap-2 transition-colors">
+              <div className="flex items-center justify-between w-full px-2 text-[11px] font-bold">
+                <div className="flex items-center gap-1.5 text-teal-900">
+                  <Activity className="h-3.5 w-3.5 text-teal-600 animate-pulse" />
+                  <span>Vitals Audio Stream · Active Health Monitoring</span>
+                </div>
+                <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-white/90 border border-teal-200 text-teal-800 shadow-2xs">
+                  {interactionState === 'speaking'
+                    ? 'Timbre TTS'
+                    : interactionState === 'interrupted'
+                    ? 'Barge-In Active'
+                    : '16kHz PCM Live'}
+                </span>
+              </div>
+
+              <div className="overflow-hidden w-full flex justify-center py-0.5">
+                <HealthWave
+                  width={340}
+                  height={40}
+                  color={
+                    interactionState === 'speaking'
+                      ? '#6366F1'
+                      : interactionState === 'interrupted'
+                      ? '#F59E0B'
+                      : interactionState === 'error'
+                      ? '#EF4444'
+                      : '#0D9488'
+                  }
+                  opacity={0.85}
+                />
+              </div>
+
+              {/* Real Web Audio Waveform Visualizer (amplitude reacting) */}
+              <div
+                className="w-full h-8 bg-white/90 border border-teal-100 rounded-xl px-3 flex items-center justify-center gap-1.5 shadow-inner"
+                aria-hidden="true"
+              >
+                {waveformBands.map((band, idx) => {
+                  const heightPct = isConnected
+                    ? Math.max(15, Math.min(95, Math.round((band * 0.7 + audioLevel * 0.3) * 100)))
+                    : 10;
+                  return (
+                    <span
+                      key={idx}
+                      className={`w-1 rounded-full transition-all duration-75 ${
+                        interactionState === 'speaking'
+                          ? 'bg-indigo-500'
+                          : audioLevel > 0.08
+                          ? 'bg-clinical-primary'
+                          : 'bg-slate-300'
+                      }`}
+                      style={{ height: `${heightPct}%` }}
+                    />
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
