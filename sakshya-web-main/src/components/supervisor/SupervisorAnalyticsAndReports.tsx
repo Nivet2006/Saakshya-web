@@ -38,7 +38,7 @@ export const SupervisorAnalyticsView: React.FC<{
         <figure className="bg-white border border-clinical-border-subtle rounded-2xl p-5 shadow-sm">
           <figcaption className="text-sm font-bold text-clinical-text flex items-center gap-2 mb-4">
             <BarChart3 className="h-4 w-4 text-clinical-primary" aria-hidden="true" />
-            <span>7-Day Visit Volume &amp; Danger Escalations</span>
+            <span>{ui.analyticsDailyVolumeTitle}</span>
           </figcaption>
 
           <div className="h-48 flex items-end justify-between gap-2 pt-4 border-b border-slate-200 pb-2">
@@ -73,7 +73,7 @@ export const SupervisorAnalyticsView: React.FC<{
         {/* Visit Type Distribution */}
         <section className="bg-white border border-clinical-border-subtle rounded-2xl p-5 shadow-sm space-y-4">
           <h2 className="text-sm font-bold text-clinical-text">
-            ANC / PNC / Newborn / Immunisation Mix
+            {ui.analyticsVisitMixTitle}
           </h2>
           <div className="space-y-3">
             {typeDistribution.map((row) => (
@@ -81,7 +81,7 @@ export const SupervisorAnalyticsView: React.FC<{
                 <div className="flex justify-between text-xs font-semibold mb-1">
                   <span className="text-clinical-text">{row.label}</span>
                   <span className="tabular-nums text-slate-600">
-                    {row.count} visits ({row.pct}%)
+                    {row.count} ({row.pct}%)
                   </span>
                 </div>
                 <div className="w-full h-2.5 rounded-full bg-slate-100 overflow-hidden">
@@ -98,12 +98,12 @@ export const SupervisorAnalyticsView: React.FC<{
         {/* Coverage & Follow-Up Gauges */}
         <section className="bg-white border border-clinical-border-subtle rounded-2xl p-5 shadow-sm space-y-4">
           <h2 className="text-sm font-bold text-clinical-text">
-            Immunisation Coverage &amp; Follow-Up Completion
+            {ui.analyticsCoverageTitle}
           </h2>
           <div className="space-y-4">
             <div>
               <div className="flex justify-between text-xs font-semibold mb-1">
-                <span>Immunisation Doses Administered</span>
+                <span>{ui.analyticsDosesAdministered}</span>
                 <span className="tabular-nums text-clinical-primary font-bold">
                   {stats.immunisationCoveragePct}%
                 </span>
@@ -118,7 +118,7 @@ export const SupervisorAnalyticsView: React.FC<{
 
             <div>
               <div className="flex justify-between text-xs font-semibold mb-1">
-                <span>Follow-Up Task Completion</span>
+                <span>{ui.analyticsFollowUpCompletion}</span>
                 <span className="tabular-nums text-clinical-secondary font-bold">
                   {stats.followUpCompletionPct}%
                 </span>
@@ -132,15 +132,15 @@ export const SupervisorAnalyticsView: React.FC<{
             </div>
 
             <p className="text-xs text-slate-600 pt-2 border-t border-slate-100">
-              Total Danger Alerts Logged: <strong className="tabular-nums">{dangerAlerts.length}</strong>{' '}
-              ({stats.activeDangerAlerts} currently active).
+              {ui.activeDangerSigns}: <strong className="tabular-nums">{dangerAlerts.length}</strong>{' '}
+              ({stats.activeDangerAlerts})
             </p>
           </div>
         </section>
 
         {/* Worker Activity Comparison */}
         <section className="bg-white border border-clinical-border-subtle rounded-2xl p-5 shadow-sm space-y-3">
-          <h2 className="text-sm font-bold text-clinical-text">ASHA Worker Activity Summary</h2>
+          <h2 className="text-sm font-bold text-clinical-text">{ui.analyticsWorkerActivityTitle}</h2>
           <ul className="space-y-2.5 text-xs">
             {workerRows.map((w) => (
               <li
@@ -150,14 +150,14 @@ export const SupervisorAnalyticsView: React.FC<{
                 <div>
                   <span className="font-bold text-clinical-text block">{w.worker.full_name}</span>
                   <span className="text-slate-500">
-                    {w.assignedBeneficiaries} households assigned
+                    {w.assignedBeneficiaries} {ui.householdsLabel}
                   </span>
                 </div>
                 <div className="text-right tabular-nums">
                   <span className="font-bold text-clinical-primary block">
-                    {w.completedVisits} visits
+                    {w.completedVisits} {ui.visitsLoggedLabel}
                   </span>
-                  <span className="text-slate-500">{w.pendingFollowUps} pending tasks</span>
+                  <span className="text-slate-500">{w.pendingFollowUps} {ui.pendingTasksLabel}</span>
                 </div>
               </li>
             ))}
@@ -230,7 +230,7 @@ export const SupervisorReportsView: React.FC<{
             className="px-4 py-2.5 rounded-xl bg-clinical-primary hover:bg-clinical-primary-dark text-white text-xs font-bold flex items-center gap-1.5"
           >
             <Download className="h-4 w-4" aria-hidden="true" />
-            <span>Export CSV</span>
+            <span>{ui.exportCsv}</span>
           </button>
           <button
             type="button"
@@ -238,7 +238,7 @@ export const SupervisorReportsView: React.FC<{
             className="px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-clinical-text text-xs font-bold flex items-center gap-1.5"
           >
             <Printer className="h-4 w-4" aria-hidden="true" />
-            <span>Print / PDF Report</span>
+            <span>{ui.printReport}</span>
           </button>
         </div>
       </div>
@@ -247,7 +247,7 @@ export const SupervisorReportsView: React.FC<{
       <div className="bg-white border border-clinical-border-subtle rounded-2xl p-4 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 no-print">
         <div>
           <label htmlFor="rep-from" className="block text-[11px] font-bold text-slate-600 mb-1">
-            From Date
+            {ui.fromDateLabel}
           </label>
           <input
             id="rep-from"
@@ -259,7 +259,7 @@ export const SupervisorReportsView: React.FC<{
         </div>
         <div>
           <label htmlFor="rep-to" className="block text-[11px] font-bold text-slate-600 mb-1">
-            To Date
+            {ui.toDateLabel}
           </label>
           <input
             id="rep-to"
@@ -271,7 +271,7 @@ export const SupervisorReportsView: React.FC<{
         </div>
         <div>
           <label htmlFor="rep-worker" className="block text-[11px] font-bold text-slate-600 mb-1">
-            ASHA Worker
+            {ui.ashaWorkerCol}
           </label>
           <select
             id="rep-worker"
@@ -279,7 +279,7 @@ export const SupervisorReportsView: React.FC<{
             onChange={(e) => setWorkerId(e.target.value)}
             className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold bg-slate-50"
           >
-            <option value="ALL">All Workers</option>
+            <option value="ALL">{ui.allWorkersFilter}</option>
             {workers
               .filter((w) => w.role === 'ASHA_WORKER')
               .map((w) => (
@@ -291,7 +291,7 @@ export const SupervisorReportsView: React.FC<{
         </div>
         <div>
           <label htmlFor="rep-type" className="block text-[11px] font-bold text-slate-600 mb-1">
-            Visit Type
+            {ui.visitTypeLabel}
           </label>
           <select
             id="rep-type"
@@ -299,7 +299,7 @@ export const SupervisorReportsView: React.FC<{
             onChange={(e) => setVisitType(e.target.value)}
             className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold bg-slate-50"
           >
-            <option value="ALL">All Visit Types</option>
+            <option value="ALL">{ui.allVisitTypesFilter}</option>
             <option value="ANC">ANC</option>
             <option value="PNC">PNC</option>
             <option value="Newborn">Newborn</option>
@@ -312,19 +312,19 @@ export const SupervisorReportsView: React.FC<{
       <section className="bg-white border border-clinical-border-subtle rounded-2xl p-5 shadow-sm">
         <h2 className="text-sm font-bold text-clinical-text flex items-center gap-2 mb-3">
           <FileSpreadsheet className="h-4 w-4 text-clinical-primary" aria-hidden="true" />
-          <span>Report Totals</span>
+          <span>{ui.reportTotalsTitle}</span>
         </h2>
         <div className="grid grid-cols-3 gap-4 text-center">
           <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-            <span className="text-xs text-slate-500 block">Filtered Visits</span>
+            <span className="text-xs text-slate-500 block">{ui.filteredVisitsLabel}</span>
             <strong className="text-xl font-bold tabular-nums">{filtered.length}</strong>
           </div>
           <div className="p-3 rounded-xl bg-red-50 border border-red-200">
-            <span className="text-xs text-red-700 block">Danger Sign Visits</span>
+            <span className="text-xs text-red-700 block">{ui.dangerSignVisitsLabel}</span>
             <strong className="text-xl font-bold tabular-nums text-red-900">{dangerCount}</strong>
           </div>
           <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
-            <span className="text-xs text-emerald-700 block">Routine / Safe</span>
+            <span className="text-xs text-emerald-700 block">{ui.routineSafeLabel}</span>
             <strong className="text-xl font-bold tabular-nums text-emerald-900">
               {filtered.length - dangerCount}
             </strong>
@@ -336,7 +336,7 @@ export const SupervisorReportsView: React.FC<{
       <section className="bg-white border border-clinical-border-subtle rounded-2xl p-5 shadow-sm space-y-3 no-print">
         <h2 className="text-sm font-bold text-clinical-text flex items-center gap-2">
           <Shield className="h-4 w-4 text-clinical-primary" aria-hidden="true" />
-          <span>System Audit Trail ({auditLogs.length})</span>
+          <span>{ui.systemAuditTrailTitle} ({auditLogs.length})</span>
         </h2>
         <ul className="divide-y divide-slate-100 text-xs">
           {auditLogs.slice(0, 15).map((log) => (

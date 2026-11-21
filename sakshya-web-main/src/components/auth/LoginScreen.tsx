@@ -154,7 +154,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                             {profile.full_name}
                           </p>
                           <p className="text-xs text-teal-100 truncate">
-                            {isSupervisor ? 'PHC Supervisor Command Center' : 'ASHA Worker Portal'} ·{' '}
+                            {isSupervisor ? ui.supervisorPortal : ui.ashaPortal} ·{' '}
                             {profile.assigned_area}
                           </p>
                         </div>
@@ -198,7 +198,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                       {l.nativeName} ({l.name})
                     </option>
                   ))}
-                  <option value="indic-auto">Auto-Detect Indic (Code-Mixed)</option>
+                  <option value="indic-auto">{ui.autoDetectIndic}</option>
                 </select>
               </div>
             </div>
@@ -216,7 +216,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                       : 'bg-slate-100 text-slate-600 border border-slate-200'
                   }`}
                 >
-                  {isRealSupabaseConfigured ? 'Auth Connected' : 'Local Demo Mode'}
+                  {isRealSupabaseConfigured ? ui.authConnected : ui.localDemoModeNotice.split(':')[0]}
                 </span>
               </div>
 

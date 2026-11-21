@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
+import { useTranslation } from '@/lib/i18n/LanguageContext';
 import type { FieldConfirmStatus } from '@/types';
 import {
   AlertCircle,
@@ -31,32 +32,33 @@ export const FieldStatusPill: React.FC<{
   status: FieldConfirmStatus;
   compact?: boolean;
 }> = ({ status, compact = false }) => {
+  const { ui } = useTranslation();
   const config: Record<
     FieldConfirmStatus,
     { label: string; classes: string; icon: React.ReactNode }
   > = {
     extracted: {
-      label: 'Extracted',
+      label: ui.statusExtracted,
       classes: 'bg-sky-50 text-sky-800 border-sky-200',
       icon: <Sparkles className="h-3 w-3" aria-hidden="true" />,
     },
     needs_clarification: {
-      label: 'Needs Clarification',
+      label: ui.needsClarification,
       classes: 'bg-amber-50 text-amber-800 border-amber-300',
       icon: <HelpCircle className="h-3 w-3" aria-hidden="true" />,
     },
     corrected: {
-      label: 'Corrected',
+      label: ui.statusCorrected,
       classes: 'bg-indigo-50 text-indigo-800 border-indigo-200',
       icon: <Edit3 className="h-3 w-3" aria-hidden="true" />,
     },
     confirmed: {
-      label: 'Confirmed',
+      label: ui.confirmed,
       classes: 'bg-emerald-50 text-emerald-800 border-emerald-200',
       icon: <CheckCircle2 className="h-3 w-3" aria-hidden="true" />,
     },
     missing: {
-      label: 'Not Identified',
+      label: ui.notIdentified,
       classes: 'bg-slate-100 text-slate-600 border-slate-300',
       icon: <HelpCircle className="h-3 w-3" aria-hidden="true" />,
     },

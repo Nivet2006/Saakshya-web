@@ -14,6 +14,7 @@ import {
   VoiceRecorder,
 } from '@/components/voice/VoiceRecorderAndTranscript';
 import { useVoiceVisitSession } from '@/hooks/useVoiceVisitSession';
+import { useTranslation } from '@/lib/i18n/LanguageContext';
 import type { Beneficiary, LanguageCode } from '@/types';
 import { AlertCircle, CheckCircle2, Clock, ShieldCheck, Volume2 } from 'lucide-react';
 
@@ -38,6 +39,7 @@ export const BasicVisitView: React.FC<BasicVisitViewProps> = ({
   voice,
   onGoHome,
 }) => {
+  const { ui } = useTranslation(language);
   if (voice.committedResult) {
     return (
       <VisitSuccess
@@ -72,7 +74,6 @@ export const BasicVisitView: React.FC<BasicVisitViewProps> = ({
       <LanguageSelector
         selectedLanguage={language}
         onChange={onChangeLanguage}
-        disabled={voice.isConnected}
       />
 
       {/* Voice Beneficiary Verification & Live TTFA Performance Status */}
@@ -100,12 +101,12 @@ export const BasicVisitView: React.FC<BasicVisitViewProps> = ({
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs sm:text-sm font-bold">
                     {voice.identityVerificationStatus === 'verified'
-                      ? 'Beneficiary Identity Verified by Voice'
+                      ? ui.identityVerifiedVoice
                       : voice.identityVerificationStatus === 'candidate_confirmation'
-                      ? 'Candidate Found — Say "Yes" or "No" to Confirm'
+                      ? ui.identityCandidatePrompt
                       : voice.identityVerificationStatus === 'correcting'
-                      ? 'Voice Identity Correction — Speak Name or Beneficiary ID'
-                      : 'Voice Identity Check — Say "Yes" or "No"'}
+                      ? ui.identityCorrectionPrompt
+                      : ui.identityCheckPrompt}
                   </span>
                   {(voice.visitDraft?.beneficiary_id || selectedBeneficiary?.beneficiary_id) && (
                     <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-white/90 border border-current/20">
@@ -217,7 +218,7 @@ export const BasicVisitView: React.FC<BasicVisitViewProps> = ({
               className="bg-sky-50 border-2 border-sky-400 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3"
             >
               <p className="text-sm font-bold text-sky-950">
-                Your visit information has been updated. Would you like me to read the complete visit summary aloud?
+                {ui.readbackPrefPrompt}
               </p>
               <div className="flex flex-wrap gap-2.5">
                 <button
@@ -225,21 +226,21 @@ export const BasicVisitView: React.FC<BasicVisitViewProps> = ({
                   onClick={() => voice.respondReadbackPreference(true)}
                   className="px-4 py-2.5 rounded-xl bg-clinical-primary hover:bg-clinical-primary-dark text-white text-xs sm:text-sm font-bold"
                 >
-                  Yes, Read Summary Aloud
+                  {ui.yesReadSummaryBtn}
                 </button>
                 <button
                   type="button"
                   onClick={() => voice.respondReadbackPreference(false)}
                   className="px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 text-xs sm:text-sm font-bold"
                 >
-                  No, Skip to Submission
+                  {ui.noSkipSubmissionBtn}
                 </button>
                 <button
                   type="button"
                   onClick={voice.speakToMakeChanges}
                   className="px-4 py-2.5 rounded-xl bg-amber-100 hover:bg-amber-200 border border-amber-400 text-amber-950 text-xs sm:text-sm font-bold"
                 >
-                  Speak to Make More Changes
+                  {ui.speakMoreChangesBtn}
                 </button>
               </div>
             </section>
@@ -248,14 +249,14 @@ export const BasicVisitView: React.FC<BasicVisitViewProps> = ({
           {voice.reviewPhase === 'editing' && voice.isConnected && (
             <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 border border-slate-200 rounded-xl p-3.5">
               <span className="text-xs font-semibold text-slate-700">
-                Keep speaking to add or correct fields, or tap Finish &amp; Review when ready.
+                {ui.finishNotesAndReviewPrompt}
               </span>
               <button
                 type="button"
                 onClick={voice.finishNotesAndReview}
                 className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold"
               >
-                Finish &amp; Review Summary
+                {ui.finishAndReviewBtn}
               </button>
             </div>
           )}
@@ -265,7 +266,7 @@ export const BasicVisitView: React.FC<BasicVisitViewProps> = ({
               role="status"
               className="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-xs font-semibold text-amber-950"
             >
-              Submission pending — visit retained safely as an unsubmitted draft. You can continue editing or submit anytime.
+              {ui.draftRetainedNotice}
             </div>
           )}
 

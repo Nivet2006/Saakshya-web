@@ -32,6 +32,28 @@ Rules:
 6. Write numbers and dates clearly so TTS speaks them naturally. Do not use markdown, bullet points, or emojis."""
 
 
+_LANG_DISPLAY = {
+    "hi-IN": "Hindi (hi-IN, Devanagari script)",
+    "en-IN": "Indian English (en-IN)",
+    "kn-IN": "Kannada (kn-IN, Kannada script)",
+    "ta-IN": "Tamil (ta-IN, Tamil script)",
+    "te-IN": "Telugu (te-IN, Telugu script)",
+    "ml-IN": "Malayalam (ml-IN, Malayalam script)",
+    "bn-IN": "Bengali (bn-IN, Bengali script)",
+    "mr-IN": "Marathi (mr-IN, Devanagari script)",
+    "gu-IN": "Gujarati (gu-IN, Gujarati script)",
+    "pa-IN": "Punjabi (pa-IN, Gurmukhi script)",
+}
+
+
+def _language_instruction(active_language: str) -> str:
+    label = _LANG_DISPLAY.get(active_language, active_language)
+    return (
+        f"\nActive worker language: {label}. "
+        f"Respond in {label} cleanly so Gnani Timbre TTS speaks it naturally."
+    )
+
+
 class GeminiLLMAdapter:
     """Async Gemini LLM adapter with zero-thinking low-latency config and fallback."""
 
@@ -79,7 +101,7 @@ class GeminiLLMAdapter:
         active_language: str,
         max_tokens: int,
     ) -> types.GenerateContentConfig:
-        lang_hint = f"\nActive worker language code: {active_language}."
+        lang_hint = _language_instruction(active_language)
         kwargs: dict[str, Any] = {
             "system_instruction": system_prompt + lang_hint,
             "max_output_tokens": max_tokens,
@@ -173,7 +195,7 @@ class GroqLLMAdapter:
         max_tokens: int = 160,
     ) -> str:
         t0 = time.perf_counter()
-        payload = [{"role": "system", "content": f"{system_prompt}\nActive language: {active_language}"}]
+        payload = [{"role": "system", "content": f"{system_prompt}{_language_instruction(active_language)}"}]
         payload.extend({"role": m.role, "content": m.content} for m in messages if m.role != "system")
         resp = await self._client.chat.completions.create(
             model=self._model,

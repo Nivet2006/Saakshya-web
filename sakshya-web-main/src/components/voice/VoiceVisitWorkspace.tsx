@@ -7,6 +7,7 @@ import { AdvancedVisitView } from '@/components/voice/AdvancedVisitView';
 import { BasicVisitView } from '@/components/voice/BasicVisitView';
 import { ModeSelector } from '@/components/voice/ModeSelector';
 import { useVoiceVisitSession } from '@/hooks/useVoiceVisitSession';
+import { useTranslation } from '@/lib/i18n/LanguageContext';
 import type { AshaExperienceMode, Beneficiary, LanguageCode, UserProfile, VisitDraft } from '@/types';
 
 interface VoiceVisitWorkspaceProps {
@@ -34,6 +35,7 @@ export const VoiceVisitWorkspace: React.FC<VoiceVisitWorkspaceProps> = ({
   onVisitCommitted,
   onGoHome,
 }) => {
+  const { ui } = useTranslation(language);
   // Default experience MUST be Basic Mode
   const [mode, setMode] = useState<AshaExperienceMode>('basic');
 
@@ -74,11 +76,10 @@ export const VoiceVisitWorkspace: React.FC<VoiceVisitWorkspaceProps> = ({
     <div className="max-w-5xl mx-auto space-y-5">
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-clinical-text">
-          Record Household Voice Visit
+          {ui.recordHouseholdVisitTitle}
         </h1>
         <p className="text-xs sm:text-sm text-clinical-text-secondary mt-0.5">
-          Connected to Agent 1 Voice Pipeline · Switch anytime between Basic and Advanced views
-          without losing visit data.
+          {ui.recordHouseholdVisitSubtitle}
         </p>
       </div>
 

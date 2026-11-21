@@ -20,7 +20,18 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-SUPPORTED_LANGUAGES: tuple[str, ...] = ("hi-IN", "en-IN", "kn-IN", "ta-IN")
+SUPPORTED_LANGUAGES: tuple[str, ...] = (
+    "hi-IN",
+    "en-IN",
+    "kn-IN",
+    "ta-IN",
+    "te-IN",
+    "ml-IN",
+    "bn-IN",
+    "mr-IN",
+    "gu-IN",
+    "pa-IN",
+)
 
 _LANGUAGE_ALIASES: dict[str, str] = {
     "hi": "hi-IN",
@@ -38,6 +49,25 @@ _LANGUAGE_ALIASES: dict[str, str] = {
     "ta": "ta-IN",
     "ta-in": "ta-IN",
     "tamil": "ta-IN",
+    "te": "te-IN",
+    "te-in": "te-IN",
+    "telugu": "te-IN",
+    "ml": "ml-IN",
+    "ml-in": "ml-IN",
+    "malayalam": "ml-IN",
+    "bn": "bn-IN",
+    "bn-in": "bn-IN",
+    "bengali": "bn-IN",
+    "bangla": "bn-IN",
+    "mr": "mr-IN",
+    "mr-in": "mr-IN",
+    "marathi": "mr-IN",
+    "gu": "gu-IN",
+    "gu-in": "gu-IN",
+    "gujarati": "gu-IN",
+    "pa": "pa-IN",
+    "pa-in": "pa-IN",
+    "punjabi": "pa-IN",
 }
 
 

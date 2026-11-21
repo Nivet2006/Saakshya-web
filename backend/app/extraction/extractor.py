@@ -14,6 +14,7 @@ from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from app.conversation.models import detect_language_from_text, normalize_language
 from app.extraction.dates import (
     AMBIGUOUS_DATE_RE,
     find_date_candidates,
@@ -466,14 +467,18 @@ class VisitFieldExtractor:
         text: str,
         *,
         reference_date: date | None = None,
-        active_language: str = "hi-IN",
+        active_language: str | None = None,
         existing_draft: VisitDraft | None = None,
     ) -> ExtractionResult:
         """Extract only fields grounded in `text`; never guess missing facts."""
-        _ = active_language  # Retained for interface parity and future locale hints
         normalized = _normalize_text(text)
         if not normalized:
             return ExtractionResult()
+        lang = (
+            normalize_language(active_language)
+            if active_language
+            else detect_language_from_text(normalized, fallback="en-IN")
+        )
 
         try:
             tz = ZoneInfo(self._timezone_name)
@@ -525,6 +530,7 @@ class VisitFieldExtractor:
             normalized,
             effective_visit_type=effective_visit_type,
             effective_beneficiary=effective_ben,
+            active_language=lang,
         )
         if wt_inline_corr:
             detected_correction = True
@@ -1259,12 +1265,75 @@ class VisitFieldExtractor:
             ),
         )
 
+    def _format_weight_hint(
+        self,
+        *,
+        kind: str,
+        language: str,
+        source_text: str = "",
+        weight_str: str = "",
+        grams_str: str = "",
+        kg_from_g: str = "",
+        context_label: str = "",
+        candidates_joined: str = "",
+    ) -> str:
+        """Return a weight clarification prompt localized to `language`."""
+        lang = normalize_language(language)
+        if kind == "conflict":
+            templates = {
+                "hi-IN": f"मुझे दो अलग वज़न सुनाई दिए ({candidates_joined} किलोग्राम)। सही वज़न कौन सा है?",
+                "kn-IN": f"ಎರಡು ಬೇರೆ ತೂಕಗಳು ಕೇಳಿಸಿದವು ({candidates_joined} ಕಿಲೋಗ್ರಾಂ). ಸರಿಯಾದ ತೂಕ ಯಾವುದು?",
+                "ta-IN": f"இரு வேறு எடைகள் கேட்டன ({candidates_joined} கிலோகிராம்). எது சரியான எடை?",
+                "te-IN": f"రెండు వేర్వేరు బరువులు వినిపించాయి ({candidates_joined} కిలోగ్రాములు). ఏది సరైనది?",
+                "ml-IN": f"രണ്ട് വ്യത്യസ്ത ഭാരം കേട്ടു ({candidates_joined} കിലോഗ്രാം). ഏതാണ് ശരി?",
+                "bn-IN": f"দুটি ভিন্ন ওজন শোনা গেছে ({candidates_joined} কিলোগ্রাম)। কোনটি সঠিক?",
+                "mr-IN": f"दोन वेगळी वजने ऐकू आली ({candidates_joined} किलोग्रॅम). कोणते बरोबर आहे?",
+                "gu-IN": f"બે અલગ વજન સંભળાયા ({candidates_joined} કિલોગ્રામ). કયું સાચું છે?",
+                "pa-IN": f"ਦੋ ਵੱਖ-ਵੱਖ ਭਾਰ ਸੁਣੇ ਗਏ ({candidates_joined} ਕਿਲੋਗ੍ਰਾਮ)। ਕਿਹੜਾ ਸਹੀ ਹੈ?",
+            }
+            return templates.get(
+                lang,
+                f"I heard conflicting weights ({candidates_joined} kilograms). Which weight is correct?",
+            )
+        if kind == "grams_vs_kg":
+            templates = {
+                "hi-IN": f"मैंने {source_text} सुना। क्या आपका मतलब {grams_str} ग्राम ({kg_from_g} किलोग्राम) था? क्या यह सही है?",
+                "kn-IN": f"{source_text} ಎಂದು ಕೇಳಿಸಿದೆ. ನಿಮ್ಮ ಅರ್ಥ {grams_str} ಗ್ರಾಂ ({kg_from_g} ಕಿಲೋಗ್ರಾಂ) ಆಗಿತ್ತೇ? ಇದು ಸರಿಯೇ?",
+                "ta-IN": f"{source_text} என்று கேட்டது. நீங்கள் {grams_str} கிராம் ({kg_from_g} கிலோகிராம்) என்று சொன்னீர்களா? இது சரியா?",
+                "te-IN": f"{source_text} అని వినిపించింది. మీరు {grams_str} గ్రాములు ({kg_from_g} కిలోగ్రాములు) అన్నారా? ఇది సరైనదేనా?",
+                "ml-IN": f"{source_text} എന്ന് കേട്ടു. നിങ്ങൾ {grams_str} ഗ്രാം ({kg_from_g} കിലോഗ്രാം) എന്നാണോ ഉദ്ദേശിച്ചത്? ഇത് ശരിയാണോ?",
+                "bn-IN": f"আমি {source_text} শুনেছি। আপনি কি {grams_str} গ্রাম ({kg_from_g} কিলোগ্রাম) বলেছেন? এটি কি সঠিক?",
+                "mr-IN": f"मला {source_text} ऐकू आले. तुम्हाला {grams_str} ग्रॅम ({kg_from_g} किलोग्रॅम) म्हणायचे आहे का? हे बरोबर आहे का?",
+                "gu-IN": f"મને {source_text} સંભળાયું. શું તમારો અર્થ {grams_str} ગ્રામ ({kg_from_g} કિલોગ્રામ) છે? શું આ સાચું છે?",
+                "pa-IN": f"ਮੈਨੂੰ {source_text} ਸੁਣਿਆ। ਕੀ ਤੁਹਾਡਾ ਮਤਲਬ {grams_str} ਗ੍ਰਾਮ ({kg_from_g} ਕਿਲੋਗ੍ਰਾਮ) ਸੀ? ਕੀ ਇਹ ਸਹੀ ਹੈ?",
+            }
+            return templates.get(
+                lang,
+                f"I heard {source_text}. Did you mean {grams_str} grams ({kg_from_g} kilograms)? Is that correct?",
+            )
+        templates = {
+            "hi-IN": f"मैंने {source_text} ({weight_str} किलोग्राम) सुना, जो सामान्य से अलग लग रहा है। क्या मैं {weight_str} किलोग्राम रखूँ या आप इसे बदलना चाहेंगी?",
+            "kn-IN": f"{source_text} ({weight_str} kg) ಎಂದು ಕೇಳಿಸಿದೆ, ಇದು ಸಾಮಾನ್ಯಕ್ಕಿಂತ ಭಿನ್ನವಾಗಿದೆ. {weight_str} kg ಉಳಿಸಬೇಕೇ ಅಥವಾ ತಿದ್ದುಪಡಿ ಮಾಡಬೇಕೇ?",
+            "ta-IN": f"{source_text} ({weight_str} கிலோ) என்று கேட்டது, இது வழக்கத்தை விட வேறுபட்டதாக உள்ளது. {weight_str} கிலோ வைக்கவா அல்லது மாற்ற வேண்டுமா?",
+            "te-IN": f"{source_text} ({weight_str} kg) అని వినిపించింది, ఇది సాధారణ కంటే భిన్నంగా ఉంది. {weight_str} kg ఉంచాలా లేదా మార్చాలా?",
+            "ml-IN": f"{source_text} ({weight_str} kg) എന്ന് കേട്ടു, ഇത് സാധാരണയേക്കാൾ വ്യത്യസ്തമാണ്. {weight_str} kg സൂക്ഷിക്കണോ അതോ തിരുത്തണോ?",
+            "bn-IN": f"আমি {source_text} ({weight_str} কেজি) শুনেছি, যা সাধারণের চেয়ে আলাদা মনে হচ্ছে। {weight_str} কেজি রাখব নাকি সংশোধন করবেন?",
+            "mr-IN": f"मला {source_text} ({weight_str} किलो) ऐकू आले, जे नेहमीपेक्षा वेगळे वाटते. {weight_str} किलो ठेवू की बदलायचे आहे?",
+            "gu-IN": f"મને {source_text} ({weight_str} કિલો) સંભળાયું, જે સામાન્ય કરતાં અલગ લાગે છે. {weight_str} કિલો રાખું કે સુધારવું છે?",
+            "pa-IN": f"ਮੈਨੂੰ {source_text} ({weight_str} ਕਿਲੋ) ਸੁਣਿਆ, ਜੋ ਆਮ ਨਾਲੋਂ ਵੱਖਰਾ ਲੱਗਦਾ ਹੈ। ਕੀ {weight_str} ਕਿਲੋ ਰੱਖਾਂ ਜਾਂ ਬਦਲਣਾ ਹੈ?",
+        }
+        return templates.get(
+            lang,
+            f"I heard {source_text} ({weight_str} kg), which seems unusual for a {context_label} record. Should I keep {weight_str} kg or would you like to correct it?",
+        )
+
     def _extract_weight(
         self,
         text: str,
         *,
         effective_visit_type: VisitType | None,
         effective_beneficiary: SyntheticBeneficiary | None,
+        active_language: str = "en-IN",
     ) -> tuple[float | None, str | None, FieldClarification | None, tuple[float, str] | None, bool, str | None]:
         candidates = find_weight_candidates(text)
         if not candidates:
@@ -1279,9 +1348,10 @@ class VisitFieldExtractor:
                 FieldClarification(
                     field_name="weight_kg",
                     reason="conflict",
-                    prompt_hint=(
-                        f"I heard conflicting weights ({' or '.join(cand_strs)} kilograms). "
-                        "Which weight is correct?"
+                    prompt_hint=self._format_weight_hint(
+                        kind="conflict",
+                        language=active_language,
+                        candidates_joined=" or ".join(cand_strs),
                     ),
                     candidates=cand_strs,
                 ),
@@ -1311,14 +1381,20 @@ class VisitFieldExtractor:
                 and 400 <= weight_kg <= 9999
             ):
                 kg_from_g = format_decimal_clean(selected.value_kg / Decimal("1000"))
-                hint = (
-                    f"I heard {source_text}. Did you mean {int(weight_kg)} grams "
-                    f"({kg_from_g} kilograms)? Is that correct?"
+                hint = self._format_weight_hint(
+                    kind="grams_vs_kg",
+                    language=active_language,
+                    source_text=source_text,
+                    grams_str=str(int(weight_kg)),
+                    kg_from_g=kg_from_g,
                 )
             else:
-                hint = (
-                    f"I heard {source_text} ({weight_str} kg), which seems unusual for a "
-                    f"{context_label} record. Should I keep {weight_str} kg or would you like to correct it?"
+                hint = self._format_weight_hint(
+                    kind="unusual",
+                    language=active_language,
+                    source_text=source_text,
+                    weight_str=weight_str,
+                    context_label=context_label,
                 )
             return (
                 None,

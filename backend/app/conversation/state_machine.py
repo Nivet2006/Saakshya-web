@@ -66,11 +66,22 @@ _NEGATION_INDIC_SUBSTRINGS: tuple[str, ...] = (
     "இல்லை",
     "வேண்டாம்",
     "தவறு",
+    "కాదు",
+    "వద్దు",
+    "అల్ల",
+    "അല്ല",
+    "വേണ്ട",
+    "না",
+    "নয়",
+    "नाही",
+    "नको",
+    "ના",
+    "ਨਹੀਂ",
 )
 
 _AFFIRMATIVE_LATIN_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(
-        r"\b(yes|yeah|yep|confirm|confirmed|correct|right|ok|okay|haan|haa|han|houdu|howdu|aama|aamam|aamaam|sari|seri)\b",
+        r"\b(yes|yeah|yep|confirm|confirmed|correct|right|ok|okay|haan|haa|han|houdu|howdu|aama|aamam|aamaam|sari|seri|avunu|athe|ho|hoy|haa|haanji)\b",
         re.IGNORECASE,
     ),
     re.compile(
@@ -91,6 +102,18 @@ _AFFIRMATIVE_INDIC_SUBSTRINGS: tuple[str, ...] = (
     "ஆமாம்",
     "சரி",
     "உறுதி",
+    "అవును",
+    "సరే",
+    "അതെ",
+    "ശരി",
+    "হ্যাঁ",
+    "ঠিক আছে",
+    "हो",
+    "होय",
+    "બરાબર",
+    "હા",
+    "ਹਾਂ",
+    "ਠੀਕ ਹੈ",
 )
 
 # Lightweight fallback patterns for inline voice corrections when caller did not
@@ -226,6 +249,18 @@ _COMPLETION_INDIC_SUBSTRINGS: tuple[str, ...] = (
     "ಇಷ್ಟೇ",
     "முடிந்தது",
     "அவ்வளவுதான்",
+    "అంతే",
+    "పూర్తయింది",
+    "മതി",
+    "കഴിഞ്ഞു",
+    "শেষ",
+    "হয়ে গেছে",
+    "झाले",
+    "एवढेच",
+    "પૂરું થયું",
+    "બસ આટલું જ",
+    "ਹੋ ਗਿਆ",
+    "ਬੱਸ ਇੰਨਾ ਹੀ",
 )
 
 
@@ -469,60 +504,117 @@ def generate_beneficiary_greeting_text(
     """Generate personalized spoken greeting when Start Recording is pressed (Section 1)."""
     lang = normalize_language(language)
     if beneficiary_name and beneficiary_id:
-        if lang == "hi-IN":
-            return (
+        with_ben: dict[str, str] = {
+            "hi-IN": (
                 f"नमस्ते! क्या आप आज {beneficiary_name} से मिलने गई हैं? "
-                f"लाभार्थी आईडी: {beneficiary_id}। "
-                "कृपया पुष्टि करें, क्या यह सही लाभार्थी है? हाँ या नहीं बोलें।"
-            )
-        if lang == "kn-IN":
-            return (
+                f"लाभार्थी आईडी: {beneficiary_id}। कृपया पुष्टि करें, क्या यह सही लाभार्थी है? हाँ या नहीं बोलें।"
+            ),
+            "kn-IN": (
                 f"ನಮಸ್ಕಾರ! ನೀವು ಇಂದು {beneficiary_name} ಅವರನ್ನು ಭೇಟಿ ಮಾಡುತ್ತಿದ್ದೀರಾ? "
-                f"ಫಲಾನುಭವಿ ಐಡಿ: {beneficiary_id}. "
-                "ದಯವಿಟ್ಟು ದೃಢೀಕರಿಸಿ, ಇದು ಸರಿಯಾದ ಫಲಾನುಭವಿಯೇ? ಹೌದು ಅಥವಾ ಇಲ್ಲ ಎಂದು ಹೇಳಿ."
-            )
-        if lang == "ta-IN":
-            return (
+                f"ಫಲಾನುಭವಿ ಐಡಿ: {beneficiary_id}. ದಯವಿಟ್ಟು ದೃಢೀಕರಿಸಿ, ಇದು ಸರಿಯಾದ ಫಲಾನುಭವಿಯೇ? ಹೌದು ಅಥವಾ ಇಲ್ಲ ಎಂದು ಹೇಳಿ."
+            ),
+            "ta-IN": (
                 f"வணக்கம்! இன்று {beneficiary_name} அவர்களை சந்திக்கிறீர்களா? "
-                f"பயனாளி ஐடி: {beneficiary_id}. "
-                "தயவுசெய்து உறுதிப்படுத்தவும், இது சரியான பயனாளியா? ஆம் அல்லது இல்லை என்று சொல்லுங்கள்."
-            )
-        return (
-            f"Namaste! Are you visiting {beneficiary_name} today? "
-            f"Beneficiary ID: {beneficiary_id}. "
-            "Please confirm. Is this the correct beneficiary? Say yes or no."
+                f"பயனாளி ஐடி: {beneficiary_id}. தயவுசெய்து உறுதிப்படுத்தவும், இது சரியான பயனாளியா? ஆம் அல்லது இல்லை என்று சொல்லுங்கள்."
+            ),
+            "te-IN": (
+                f"నమస్కారం! మీరు ఈరోజు {beneficiary_name} గారిని కలుస్తున్నారా? "
+                f"లబ్ధిదారు ఐడి: {beneficiary_id}. దయచేసి నిర్ధారించండి, అవును లేదా కాదు అని చెప్పండి."
+            ),
+            "ml-IN": (
+                f"നമസ്കാരം! നിങ്ങൾ ഇന്ന് {beneficiary_name} യെ സന്ദർശിക്കുകയാണോ? "
+                f"ഗുണഭോക്തൃ ഐഡി: {beneficiary_id}. ഇത് ശരിയാണോ? അതെ അല്ലെങ്കിൽ അല്ല എന്ന് പറയുക."
+            ),
+            "bn-IN": (
+                f"নমস্কার! আপনি কি আজ {beneficiary_name}-এর সাথে দেখা করছেন? "
+                f"সুবিধাভোগী আইডি: {beneficiary_id}। অনুগ্রহ করে নিশ্চিত করুন, হ্যাঁ বা না বলুন।"
+            ),
+            "mr-IN": (
+                f"नमस्कार! तुम्ही आज {beneficiary_name} यांना भेटत आहात का? "
+                f"लाभार्थी आयडी: {beneficiary_id}. कृपया होय किंवा नाही सांगा."
+            ),
+            "gu-IN": (
+                f"નમસ્તે! શું તમે આજે {beneficiary_name} ની મુલાકાત લઈ રહ્યા છો? "
+                f"લાભાર્થી આઈડી: {beneficiary_id}. કૃપા કરીને હા અથવા ના કહો."
+            ),
+            "pa-IN": (
+                f"ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ! ਕੀ ਤੁਸੀਂ ਅੱਜ {beneficiary_name} ਨੂੰ ਮਿਲਣ ਜਾ ਰਹੇ ਹੋ? "
+                f"ਲਾਭਪਾਤਰੀ ਆਈਡੀ: {beneficiary_id}। ਕਿਰਪਾ ਕਰਕੇ ਹਾਂ ਜਾਂ ਨਹੀਂ ਕਹੋ।"
+            ),
+        }
+        return with_ben.get(
+            lang,
+            (
+                f"Namaste! Are you visiting {beneficiary_name} today? "
+                f"Beneficiary ID: {beneficiary_id}. "
+                "Please confirm. Is this the correct beneficiary? Say yes or no."
+            ),
         )
 
-    if lang == "hi-IN":
-        return "नमस्ते! कृपया आज की विज़िट के लिए लाभार्थी का नाम या लाभार्थी आईडी बताएं।"
-    if lang == "kn-IN":
-        return "ನಮಸ್ಕಾರ! ಇಂದಿನ ಭೇಟಿಗಾಗಿ ದಯವಿಟ್ಟು ಫಲಾನುಭವಿಯ ಹೆಸರು ಅಥವಾ ಫಲಾನುಭವಿ ಐಡಿ ತಿಳಿಸಿ."
-    if lang == "ta-IN":
-        return "வணக்கம்! இன்றைய பார்வைக்காக பயனாளியின் பெயர் அல்லது பயனாளி ஐடியைக் கூறுங்கள்."
-    return "Namaste! Please tell me the beneficiary's name or beneficiary ID for today's visit."
+    no_ben: dict[str, str] = {
+        "hi-IN": "नमस्ते! कृपया आज की विज़िट के लिए लाभार्थी का नाम या लाभार्थी आईडी बताएं।",
+        "kn-IN": "ನಮಸ್ಕಾರ! ಇಂದಿನ ಭೇಟಿಗಾಗಿ ದಯವಿಟ್ಟು ಫಲಾನುಭವಿಯ ಹೆಸರು ಅಥವಾ ಫಲಾನುಭವಿ ಐಡಿ ತಿಳಿಸಿ.",
+        "ta-IN": "வணக்கம்! இன்றைய பார்வைக்காக பயனாளியின் பெயர் அல்லது பயனாளி ஐடியைக் கூறுங்கள்.",
+        "te-IN": "నమస్కారం! ఈరోజు విజిట్ కోసం లబ్ధిదారు పేరు లేదా ఐడి చెప్పండి.",
+        "ml-IN": "നമസ്കാരം! ഇന്നത്തെ സന്ദർശനത്തിനായി ഗുണഭോക്താവിന്റെ പേര് അല്ലെങ്കിൽ ഐഡി പറയുക.",
+        "bn-IN": "নমস্কার! আজকের ভিজিটের জন্য অনুগ্রহ করে সুবিধাভোগীর নাম বা আইডি বলুন।",
+        "mr-IN": "नमस्कार! आजच्या भेटीसाठी कृपया लाभार्थ्याचे नाव किंवा आयडी सांगा.",
+        "gu-IN": "નમસ્તે! આજની મુલાકાત માટે કૃપા કરીને લાભાર્થીનું નામ અથવા આઈડી કહો.",
+        "pa-IN": "ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ! ਅੱਜ ਦੀ ਵਿਜ਼ਿਟ ਲਈ ਕਿਰਪਾ ਕਰਕੇ ਲਾਭਪਾਤਰੀ ਦਾ ਨਾਮ ਜਾਂ ਆਈਡੀ ਦੱਸੋ।",
+    }
+    return no_ben.get(
+        lang,
+        "Namaste! Please tell me the beneficiary's name or beneficiary ID for today's visit.",
+    )
 
 
 def generate_identity_confirmed_text(beneficiary_name: str, language: str) -> str:
     """Scenario A: Short acknowledgement after beneficiary identity is confirmed."""
     lang = normalize_language(language)
-    if lang == "hi-IN":
-        return (
+    msgs: dict[str, str] = {
+        "hi-IN": (
             f"धन्यवाद। {beneficiary_name} कन्फर्म हो गई हैं। "
             "कृपया आज की विज़िट के बारे में बताएं। आप अपनी भाषा में सामान्य रूप से बोल सकती हैं।"
-        )
-    if lang == "kn-IN":
-        return (
+        ),
+        "kn-IN": (
             f"ಧನ್ಯವಾದಗಳು. {beneficiary_name} ದೃಢೀಕರಿಸಲಾಗಿದೆ. "
             "ದಯವಿಟ್ಟು ಇಂದಿನ ಭೇಟಿಯ ಬಗ್ಗೆ ತಿಳಿಸಿ. ನಿಮ್ಮ ಭಾಷೆಯಲ್ಲಿ ಸಹಜವಾಗಿ ಮಾತನಾಡಬಹುದು."
-        )
-    if lang == "ta-IN":
-        return (
+        ),
+        "ta-IN": (
             f"நன்றி. {beneficiary_name} உறுதிப்படுத்தப்பட்டது. "
             "தயவுசெய்து இன்றைய பார்வையைப் பற்றி கூறுங்கள். உங்கள் மொழியில் இயல்பாகப் பேசலாம்."
-        )
-    return (
-        f"Thank you. {beneficiary_name} is confirmed. "
-        "Please tell me about today's visit. You can speak naturally in your language."
+        ),
+        "te-IN": (
+            f"ధన్యవాదాలు. {beneficiary_name} నిర్ధారించబడింది. "
+            "దయచేసి ఈరోజు విజిట్ గురించి మీ భాషలో సహజంగా చెప్పండి."
+        ),
+        "ml-IN": (
+            f"നന്ദി. {beneficiary_name} സ്ഥിരീകരിച്ചു. "
+            "ഇന്നത്തെ സന്ദർശനത്തെക്കുറിച്ച് നിങ്ങളുടെ ഭാഷയിൽ സ്വാഭാവികമായി സംസാരിക്കാം."
+        ),
+        "bn-IN": (
+            f"ধন্যবাদ। {beneficiary_name} নিশ্চিত হয়েছেন। "
+            "অনুগ্রহ করে আজকের ভিজিট সম্পর্কে আপনার ভাষায় স্বাভাবিকভাবে বলুন।"
+        ),
+        "mr-IN": (
+            f"धन्यवाद। {beneficiary_name} निश्चित झाले आहेत। "
+            "कृपया आजच्या भेटीबद्दल तुमच्या भाषेत सहज बोला."
+        ),
+        "gu-IN": (
+            f"આભાર. {beneficiary_name} ની પુષ્ટિ થઈ છે. "
+            "કૃપા કરીને આજની મુલાકાત વિશે તમારી ભાષામાં સહજતાથી જણાવો."
+        ),
+        "pa-IN": (
+            f"ਧੰਨਵਾਦ। {beneficiary_name} ਦੀ ਪੁਸ਼ਟੀ ਹੋ ਗਈ ਹੈ। "
+            "ਕਿਰਪਾ ਕਰਕੇ ਅੱਜ ਦੀ ਵਿਜ਼ਿਟ ਬਾਰੇ ਆਪਣੀ ਭਾਸ਼ਾ ਵਿੱਚ ਆਰਾਮ ਨਾਲ ਦੱਸੋ।"
+        ),
+    }
+    return msgs.get(
+        lang,
+        (
+            f"Thank you. {beneficiary_name} is confirmed. "
+            "Please tell me about today's visit. You can speak naturally in your language."
+        ),
     )
 
 
@@ -625,6 +717,30 @@ _URGENT_REFERRAL_MESSAGES: dict[str, str] = {
         "தயவுசெய்து பயனாளியை உடனடியாக அருகிலுள்ள ஆரம்ப சுகாதார நிலையத்திற்கு அனுப்பவும். "
         "தாமதிக்க வேண்டாம்."
     ),
+    "te-IN": (
+        "అత్యవసర హెచ్చరిక! ప్రమాద సంకేతం గుర్తించబడింది. "
+        "దయచేసి లబ్ధిదారుని వెంటనే సమీపంలోని ప్రాథమిక ఆరోగ్య కేంద్రానికి (PHC) తీసుకెళ్లండి."
+    ),
+    "ml-IN": (
+        "അടിയന്തര മുന്നറിയിപ്പ്! അപകട ലക്ഷണം കണ്ടെത്തി. "
+        "ദയവായി ഗുണഭോക്താവിനെ ഉടൻ അടുത്തുള്ള പ്രാഥമിക ആരോഗ്യ കേന്ദ്രത്തിലേക്ക് (PHC) മാറ്റുക."
+    ),
+    "bn-IN": (
+        "জরুরি সতর্কতা! বিপদের লক্ষণ শনাক্ত হয়েছে। "
+        "অনুগ্রহ করে রোগীকে অবিলম্বে নিকটস্থ পিএইচসি (PHC)-তে রেফার করুন। দেরি করবেন না।"
+    ),
+    "mr-IN": (
+        "तातडीची सूचना! धोक्याचे लक्षण आढळले आहे. "
+        "कृपया लाभार्थ्याला ताबडतोब जवळच्या प्राथमिक आरोग्य केंद्रात (PHC) न्या. उशीर करू नका."
+    ),
+    "gu-IN": (
+        "તાત્કાલિક ચેતવણી! જોખમનું ચિહ્ન જણાયું છે. "
+        "કૃપા કરીને લાભાર્થીને તાત્કાલિક નજીકના પીએચસી (PHC) માં મોકલો. વિલંબ કરશો નહીં."
+    ),
+    "pa-IN": (
+        "ਤੁਰੰਤ ਚੇਤਾਵਨੀ! ਖ਼ਤਰੇ ਦਾ ਸੰਕੇਤ ਮਿਲਿਆ ਹੈ। "
+        "ਕਿਰਪਾ ਕਰਕੇ ਲਾਭਪਾਤਰੀ ਨੂੰ ਤੁਰੰਤ ਨਜ਼ਦੀਕੀ ਪੀ.ਐਚ.ਸੀ. (PHC) ਭੇਜੋ। ਦੇਰੀ ਨਾ ਕਰੋ।"
+    ),
 }
 
 _CONFIRMATION_PENDING_MESSAGES: dict[str, str] = {
@@ -632,6 +748,12 @@ _CONFIRMATION_PENDING_MESSAGES: dict[str, str] = {
     "hi-IN": "रिकॉर्ड कन्फर्म हो गया है। अब विज़िट रिकॉर्ड सेव किया जा रहा है।",
     "kn-IN": "ದಾಖಲೆ ದೃಢೀಕರಿಸಲಾಗಿದೆ. ಈಗ ಭೇಟಿಯ ದಾಖಲೆಯನ್ನು ಉಳಿಸಲಾಗುತ್ತಿದೆ.",
     "ta-IN": "பதிவு உறுதிப்படுத்தப்பட்டது. இப்போது பார்வை பதிவு சேமிக்கப்படுகிறது.",
+    "te-IN": "రికార్డు నిర్ధారించబడింది. ఇప్పుడు విజిట్ రికార్డును సేవ్ చేస్తున్నాము.",
+    "ml-IN": "രേഖ സ്ഥിരീകരിച്ചു. ഇപ്പോൾ സന്ദർശന രേഖ സംരക്ഷിക്കുന്നു.",
+    "bn-IN": "রেকর্ড নিশ্চিত হয়েছে। এখন ভিজিট রেকর্ড সংরক্ষণ করা হচ্ছে।",
+    "mr-IN": "नोंद निश्चित झाली आहे. आता भेट नोंद जतन केली जात आहे.",
+    "gu-IN": "રેકોર્ડની પુષ્ટિ થઈ છે. હવે મુલાકાત રેકોર્ડ સાચવવામાં આવી રહ્યો છે.",
+    "pa-IN": "ਰਿਕਾਰਡ ਦੀ ਪੁਸ਼ਟੀ ਹੋ ਗਈ ਹੈ। ਹੁਣ ਵਿਜ਼ਿਟ ਰਿਕਾਰਡ ਸੇਵ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ।",
 }
 
 _COMMITTED_MESSAGES: dict[str, str] = {
@@ -639,6 +761,12 @@ _COMMITTED_MESSAGES: dict[str, str] = {
     "hi-IN": "आपकी विज़िट सफलतापूर्वक सेव हो गई है। धन्यवाद।",
     "kn-IN": "ನಿಮ್ಮ ಭೇಟಿಯನ್ನು ಯಶಸ್ವಿಯಾಗಿ ಉಳಿಸಲಾಗಿದೆ. ಧನ್ಯವಾದಗಳು.",
     "ta-IN": "உங்கள் பார்வை வெற்றிகரமாக சேமிக்கப்பட்டது. நன்றி.",
+    "te-IN": "మీ విజిట్ విజయవంతంగా సేవ్ చేయబడింది. ధన్యవాదాలు.",
+    "ml-IN": "നിങ്ങളുടെ സന്ദർശനം വിജയകരമായി സംരക്ഷിച്ചു. നന്ദി.",
+    "bn-IN": "আপনার ভিজিট সফলভাবে সংরক্ষিত হয়েছে। ধন্যবাদ।",
+    "mr-IN": "तुमची भेट यशस्वीरित्या जतन झाली आहे. धन्यवाद.",
+    "gu-IN": "તમારી મુલાકાત સફળતાપૂર્વક સાચવાઈ ગઈ છે. આભાર.",
+    "pa-IN": "ਤੁਹਾਡੀ ਵਿਜ਼ਿਟ ਸਫਲਤਾਪੂਰਵਕ ਸੇਵ ਹੋ ਗਈ ਹੈ। ਧੰਨਵਾਦ।",
 }
 
 _PERSISTENCE_FAILED_MESSAGES: dict[str, str] = {
@@ -719,7 +847,7 @@ def generate_urgent_referral_text(language: str, alert: DangerAlertInput | None 
     lang = normalize_language(language)
     if alert is not None and alert.escalation_message and alert.escalation_message.strip():
         return alert.escalation_message.strip()
-    return _URGENT_REFERRAL_MESSAGES[lang]
+    return _URGENT_REFERRAL_MESSAGES.get(lang, _URGENT_REFERRAL_MESSAGES["en-IN"])
 
 
 def generate_read_back_text(visit: VisitRecordState, language: str) -> str:
@@ -841,7 +969,7 @@ def generate_clarification_text(
 ) -> str:
     """Generate a concise localized prompt asking ONLY for missing/ambiguous fields."""
     lang = normalize_language(language)
-    templates = _CLARIFICATION_TEMPLATES[lang]
+    templates = _CLARIFICATION_TEMPLATES.get(lang, _CLARIFICATION_TEMPLATES["en-IN"])
     prompts: list[str] = []
 
     for req in clarifications:
@@ -2065,7 +2193,9 @@ class ConversationStateMachine:
                     },
                 )
             )
-            spoken = _CONFIRMATION_PENDING_MESSAGES[self.active_language]
+            spoken = _CONFIRMATION_PENDING_MESSAGES.get(
+                self.active_language, _CONFIRMATION_PENDING_MESSAGES["en-IN"]
+            )
             actions.append(
                 StateMachineAction(
                     action_type=ActionType.SPEAK,
@@ -2088,7 +2218,9 @@ class ConversationStateMachine:
                 "worker_rejected_without_field",
                 actions,
             )
-            spoken = _REJECT_WITHOUT_FIELD_MESSAGES[self.active_language]
+            spoken = _REJECT_WITHOUT_FIELD_MESSAGES.get(
+                self.active_language, _REJECT_WITHOUT_FIELD_MESSAGES["en-IN"]
+            )
             actions.append(
                 StateMachineAction(
                     action_type=ActionType.CLARIFICATION_PROMPT,
@@ -2115,7 +2247,9 @@ class ConversationStateMachine:
             )
 
         # 5. Unclear response -> never confirm; re-prompt politely
-        spoken = _UNCLEAR_CONFIRMATION_MESSAGES[self.active_language]
+        spoken = _UNCLEAR_CONFIRMATION_MESSAGES.get(
+            self.active_language, _UNCLEAR_CONFIRMATION_MESSAGES["en-IN"]
+        )
         actions.append(
             StateMachineAction(
                 action_type=ActionType.SPEAK,
@@ -2171,7 +2305,9 @@ class ConversationStateMachine:
                     },
                 )
             )
-            spoken = _COMMITTED_MESSAGES[self.active_language]
+            spoken = _COMMITTED_MESSAGES.get(
+                self.active_language, _COMMITTED_MESSAGES["en-IN"]
+            )
             actions.append(
                 StateMachineAction(
                     action_type=ActionType.SPEAK,
@@ -2199,7 +2335,9 @@ class ConversationStateMachine:
                 },
             )
         )
-        spoken = _PERSISTENCE_FAILED_MESSAGES[self.active_language]
+        spoken = _PERSISTENCE_FAILED_MESSAGES.get(
+            self.active_language, _PERSISTENCE_FAILED_MESSAGES["en-IN"]
+        )
         actions.append(
             StateMachineAction(
                 action_type=ActionType.SPEAK,
@@ -2851,7 +2989,9 @@ class ConversationStateMachine:
                     },
                 )
             )
-            spoken = _CONFIRMATION_PENDING_MESSAGES[self.active_language]
+            spoken = _CONFIRMATION_PENDING_MESSAGES.get(
+                self.active_language, _CONFIRMATION_PENDING_MESSAGES["en-IN"]
+            )
             actions.append(
                 StateMachineAction(
                     action_type=ActionType.SPEAK,

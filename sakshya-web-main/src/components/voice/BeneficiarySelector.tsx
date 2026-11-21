@@ -50,15 +50,15 @@ export const BeneficiarySelector: React.FC<BeneficiarySelectorProps> = ({
   const formatCategory = (cat: Beneficiary['category']): string => {
     switch (cat) {
       case 'PREGNANT_WOMAN':
-        return 'ANC Beneficiary';
+        return ui.categoryAncBeneficiary;
       case 'LACTATING_MOTHER':
-        return 'PNC Mother';
+        return ui.categoryPncMother;
       case 'INFANT':
-        return 'Newborn / Infant';
+        return ui.categoryNewbornInfant;
       case 'CHILD':
-        return 'Child';
+        return ui.categoryChild;
       default:
-        return 'Beneficiary';
+        return ui.categoryBeneficiary;
     }
   };
 
@@ -97,7 +97,7 @@ export const BeneficiarySelector: React.FC<BeneficiarySelectorProps> = ({
         >
           <p className="text-xs font-bold flex items-center gap-1.5">
             <AlertCircle className="h-4 w-4 text-amber-700 shrink-0" aria-hidden="true" />
-            <span>Multiple matching beneficiaries found — please tap or speak who you mean:</span>
+            <span>{ui.multipleBeneficiaryMatch}</span>
           </p>
           <div className="mt-2.5 flex flex-wrap gap-2">
             {ambiguousCandidates.map((cand) => (
@@ -159,7 +159,7 @@ export const BeneficiarySelector: React.FC<BeneficiarySelectorProps> = ({
               disabled={disabled}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search beneficiary name, BEN-ID, or ward..."
+              placeholder={ui.searchDirectoryPlaceholder}
               className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-clinical-border bg-slate-50 focus:bg-white text-sm"
             />
           </div>
@@ -169,7 +169,7 @@ export const BeneficiarySelector: React.FC<BeneficiarySelectorProps> = ({
             <div>
               <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1">
                 <Users className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>Quick Select / Recent</span>
+                <span>{ui.quickSelectRecent}</span>
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {recentList.map((ben) => (

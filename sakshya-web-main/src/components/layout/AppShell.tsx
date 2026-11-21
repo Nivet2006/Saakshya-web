@@ -181,7 +181,7 @@ export const AppShell: React.FC<AppShellProps> = ({
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="font-bold text-clinical-text text-sm sm:text-base truncate">
-                  {t.appName}
+                  {ui.appName}
                 </span>
                 <span
                   className={`hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
@@ -271,7 +271,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                     {l.nativeName} ({l.name})
                   </option>
                 ))}
-                <option value="indic-auto">Auto-Indic</option>
+                <option value="indic-auto">{ui.autoDetectIndic}</option>
               </select>
             </div>
 
@@ -279,8 +279,8 @@ export const AppShell: React.FC<AppShellProps> = ({
               type="button"
               onClick={onSignOut}
               className="p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-              aria-label="Sign out"
-              title="Sign out / Switch User"
+              aria-label={ui.signOut}
+              title={ui.signOut}
             >
               <LogOut className="h-4 w-4" aria-hidden="true" />
             </button>
@@ -429,7 +429,7 @@ export const AppShell: React.FC<AppShellProps> = ({
             {backendHealthy === false && (
               <p className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800">
                 <WifiOff className="h-3 w-3" aria-hidden="true" />
-                <span>Offline drafts available</span>
+                <span>{ui.offlineDraftsBanner}</span>
               </p>
             )}
           </div>

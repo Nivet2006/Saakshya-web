@@ -228,6 +228,11 @@ export class BrowserVoiceClient {
     if (!active) {
       this.pendingPcmSamples = [];
     }
+    try {
+      this.workletNode?.port.postMessage({ type: 'set_active', active });
+    } catch {
+      // ignore if worklet already closed
+    }
   }
 
   /** Starts a full Agent 1 voice session: POST /api/v1/sessions -> WS /ws/voice/{session_id}. */
@@ -257,6 +262,16 @@ export class BrowserVoiceClient {
     this.callbacks.onStateChange('connecting');
 
     // 1. Acquire microphone permission
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      this.callbacks.onStateChange('error');
+      this.callbacks.onError(
+        'MICROPHONE_UNAVAILABLE',
+        'Microphone capture requires HTTPS or http://localhost in this browser.',
+        false
+      );
+      return null;
+    }
+
     try {
       const audioConstraints: MediaTrackConstraints = {
         channelCount: 1,
@@ -464,29 +479,36 @@ export class BrowserVoiceClient {
 
     if (this.captureContext.audioWorklet) {
       try {
-        await this.captureContext.audioWorklet.addModule('/audio-capture-worklet.js');
+        await this.captureContext.audioWorklet.addModule('/audio-capture-worklet.js?v=2');
         if (!this.captureContext || this.isClosing) return;
         this.workletNode = new AudioWorkletNode(
           this.captureContext,
           'sakshya-capture-processor',
           { numberOfInputs: 1, numberOfOutputs: 0, channelCount: 1 }
         );
+        this.workletNode.port.postMessage({ type: 'set_active', active: this.isMicStreaming });
         this.workletNode.port.onmessage = (ev: MessageEvent) => {
           const payload = ev.data as {
             pcmBuffer?: ArrayBuffer;
+            buffer?: ArrayBuffer;
             rms?: number;
             clippedSamples?: number;
+            clipped?: number;
           };
-          if (!payload?.pcmBuffer) return;
+          const pcmBuf = payload?.pcmBuffer ?? payload?.buffer;
+          if (!pcmBuf) return;
           if (!this.isMicStreaming) return;
           if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
             this.audioDiag.droppedFrames += 1;
             return;
           }
-          handleFrameStats(Number(payload.rms || 0), Number(payload.clippedSamples || 0));
-          this.ws.send(payload.pcmBuffer);
+          handleFrameStats(
+            Number(payload.rms || 0),
+            Number(payload.clippedSamples ?? payload.clipped ?? 0)
+          );
+          this.ws.send(pcmBuf);
           this.audioDiag.framesSent += 1;
-          this.audioDiag.bytesSent += payload.pcmBuffer.byteLength;
+          this.audioDiag.bytesSent += pcmBuf.byteLength;
           if (this.audioDiag.framesSent % 20 === 0) {
             this.callbacks.onAudioDiagnostics?.({ ...this.audioDiag });
           }
@@ -767,6 +789,9 @@ export class BrowserVoiceClient {
   private enqueuePcmPlayback(base64: string, sampleRate: number, turnId?: number): void {
     if (!base64 || !this.playbackContext) return;
     try {
+      if (this.playbackContext.state === 'suspended' && !this.isPlaybackPaused) {
+        void this.playbackContext.resume().catch(() => {});
+      }
       const floatSamples = decodePcmS16LeBase64(base64);
       if (floatSamples.length === 0) return;
 

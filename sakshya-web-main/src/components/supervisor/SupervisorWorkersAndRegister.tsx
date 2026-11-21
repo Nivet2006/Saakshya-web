@@ -73,7 +73,7 @@ export const AshaWorkerManagementView: React.FC<{
                         : 'bg-slate-100 text-slate-600'
                     }`}
                   >
-                    {row.worker.is_online ? 'Online' : 'Offline'}
+                    {row.worker.is_online ? ui.online : ui.offline}
                   </span>
                 </div>
 
@@ -92,25 +92,25 @@ export const AshaWorkerManagementView: React.FC<{
 
                 <dl className="mt-4 grid grid-cols-2 gap-2 text-xs">
                   <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
-                    <dt className="text-slate-500">Households</dt>
+                    <dt className="text-slate-500">{ui.householdsLabel}</dt>
                     <dd className="text-base font-bold tabular-nums text-clinical-text">
                       {row.assignedBeneficiaries}
                     </dd>
                   </div>
                   <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
-                    <dt className="text-slate-500">Visits Logged</dt>
+                    <dt className="text-slate-500">{ui.visitsLoggedLabel}</dt>
                     <dd className="text-base font-bold tabular-nums text-clinical-primary">
                       {row.completedVisits}
                     </dd>
                   </div>
                   <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
-                    <dt className="text-slate-500">Pending Tasks</dt>
+                    <dt className="text-slate-500">{ui.pendingTasksLabel}</dt>
                     <dd className="text-base font-bold tabular-nums text-amber-700">
                       {row.pendingFollowUps}
                     </dd>
                   </div>
                   <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
-                    <dt className="text-slate-500">Active Alerts</dt>
+                    <dt className="text-slate-500">{ui.activeAlertsLabel}</dt>
                     <dd
                       className={`text-base font-bold tabular-nums ${
                         row.activeAlerts > 0 ? 'text-clinical-danger' : 'text-slate-700'
@@ -127,7 +127,7 @@ export const AshaWorkerManagementView: React.FC<{
                 onClick={() => setSelectedWorker(row)}
                 className="w-full py-2.5 px-3 rounded-xl border border-slate-300 hover:bg-slate-50 text-xs font-bold text-clinical-text"
               >
-                View Worker Activity
+                {ui.viewWorkerActivity}
               </button>
             </article>
           ))}
@@ -239,14 +239,14 @@ export const SupervisorVisitRegisterView: React.FC<{
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Beneficiary name or BEN-ID..."
+            placeholder={ui.searchBeneficiariesPlaceholder}
             className="w-full pl-9 pr-3 py-2 rounded-xl border border-clinical-border text-xs bg-slate-50"
           />
         </div>
 
         <div>
           <label htmlFor="reg-type-filter" className="sr-only">
-            Filter by visit type
+            {ui.allVisitTypesFilter}
           </label>
           <select
             id="reg-type-filter"
@@ -254,7 +254,7 @@ export const SupervisorVisitRegisterView: React.FC<{
             onChange={(e) => setVisitTypeFilter(e.target.value)}
             className="w-full px-3 py-2 rounded-xl border border-clinical-border text-xs font-semibold bg-slate-50"
           >
-            <option value="ALL">All Visit Types</option>
+            <option value="ALL">{ui.allVisitTypesFilter}</option>
             <option value="ANC">ANC</option>
             <option value="PNC">PNC</option>
             <option value="Newborn">Newborn</option>
@@ -264,7 +264,7 @@ export const SupervisorVisitRegisterView: React.FC<{
 
         <div>
           <label htmlFor="reg-worker-filter" className="sr-only">
-            Filter by ASHA worker
+            {ui.allWorkersFilter}
           </label>
           <select
             id="reg-worker-filter"
@@ -272,7 +272,7 @@ export const SupervisorVisitRegisterView: React.FC<{
             onChange={(e) => setWorkerFilter(e.target.value)}
             className="w-full px-3 py-2 rounded-xl border border-clinical-border text-xs font-semibold bg-slate-50"
           >
-            <option value="ALL">All ASHA Workers</option>
+            <option value="ALL">{ui.allWorkersFilter}</option>
             {workers.map((w) => (
               <option key={w.worker.id} value={w.worker.id}>
                 {w.worker.full_name}
@@ -288,14 +288,14 @@ export const SupervisorVisitRegisterView: React.FC<{
             onChange={(e) => setDangerOnly(e.target.checked)}
             className="rounded border-slate-300 text-clinical-danger"
           />
-          <span>Danger Sign Flagged Only</span>
+          <span>{ui.dangerFlaggedOnly}</span>
         </label>
       </div>
 
       {filtered.length === 0 ? (
         <EmptyState
-          title="No visits match selected filters"
-          description="Adjust your search or visit-type filters to view field records."
+          title={ui.noSavedVisitsYet}
+          description={ui.noSavedVisitsDesc}
           icon={<ClipboardList className="h-5 w-5" />}
         />
       ) : (
@@ -307,18 +307,18 @@ export const SupervisorVisitRegisterView: React.FC<{
         >
           <table className="responsive-clinical-table w-full text-left text-xs border-collapse">
             <caption id="sup-register-caption" className="sr-only">
-              PHC Supervisor Field Visit Register
+              {ui.fieldRegister}
             </caption>
             <thead className="bg-slate-50 border-b border-slate-200 font-bold text-slate-600">
               <tr>
-                <th scope="col" className="p-3.5">Date</th>
-                <th scope="col" className="p-3.5">Beneficiary</th>
-                <th scope="col" className="p-3.5">ASHA Worker</th>
-                <th scope="col" className="p-3.5">Type</th>
-                <th scope="col" className="p-3.5">Weight</th>
-                <th scope="col" className="p-3.5">Danger Sign</th>
-                <th scope="col" className="p-3.5">Next Visit</th>
-                <th scope="col" className="p-3.5">Status</th>
+                <th scope="col" className="p-3.5">{ui.colDate}</th>
+                <th scope="col" className="p-3.5">{ui.colBeneficiary}</th>
+                <th scope="col" className="p-3.5">{ui.ashaWorkerCol}</th>
+                <th scope="col" className="p-3.5">{ui.colType}</th>
+                <th scope="col" className="p-3.5">{ui.colWeight}</th>
+                <th scope="col" className="p-3.5">{ui.colDangerSign}</th>
+                <th scope="col" className="p-3.5">{ui.nextVisitCol}</th>
+                <th scope="col" className="p-3.5">{ui.colStatus}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">

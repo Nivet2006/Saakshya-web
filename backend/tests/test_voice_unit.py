@@ -291,3 +291,73 @@ def test_rest_health_and_synthetic_beneficiaries() -> None:
     assert r_sess.status_code == 200
     assert r_sess.json()["websocket_path"].startswith("/ws/voice/")
 
+
+def test_all_ten_indic_languages_supported_without_fallback_or_keyerror() -> None:
+    from app.conversation.models import SUPPORTED_LANGUAGES, normalize_language
+    from app.conversation.state_machine import generate_beneficiary_greeting_text
+    from app.danger_signs.detector import get_referral_message
+
+    expected = {"hi-IN", "en-IN", "kn-IN", "ta-IN", "te-IN", "ml-IN", "bn-IN", "mr-IN", "gu-IN", "pa-IN"}
+    assert expected.issubset(set(SUPPORTED_LANGUAGES))
+    for lang in expected:
+        assert normalize_language(lang) == lang
+        assert normalize_language(lang.split("-")[0]) == lang
+        greeting = generate_beneficiary_greeting_text("Lakshmi Devi", "BEN-1042", lang)
+        referral = get_referral_message(lang)
+        assert isinstance(greeting, str) and len(greeting) > 5
+        assert isinstance(referral, str) and len(referral) > 5
+
+
+@pytest.mark.asyncio
+async def test_language_lock_preserves_selected_tamil_on_english_codemix() -> None:
+    from app.healthcare.pipeline import HealthcareSessionPipeline
+
+    emitted: list[dict[str, Any]] = []
+
+    async def emit(ev: dict[str, Any]) -> None:
+        emitted.append(ev)
+
+    stt = _MockSTT()
+    tts = _MockSlowTTS()
+    llm = _MockLLM()
+    vad = _TriggerOnCommandVAD()
+
+    pipeline = HealthcareSessionPipeline(session_id="lang_lock_1", language="ta-IN", beneficiary_id="BEN-1042")
+    pipeline.set_preferred_language("ta-IN", fallback="ta-IN")
+
+    orch = VoiceSessionOrchestrator(
+        session_id="lang_lock_1",
+        stt=stt,
+        tts=tts,
+        llm=llm,
+        vad=vad,
+        emit=emit,
+        default_language="ta-IN",
+        language_locked=True,
+        on_partial_hook=pipeline.on_partial_transcript,
+        on_final_hook=pipeline.on_final_transcript,
+    )
+    pipeline.attach_orchestrator(orch)
+    orch._turn_debounce_s = 0.02
+    await orch.start()
+
+    # Code-mixed English numbers/phrases when user explicitly selected Tamil
+    await stt.queue.put(
+        TranscriptEvent(
+            event_type="final",
+            text="Baby weight 2.8 kg next visit 28 November",
+            is_final=True,
+            language_code="en-IN",
+        )
+    )
+    for _ in range(50):
+        await asyncio.sleep(0.02)
+        if any(e.get("type") in {"final_transcript", "assistant_response", "visit_draft_updated"} for e in emitted):
+            break
+
+    assert orch.active_language == "ta-IN"
+    assert pipeline.sm.active_language == "ta-IN"
+    finals = [e for e in emitted if e.get("type") == "final_transcript"]
+    assert finals and finals[0]["language"] == "ta-IN"
+    await orch.close()
+

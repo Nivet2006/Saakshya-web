@@ -221,6 +221,12 @@ export function useVoiceVisitSession(params: {
   }, []);
 
   useEffect(() => {
+    if (isConnected && clientRef.current?.isConnected()) {
+      clientRef.current.setLanguage(language);
+    }
+  }, [language, isConnected]);
+
+  useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       clientRef.current?.stopSession();
@@ -672,8 +678,8 @@ export function useVoiceVisitSession(params: {
 
   const sendClarificationSelection = useCallback((candidate: ClarificationCandidateV1) => {
     setClarification(null);
-    clientRef.current?.sendTextInput(candidate.id);
-  }, []);
+    clientRef.current?.sendTextInput(candidate.id, language);
+  }, [language]);
 
   const startVoiceCorrection = useCallback((fieldKey?: string) => {
     setIsCorrectingMode(true);

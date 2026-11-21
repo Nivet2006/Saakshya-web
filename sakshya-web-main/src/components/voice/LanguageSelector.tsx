@@ -54,7 +54,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
                 {l.nativeName} ({l.name})
               </option>
             ))}
-            <option value="indic-auto">Auto-Detect Indic (Mixed)</option>
+            <option value="indic-auto">{ui.autoDetectIndic}</option>
           </select>
         </div>
       </div>
@@ -63,7 +63,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
       <div className="mt-3 flex items-center gap-2 flex-wrap">
         {['hi-IN', 'kn-IN', 'ta-IN', 'te-IN', 'en-IN', 'indic-auto'].map((code) => {
           const info = PRISMA_LANGUAGES.find((l) => l.code === code);
-          const label = info ? info.nativeName : 'Auto-Indic';
+          const label = info ? info.nativeName : ui.autoDetectIndic;
           const active = selectedLanguage === code;
           return (
             <button

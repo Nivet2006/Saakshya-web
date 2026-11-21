@@ -303,6 +303,9 @@ class HealthcareSessionPipeline:
         self.session_id = session_id
         self.worker_id = worker_id
         self.language = normalize_language(language)
+        self._preferred_language: str | None = (
+            None if str(language).strip().lower() in ("auto", "indic-auto") else self.language
+        )
         self._directory = directory or SyntheticBeneficiaryDirectory()
         self._extractor = VisitFieldExtractor(beneficiary_directory=self._directory)
         self._reference_date = reference_date
@@ -347,6 +350,18 @@ class HealthcareSessionPipeline:
 
     def set_secondary_recognizer(self, recognizer: SecondarySpeechRecognizer | None) -> None:
         self._secondary_recognizer = recognizer
+
+    def set_preferred_language(self, language_code: str, *, fallback: str = "hi-IN") -> None:
+        """Lock or unlock response language based on explicit worker UI selection."""
+        cleaned = (language_code or "").strip()
+        if not cleaned or cleaned.lower() in ("auto", "indic-auto"):
+            self._preferred_language = None
+            eff = normalize_language(fallback)
+        else:
+            eff = normalize_language(cleaned)
+            self._preferred_language = eff
+        self.language = eff
+        self.sm.set_language(eff)
 
     async def _reconnect_stt_safely(self, stt: Any) -> None:
         try:
@@ -693,8 +708,15 @@ class HealthcareSessionPipeline:
     ) -> bool:
         """Process a final transcript through 1A (Danger) -> 1C (Extraction) -> 1B (State Machine)."""
         self._cancel_silence_timer()
-        raw_lang = event.language_code or orchestrator.active_language or self.language
-        lang = detect_language_from_text(event.text, fallback=raw_lang)
+        fallback_lang = self._preferred_language or event.language_code or orchestrator.active_language or self.language
+        detected = detect_language_from_text(event.text, fallback=fallback_lang)
+        # If the ASHA worker explicitly selected a language (e.g. ta-IN), do not flip
+        # the conversation to English merely because code-mixed ASCII/digits were transcribed.
+        has_indic_script = any(0x0900 <= ord(ch) <= 0x0D7F for ch in (event.text or ""))
+        if self._preferred_language and (not has_indic_script or detected == "en-IN"):
+            lang = self._preferred_language
+        else:
+            lang = detected
         self.sm.set_language(lang)
         self.language = lang
         orchestrator.active_language = lang
