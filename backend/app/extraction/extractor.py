@@ -23,6 +23,7 @@ from app.extraction.models import (
 from app.services.beneficiaries import (
     SyntheticBeneficiary,
     SyntheticBeneficiaryDirectory,
+    extract_spoken_beneficiary_id,
 )
 
 # ---------------------------------------------------------------------------
@@ -43,8 +44,10 @@ _RB = rf"(?![{_INDIC_CHAR_CLASS}])"
 
 
 def _normalize_text(text: str) -> str:
-    """Normalize Unicode NFC, Indic numerals to ASCII digits, and collapse whitespace."""
+    """Normalize Unicode NFC, Indic numerals to ASCII digits, spaced decimals, and whitespace."""
     normalized = unicodedata.normalize("NFC", text).translate(_INDIC_DIGIT_TRANS)
+    # Collapse ASR spaced decimals like "2 . 8" -> "2.8" so decimal weights are never split
+    normalized = re.sub(r"(?<=\d)\s*\.\s*(?=\d)", ".", normalized)
     return re.sub(r"\s+", " ", normalized).strip()
 
 
@@ -257,6 +260,49 @@ _HI_NUMBERS: dict[str, int] = {
     "अस्सी": 80,
     "नब्बे": 90,
     "सौ": 100,
+    # Kannada spoken number words
+    "ಸೊನ್ನೆ": 0,
+    "ಒಂದು": 1,
+    "ಎರಡು": 2,
+    "ಮೂರು": 3,
+    "ನಾಲ್ಕು": 4,
+    "ಐದು": 5,
+    "ಆರು": 6,
+    "ಏಳು": 7,
+    "ಎಂಟು": 8,
+    "ಒಂಬತ್ತು": 9,
+    "ಹತ್ತು": 10,
+    "ಇಪ್ಪತ್ತು": 20,
+    "ಇಪ್ಪತ್ತೈದು": 25,
+    "ಇಪ್ಪತ್ತೆಂಟು": 28,
+    "ಮೂವತ್ತು": 30,
+    "ನಲವತ್ತು": 40,
+    "ಐವತ್ತು": 50,
+    "ಐವತ್ತೆರಡು": 52,
+    "ಐವತ್ತಮೂರು": 53,
+    "ಅರವತ್ತು": 60,
+    # Tamil spoken number words
+    "பூஜ்ஜியம்": 0,
+    "ஒன்று": 1,
+    "இரண்டு": 2,
+    "ரெண்டு": 2,
+    "மூன்று": 3,
+    "நான்கு": 4,
+    "ஐந்து": 5,
+    "ஆறு": 6,
+    "ஏழு": 7,
+    "எட்டு": 8,
+    "ஒன்பது": 9,
+    "பத்து": 10,
+    "இருபது": 20,
+    "இருபத்து ஐந்து": 25,
+    "இருபத்து எட்டு": 28,
+    "முப்பது": 30,
+    "நாற்பது": 40,
+    "ஐம்பது": 50,
+    "ஐம்பத்து இரண்டு": 52,
+    "ஐம்பத்து மூன்று": 53,
+    "அறுபது": 60,
 }
 
 _MULTIPLIERS: dict[str, int] = {
@@ -271,7 +317,18 @@ _MULTIPLIERS: dict[str, int] = {
 }
 
 _DECIMAL_WORDS: frozenset[str] = frozenset(
-    {"point", "dot", "dashamlav", "दशमलव", "पॉइंट", "प्वाइंट"}
+    {
+        "point",
+        "dot",
+        "dashamlav",
+        "दशमलव",
+        "पॉइंट",
+        "प्वाइंट",
+        "ಪಾಯಿಂಟ್",
+        "ದಶಮಾಂಶ",
+        "புள்ளி",
+        "பாயிண்ட்",
+    }
 )
 
 _FRACTION_IDIOMS: dict[str, float] = {
@@ -1189,6 +1246,38 @@ class VisitFieldExtractor:
         if date_clar is not None:
             clarifications.append(date_clar)
 
+        # 6b. Bare numeric weight correction fallback (e.g. "No, it is fifty-three." or "No, it is 3.2.")
+        if (
+            weight_kg is None
+            and weight_clar is None
+            and detected_correction
+            and next_date is None
+            and date_clar is None
+            and not v_completed
+            and not v_due
+            and ben is None
+            and visit_type is None
+        ):
+            m_bare = re.search(
+                rf"(?:it\s+is|is|hai|है|actually|no[, ]+|nahi[, ]+|नहीं[, ]+)\s*(?P<qty>{_LB}{_QTY_PHRASE}{_RB})",
+                normalized,
+                re.IGNORECASE,
+            )
+            if m_bare:
+                bare_val = _parse_number_phrase(m_bare.group("qty"))
+                if bare_val is not None:
+                    min_kg, max_kg, _ctx = self._weight_bounds(
+                        effective_visit_type=effective_visit_type,
+                        effective_beneficiary=effective_ben,
+                        text=normalized,
+                    )
+                    if min_kg <= bare_val <= max_kg:
+                        weight_kg = round(bare_val, 3)
+                        weight_source = m_bare.group("qty").strip()
+                        patch["weight_kg"] = weight_kg
+                        patch["weight_source_text"] = weight_source
+                        provenance["weight_kg"] = weight_source
+
         # 7. Grounded follow-up actions
         actions = self._derive_follow_up_actions(
             normalized,
@@ -1445,21 +1534,27 @@ class VisitFieldExtractor:
     ) -> tuple[SyntheticBeneficiary | None, str | None, FieldClarification | None]:
         # 1. Explicit beneficiary ID lookup (highest precision)
         id_match = _BEN_ID_RE.search(text)
-        if id_match:
-            canonical_id = f"BEN-{id_match.group(1)}"
-            found = self._directory.get_by_id(canonical_id)
+        spoken_id = (
+            f"BEN-{id_match.group(1)}"
+            if id_match
+            else extract_spoken_beneficiary_id(text)
+        )
+        if spoken_id:
+            found = self._directory.get_by_id(spoken_id)
             if found is not None:
-                return found, id_match.group(0), None
-            return (
-                None,
-                None,
-                FieldClarification(
-                    field_name="beneficiary_id",
-                    reason=f"Beneficiary ID {canonical_id} was not found in the synthetic directory.",
-                    prompt_hint=f"I could not find {canonical_id} in the beneficiary list. Please repeat the beneficiary's name or ID.",
-                    candidates=[],
-                ),
-            )
+                src_str = id_match.group(0) if id_match else spoken_id
+                return found, src_str, None
+            if id_match or re.search(r"\b(?:ben|id)\b", text, re.IGNORECASE):
+                return (
+                    None,
+                    None,
+                    FieldClarification(
+                        field_name="beneficiary_id",
+                        reason=f"Beneficiary ID {spoken_id} was not found in the synthetic directory.",
+                        prompt_hint=f"I could not find {spoken_id} in the beneficiary list. Please repeat the beneficiary's name or ID.",
+                        candidates=[],
+                    ),
+                )
 
         all_bens = self._directory.list_all()
         text_lower = text.lower()

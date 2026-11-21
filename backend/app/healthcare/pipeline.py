@@ -60,7 +60,14 @@ _MATCH_TYPE_TO_CONTRACT: dict[str, str] = {
 
 _STATE_TO_WS_SESSION_STATE: dict[ConversationState, str] = {
     ConversationState.IDLE: "idle",
+    ConversationState.SESSION_START: "idle",
+    ConversationState.BENEFICIARY_GREETING: "speaking",
+    ConversationState.IDENTITY_CONFIRMATION: "listening",
+    ConversationState.IDENTITY_CORRECTION: "listening",
+    ConversationState.BENEFICIARY_LOOKUP: "processing",
+    ConversationState.CANDIDATE_CONFIRMATION: "listening",
     ConversationState.GATHERING_NOTES: "listening",
+    ConversationState.STREAMING_TRANSCRIPTION: "listening",
     ConversationState.EXTRACTING_FIELDS: "processing",
     ConversationState.CLARIFICATION_REQUIRED: "speaking",
     ConversationState.READ_BACK_CONFIRMATION: "speaking",
@@ -251,6 +258,14 @@ class HealthcareSessionPipeline:
     def attach_orchestrator(self, orchestrator: VoiceSessionOrchestrator) -> None:
         self._orchestrator = orchestrator
 
+    async def start_session_greeting(self, orchestrator: VoiceSessionOrchestrator) -> None:
+        """Initiate Section 1 personalized spoken greeting and enter voice identity verification."""
+        transition = self.sm.start_beneficiary_greeting(language=self.language)
+        orchestrator.telemetry.steps.session_started = True
+        orchestrator.telemetry.steps.beneficiary_identified = bool(self.sm.visit.beneficiary_id)
+        orchestrator.telemetry.steps.identity_voice_confirmed = False
+        await self._dispatch_transition(transition, orchestrator, is_greeting=True)
+
     def current_visit_contract(self) -> dict[str, Any]:
         return format_visit_contract(
             visit_state=self.sm.visit,
@@ -393,6 +408,76 @@ class HealthcareSessionPipeline:
         if self.sm.state == ConversationState.DANGER_ESCALATION and not danger_fired:
             self.sm.resume_after_danger()
 
+        # 1b. Voice-Based Beneficiary Identity Verification & Lookup (Sections 1 & 2)
+        if not danger_fired and self.sm.state in (
+            ConversationState.IDENTITY_CONFIRMATION,
+            ConversationState.CANDIDATE_CONFIRMATION,
+        ):
+            intent = classify_confirmation_intent(event.text)
+            if intent == "confirm":
+                transition = self.sm.handle_identity_confirmation_response(
+                    event.text, language=lang
+                )
+                orchestrator.telemetry.steps.beneficiary_identified = True
+                orchestrator.telemetry.steps.identity_voice_confirmed = True
+                await self._dispatch_transition(transition, orchestrator)
+                return True
+
+            if intent == "reject":
+                rejected_id = self.sm.candidate_beneficiary_id
+                rej_transition = self.sm.handle_identity_confirmation_response(
+                    "no", language=lang
+                )
+                # Check if worker also spoke the replacement name/ID in the same utterance
+                matches, spoken_id = self._directory.resolve_spoken_identity(
+                    event.text, exclude_beneficiary_id=rejected_id
+                )
+                if matches or spoken_id is not None:
+                    lookup_trans = self.sm.apply_beneficiary_lookup_result(
+                        [(b.beneficiary_id, b.full_name) for b in matches],
+                        language=lang,
+                    )
+                    if len(matches) == 1:
+                        orchestrator.telemetry.steps.beneficiary_identified = True
+                    await self._dispatch_transition(lookup_trans, orchestrator)
+                    return True
+                await self._dispatch_transition(rej_transition, orchestrator)
+                return True
+
+            # Unclear response: check if worker directly spoke a different beneficiary name/ID
+            matches, spoken_id = self._directory.resolve_spoken_identity(
+                event.text, exclude_beneficiary_id=self.sm.candidate_beneficiary_id
+            )
+            if matches or spoken_id is not None:
+                lookup_trans = self.sm.apply_beneficiary_lookup_result(
+                    [(b.beneficiary_id, b.full_name) for b in matches],
+                    language=lang,
+                )
+                if len(matches) == 1:
+                    orchestrator.telemetry.steps.beneficiary_identified = True
+                await self._dispatch_transition(lookup_trans, orchestrator)
+                return True
+
+            unclear_trans = self.sm.handle_identity_confirmation_response(
+                event.text, language=lang
+            )
+            await self._dispatch_transition(unclear_trans, orchestrator)
+            return True
+
+        if not danger_fired and self.sm.state in (
+            ConversationState.IDENTITY_CORRECTION,
+            ConversationState.BENEFICIARY_LOOKUP,
+        ):
+            matches, _spoken_id = self._directory.resolve_spoken_identity(event.text)
+            lookup_trans = self.sm.apply_beneficiary_lookup_result(
+                [(b.beneficiary_id, b.full_name) for b in matches],
+                language=lang,
+            )
+            if len(matches) == 1:
+                orchestrator.telemetry.steps.beneficiary_identified = True
+            await self._dispatch_transition(lookup_trans, orchestrator)
+            return True
+
         # 2. Extract structured healthcare visit fields (1C)
         existing_draft = self._build_draft_snapshot_for_extractor()
         extraction = self._extractor.extract(
@@ -503,11 +588,16 @@ class HealthcareSessionPipeline:
                 event.text,
                 correction_patch=patch_arg,
             )
+            if patch_arg is not None:
+                orchestrator.telemetry.correction_count += 1
+            if self.sm.visit.status == VisitStatus.CONFIRMED:
+                orchestrator.telemetry.steps.worker_confirmed = True
             await self._dispatch_transition(transition, orchestrator)
             return True
 
         # If worker gave an explicit correction while gathering/clarifying
         if extraction.detected_correction and explicit_fields:
+            orchestrator.telemetry.correction_count += 1
             transition = self.sm.apply_correction_patch(update)
             await self._dispatch_transition(transition, orchestrator)
             return True
@@ -517,7 +607,22 @@ class HealthcareSessionPipeline:
             # Let Milestone 1 LLM handle conversational greeting naturally unless awaiting confirmation
             return False
 
+        orchestrator.telemetry.steps.visit_notes_captured = True
         transition = self.sm.apply_extraction(update)
+        if self.sm.visit.beneficiary_id:
+            orchestrator.telemetry.steps.beneficiary_identified = True
+            if self.sm.identity_verified:
+                orchestrator.telemetry.steps.identity_voice_confirmed = True
+        orchestrator.telemetry.steps.clarifications_resolved = (
+            len(self.sm.pending_clarifications) == 0
+        )
+        if not self._missing_required_fields():
+            orchestrator.telemetry.steps.required_fields_extracted = True
+        if self.sm.state in (
+            ConversationState.READ_BACK_CONFIRMATION,
+            ConversationState.READY_TO_CONFIRM,
+        ):
+            orchestrator.telemetry.steps.read_back_completed = True
         await self._dispatch_transition(transition, orchestrator)
         return True
 
@@ -565,6 +670,9 @@ class HealthcareSessionPipeline:
         )
         if accepted:
             self._committed_at = committed_at or utc_now_iso()
+            if self._orchestrator is not None:
+                self._orchestrator.telemetry.steps.worker_confirmed = True
+                self._orchestrator.telemetry.steps.visit_persisted = True
 
         if emit_ws and self._orchestrator is not None:
             await self._dispatch_transition(
@@ -661,7 +769,7 @@ class HealthcareSessionPipeline:
 
     def _missing_required_fields(self) -> list[str]:
         missing: list[str] = []
-        if self.sm.visit.beneficiary_id is None:
+        if self.sm.visit.beneficiary_id is None or not self.sm.identity_verified:
             missing.append("beneficiary_id")
         if self.sm.visit.visit_type is None:
             missing.append("visit_type")
@@ -689,6 +797,7 @@ class HealthcareSessionPipeline:
         orchestrator: VoiceSessionOrchestrator,
         *,
         error_code: str | None = None,
+        is_greeting: bool = False,
     ) -> None:
         """Emit strict v1 contract WebSocket events & trigger TTS for a 1B TransitionResult."""
         visit_id = self.sm.visit.visit_draft_id
@@ -700,11 +809,14 @@ class HealthcareSessionPipeline:
             payload = action.payload
 
             if atype == ActionType.DRAFT_UPDATED:
+                updated_fields = list(
+                    payload.get("updated_fields") or payload.get("changed_fields") or []
+                )
                 await orchestrator.emit_event(
                     "visit_draft_updated",
                     visit_id=visit_id,
                     draft=self.current_visit_contract(),
-                    updated_fields=list(payload.get("updated_fields", [])),
+                    updated_fields=updated_fields,
                     missing_required_fields=self._missing_required_fields(),
                 )
 
@@ -712,10 +824,11 @@ class HealthcareSessionPipeline:
                 raw_clars = payload.get("clarifications", [])
                 first = raw_clars[0] if raw_clars else {"field": "visit_notes", "reason": "missing_required"}
                 field_name = str(first.get("field", "visit_notes"))
-                candidates = [
-                    {"id": str(c), "label": str(c), "detail": None}
-                    for c in (first.get("candidates") or [])
-                ]
+                candidates = []
+                for c in first.get("candidates") or []:
+                    c_str = str(c)
+                    cid = c_str.split(":", 1)[0].strip() if ":" in c_str else c_str
+                    candidates.append({"id": cid, "label": c_str, "detail": None})
                 ev_kwargs: dict[str, Any] = {
                     "visit_id": visit_id,
                     "field": field_name,
@@ -803,10 +916,13 @@ class HealthcareSessionPipeline:
                 )
             else:
                 await orchestrator.speak_direct(
-                    transition.spoken_text, language=transition.spoken_language
+                    transition.spoken_text,
+                    language=transition.spoken_language,
+                    is_greeting=is_greeting,
                 )
             if transition.current_state == ConversationState.READ_BACK_CONFIRMATION:
                 self.sm.on_read_back_completed()
+                orchestrator.telemetry.steps.read_back_completed = True
 
 
 class SessionRegistry:

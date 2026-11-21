@@ -1,4 +1,9 @@
-import { fastApiClient, FastApiError, getVoiceWsBaseUrl } from '@/lib/api/fastapi-client';
+import {
+  fastApiClient,
+  FastApiError,
+  getVoiceApiBaseUrl,
+  getVoiceWsBaseUrl,
+} from '@/lib/api/fastapi-client';
 import type {
   BackendSessionStateV1,
   ClarificationCandidateV1,
@@ -31,6 +36,28 @@ export interface AudioInputDeviceInfo {
   label: string;
 }
 
+export interface VoiceLatencyMetrics {
+  lastTtfaMs: number | null;
+  p50TtfaMs: number | null;
+  p95TtfaMs: number | null;
+  avgTtfaMs: number | null;
+  greetingLatencyMs: number | null;
+  lastSttFinalizationMs: number | null;
+  lastTtsFirstChunkMs: number | null;
+  turnCount: number;
+}
+
+function computePercentile(sorted: number[], pct: number): number | null {
+  if (sorted.length === 0) return null;
+  if (sorted.length === 1) return Math.round(sorted[0]);
+  const rank = (pct / 100) * (sorted.length - 1);
+  const low = Math.floor(rank);
+  const high = Math.ceil(rank);
+  if (low === high) return Math.round(sorted[low]);
+  const weight = rank - low;
+  return Math.round(sorted[low] * (1 - weight) + sorted[high] * weight);
+}
+
 export interface VoiceClientCallbacks {
   onStateChange: (state: VoiceInteractionState, backendState?: BackendSessionStateV1) => void;
   onSessionReady?: (event: ServerSessionReadyEventV1) => void;
@@ -51,6 +78,7 @@ export interface VoiceClientCallbacks {
   onVisitCommitted?: (event: ServerVisitCommittedEventV1) => void;
   onPersistenceRejected?: (event: ServerPersistenceRejectedEventV1) => void;
   onDangerAlert: (event: ServerDangerAlertEventV1) => void;
+  onLatencyUpdate?: (metrics: VoiceLatencyMetrics) => void;
   onError: (code: string, message: string, retryable: boolean) => void;
 }
 
@@ -130,6 +158,19 @@ export class BrowserVoiceClient {
   private isClosing = false;
   private isMicStreaming = true; // false when Push-to-Talk released or muted
   private lastPartialReceivedAt = 0;
+
+  // Section 5 TTFA Latency Instrumentation
+  private sessionReadyAtMs = 0;
+  private speechStartedAtMs = 0;
+  private speechEndedAtMs = 0;
+  private transcriptFinalizedAtMs = 0;
+  private llmFirstTokenAtMs = 0;
+  private ttsFirstChunkAtMs = 0;
+  private recordedTurnPlaybacks = new Set<number>();
+  private ttfaSamplesMs: number[] = [];
+  private greetingLatencyMs: number | null = null;
+  private lastSttFinalizationMs: number | null = null;
+  private lastTtsFirstChunkMs: number | null = null;
 
   constructor(callbacks: VoiceClientCallbacks) {
     this.callbacks = callbacks;
@@ -247,8 +288,8 @@ export class BrowserVoiceClient {
       return null;
     }
 
-    // 4. Open WebSocket to /ws/voice/{session_id}?language=...
-    const wsUrl = `${getVoiceWsBaseUrl()}${wsPath}?language=${encodeURIComponent(this.language)}`;
+    // 4. Open WebSocket to /ws/voice/{session_id}?language=...&greet=true
+    const wsUrl = `${getVoiceWsBaseUrl()}${wsPath}?language=${encodeURIComponent(this.language)}&greet=true`;
     this.openWebSocket(wsUrl);
     return this.sessionId;
   }
@@ -377,6 +418,7 @@ export class BrowserVoiceClient {
     const type = raw.type as string;
     switch (type) {
       case 'session_ready': {
+        this.sessionReadyAtMs = Date.now();
         const ev = raw as unknown as ServerSessionReadyEventV1;
         this.callbacks.onSessionReady?.(ev);
         this.callbacks.onStateChange('listening', 'listening');
@@ -389,28 +431,42 @@ export class BrowserVoiceClient {
         break;
       }
       case 'speech_start': {
+        this.speechStartedAtMs = Date.now();
         this.callbacks.onSpeechActivity?.(true, (raw.utterance_id as string | null) ?? null);
         break;
       }
       case 'speech_end': {
+        this.speechEndedAtMs = Date.now();
         this.callbacks.onSpeechActivity?.(false, (raw.utterance_id as string | null) ?? null);
         break;
       }
       case 'partial_transcript': {
         const ev = raw as unknown as ServerPartialTranscriptEventV1;
-        this.lastPartialReceivedAt = Date.now();
+        const now = Date.now();
+        if (!this.speechStartedAtMs) this.speechStartedAtMs = now;
+        this.lastPartialReceivedAt = now;
         this.callbacks.onStateChange('transcribing');
         this.callbacks.onPartialTranscript(ev);
         break;
       }
       case 'final_transcript': {
         const ev = raw as unknown as ServerFinalTranscriptEventV1;
+        const now = Date.now();
+        this.transcriptFinalizedAtMs = now;
+        if (!this.speechEndedAtMs) {
+          this.speechEndedAtMs =
+            typeof ev.latency_ms === 'number' && ev.latency_ms >= 0
+              ? now - ev.latency_ms
+              : now;
+        }
+        this.lastSttFinalizationMs = Math.max(0, Math.round(now - this.speechEndedAtMs));
         this.callbacks.onFinalTranscript(ev);
         this.callbacks.onStateChange('processing');
         break;
       }
       case 'assistant_response': {
         const turnId = Number(raw.turn_id || 1);
+        this.llmFirstTokenAtMs = Date.now();
         this.callbacks.onStateChange('responding');
         this.callbacks.onAssistantResponse(
           String(raw.text || ''),
@@ -437,7 +493,21 @@ export class BrowserVoiceClient {
           // Zero-stale-audio rule: silently drop stale chunks
           return;
         }
-        this.enqueuePcmPlayback(String(raw.audio_base64 || ''), Number(raw.sample_rate || 16000));
+        const seq = Number(raw.seq || 1);
+        if (seq === 1) {
+          this.ttsFirstChunkAtMs = Date.now();
+          if (this.llmFirstTokenAtMs > 0) {
+            this.lastTtsFirstChunkMs = Math.max(
+              0,
+              Math.round(this.ttsFirstChunkAtMs - this.llmFirstTokenAtMs)
+            );
+          }
+        }
+        this.enqueuePcmPlayback(
+          String(raw.audio_base64 || ''),
+          Number(raw.sample_rate || 16000),
+          turnId
+        );
         break;
       }
       case 'tts_complete': {
@@ -514,7 +584,7 @@ export class BrowserVoiceClient {
     }
   }
 
-  private enqueuePcmPlayback(base64: string, sampleRate: number): void {
+  private enqueuePcmPlayback(base64: string, sampleRate: number, turnId?: number): void {
     if (!base64 || !this.playbackContext) return;
     try {
       const floatSamples = decodePcmS16LeBase64(base64);
@@ -528,7 +598,7 @@ export class BrowserVoiceClient {
       source.connect(this.playbackContext.destination);
 
       const now = this.playbackContext.currentTime;
-      const startAt = Math.max(now + 0.015, this.nextPlaybackTime);
+      const startAt = Math.max(now + 0.005, this.nextPlaybackTime);
       this.nextPlaybackTime = startAt + audioBuffer.duration;
 
       this.playingSources.push(source);
@@ -536,8 +606,65 @@ export class BrowserVoiceClient {
         this.playingSources = this.playingSources.filter((s) => s !== source);
       };
       source.start(startAt);
+
+      if (turnId && !this.recordedTurnPlaybacks.has(turnId)) {
+        this.recordedTurnPlaybacks.add(turnId);
+        this.recordFirstAudioPlayed(turnId, Math.round((startAt - now) * 1000));
+      }
     } catch (err) {
       console.warn('PCM playback decode warning:', err);
+    }
+  }
+
+  private recordFirstAudioPlayed(turnId: number, scheduleOffsetMs: number): void {
+    const audioFirstPlayedAtMs = Date.now() + Math.max(0, scheduleOffsetMs);
+    let turnTtfaMs: number | null = null;
+
+    if (this.speechEndedAtMs > 0) {
+      turnTtfaMs = Math.max(0, Math.round(audioFirstPlayedAtMs - this.speechEndedAtMs));
+      this.ttfaSamplesMs.push(turnTtfaMs);
+      this.speechStartedAtMs = 0;
+      this.speechEndedAtMs = 0;
+    } else if (this.greetingLatencyMs === null && this.sessionReadyAtMs > 0) {
+      this.greetingLatencyMs = Math.max(
+        0,
+        Math.round(audioFirstPlayedAtMs - this.sessionReadyAtMs)
+      );
+    }
+
+    const sorted = [...this.ttfaSamplesMs].sort((a, b) => a - b);
+    const avg =
+      sorted.length > 0
+        ? Math.round(sorted.reduce((acc, v) => acc + v, 0) / sorted.length)
+        : null;
+
+    this.callbacks.onLatencyUpdate?.({
+      lastTtfaMs:
+        turnTtfaMs ??
+        (this.ttfaSamplesMs.length > 0
+          ? this.ttfaSamplesMs[this.ttfaSamplesMs.length - 1]
+          : null),
+      p50TtfaMs: computePercentile(sorted, 50),
+      p95TtfaMs: computePercentile(sorted, 95),
+      avgTtfaMs: avg,
+      greetingLatencyMs: this.greetingLatencyMs,
+      lastSttFinalizationMs: this.lastSttFinalizationMs,
+      lastTtsFirstChunkMs: this.lastTtsFirstChunkMs,
+      turnCount: this.ttfaSamplesMs.length,
+    });
+
+    if (this.sessionId) {
+      fetch(`${getVoiceApiBaseUrl()}/api/v1/sessions/${encodeURIComponent(this.sessionId)}/metrics/client-playback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          schema_version: 'v1',
+          turn_id: turnId,
+          client_ttfa_ms: turnTtfaMs,
+          audio_first_played_epoch_ms: audioFirstPlayedAtMs,
+        }),
+        keepalive: true,
+      }).catch(() => {});
     }
   }
 

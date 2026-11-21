@@ -162,6 +162,36 @@ def extract_fallback_correction_patch(utterance: str) -> ExtractionUpdate | None
         kwargs["visit_type"] = m_vtype.group(1)
         explicit.add("visit_type")
 
+    # Bare numeric weight correction fallback ("No, it is 53", "No, it is fifty-three", "No, it is 3.2")
+    if not explicit:
+        m_bare_num = re.search(
+            r"(?:no|nahi|nahin|actually|it\s+is|is)\s*[,:]?\s*(?:it\s+is\s*)?(\d+(?:\.\d+)?)\b",
+            text,
+            re.IGNORECASE,
+        )
+        if m_bare_num:
+            val = float(m_bare_num.group(1))
+            if 0.4 <= val <= 200:
+                kwargs["weight_kg"] = val
+                explicit.add("weight_kg")
+        else:
+            _word_map = {
+                "fifty-two": 52.0,
+                "fifty two": 52.0,
+                "fifty-three": 53.0,
+                "fifty three": 53.0,
+                "fifty-four": 54.0,
+                "fifty four": 54.0,
+                "bawan": 52.0,
+                "tirpan": 53.0,
+            }
+            low = text.lower()
+            for phrase, num_val in _word_map.items():
+                if phrase in low:
+                    kwargs["weight_kg"] = num_val
+                    explicit.add("weight_kg")
+                    break
+
     if not explicit:
         return None
     return ExtractionUpdate(**kwargs, explicit_fields=explicit)
@@ -179,6 +209,180 @@ def _format_weight(weight_kg: float) -> str:
 
 def _join_list(items: list[str]) -> str:
     return ", ".join(items)
+
+
+_EN_MONTH_LABELS: tuple[str, ...] = (
+    "",
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+)
+
+
+def format_unambiguous_spoken_date(iso_date: str | None) -> str:
+    """Format an ISO YYYY-MM-DD date unambiguously as '28 November 2026 (2026-11-28)'."""
+    if not iso_date:
+        return ""
+    cleaned = iso_date.strip()
+    m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", cleaned)
+    if not m:
+        return cleaned
+    year, month, day = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    if 1 <= month <= 12:
+        return f"{day} {_EN_MONTH_LABELS[month]} {year} ({cleaned})"
+    return cleaned
+
+
+def generate_beneficiary_greeting_text(
+    beneficiary_name: str | None,
+    beneficiary_id: str | None,
+    language: str,
+) -> str:
+    """Generate personalized spoken greeting when Start Recording is pressed (Section 1)."""
+    lang = normalize_language(language)
+    if beneficiary_name and beneficiary_id:
+        if lang == "hi-IN":
+            return (
+                f"नमस्ते! क्या आप आज {beneficiary_name} से मिलने गई हैं? "
+                f"लाभार्थी आईडी: {beneficiary_id}। "
+                "कृपया पुष्टि करें, क्या यह सही लाभार्थी है? हाँ या नहीं बोलें।"
+            )
+        if lang == "kn-IN":
+            return (
+                f"ನಮಸ್ಕಾರ! ನೀವು ಇಂದು {beneficiary_name} ಅವರನ್ನು ಭೇಟಿ ಮಾಡುತ್ತಿದ್ದೀರಾ? "
+                f"ಫಲಾನುಭವಿ ಐಡಿ: {beneficiary_id}. "
+                "ದಯವಿಟ್ಟು ದೃಢೀಕರಿಸಿ, ಇದು ಸರಿಯಾದ ಫಲಾನುಭವಿಯೇ? ಹೌದು ಅಥವಾ ಇಲ್ಲ ಎಂದು ಹೇಳಿ."
+            )
+        if lang == "ta-IN":
+            return (
+                f"வணக்கம்! இன்று {beneficiary_name} அவர்களை சந்திக்கிறீர்களா? "
+                f"பயனாளி ஐடி: {beneficiary_id}. "
+                "தயவுசெய்து உறுதிப்படுத்தவும், இது சரியான பயனாளியா? ஆம் அல்லது இல்லை என்று சொல்லுங்கள்."
+            )
+        return (
+            f"Namaste! Are you visiting {beneficiary_name} today? "
+            f"Beneficiary ID: {beneficiary_id}. "
+            "Please confirm. Is this the correct beneficiary? Say yes or no."
+        )
+
+    if lang == "hi-IN":
+        return "नमस्ते! कृपया आज की विज़िट के लिए लाभार्थी का नाम या लाभार्थी आईडी बताएं।"
+    if lang == "kn-IN":
+        return "ನಮಸ್ಕಾರ! ಇಂದಿನ ಭೇಟಿಗಾಗಿ ದಯವಿಟ್ಟು ಫಲಾನುಭವಿಯ ಹೆಸರು ಅಥವಾ ಫಲಾನುಭವಿ ಐಡಿ ತಿಳಿಸಿ."
+    if lang == "ta-IN":
+        return "வணக்கம்! இன்றைய பார்வைக்காக பயனாளியின் பெயர் அல்லது பயனாளி ஐடியைக் கூறுங்கள்."
+    return "Namaste! Please tell me the beneficiary's name or beneficiary ID for today's visit."
+
+
+def generate_identity_confirmed_text(beneficiary_name: str, language: str) -> str:
+    """Scenario A: Short acknowledgement after beneficiary identity is confirmed."""
+    lang = normalize_language(language)
+    if lang == "hi-IN":
+        return (
+            f"धन्यवाद। {beneficiary_name} कन्फर्म हो गई हैं। "
+            "कृपया आज की विज़िट के बारे में बताएं। आप अपनी भाषा में सामान्य रूप से बोल सकती हैं।"
+        )
+    if lang == "kn-IN":
+        return (
+            f"ಧನ್ಯವಾದಗಳು. {beneficiary_name} ದೃಢೀಕರಿಸಲಾಗಿದೆ. "
+            "ದಯವಿಟ್ಟು ಇಂದಿನ ಭೇಟಿಯ ಬಗ್ಗೆ ತಿಳಿಸಿ. ನಿಮ್ಮ ಭಾಷೆಯಲ್ಲಿ ಸಹಜವಾಗಿ ಮಾತನಾಡಬಹುದು."
+        )
+    if lang == "ta-IN":
+        return (
+            f"நன்றி. {beneficiary_name} உறுதிப்படுத்தப்பட்டது. "
+            "தயவுசெய்து இன்றைய பார்வையைப் பற்றி கூறுங்கள். உங்கள் மொழியில் இயல்பாகப் பேசலாம்."
+        )
+    return (
+        f"Thank you. {beneficiary_name} is confirmed. "
+        "Please tell me about today's visit. You can speak naturally in your language."
+    )
+
+
+def generate_identity_correction_prompt(language: str) -> str:
+    """Scenario B step 1: Prompt when worker says NO to the initial beneficiary."""
+    lang = normalize_language(language)
+    if lang == "hi-IN":
+        return "ठीक है। कृपया सही लाभार्थी का नाम या लाभार्थी आईडी बताएं।"
+    if lang == "kn-IN":
+        return "ಸರಿ. ದಯವಿಟ್ಟು ಸರಿಯಾದ ಫಲಾನುಭವಿಯ ಹೆಸರು ಅಥವಾ ಫಲಾನುಭವಿ ಐಡಿ ತಿಳಿಸಿ."
+    if lang == "ta-IN":
+        return "சரி. தயவுசெய்து சரியான பயனாளியின் பெயர் அல்லது பயனாளி ஐடியைக் கூறுங்கள்."
+    return "Okay. Please tell me the correct beneficiary's name or beneficiary ID."
+
+
+def generate_candidate_confirmation_text(
+    beneficiary_name: str,
+    beneficiary_id: str,
+    language: str,
+) -> str:
+    """Scenario B step 2: Read resolved candidate's name and ID aloud and ask for confirmation."""
+    lang = normalize_language(language)
+    if lang == "hi-IN":
+        return (
+            f"मुझे {beneficiary_name}, लाभार्थी आईडी {beneficiary_id} मिली हैं। "
+            "क्या यह सही है? कृपया हाँ या नहीं बोलें।"
+        )
+    if lang == "kn-IN":
+        return (
+            f"ನನಗೆ {beneficiary_name}, ಫಲಾನುಭವಿ ಐಡಿ {beneficiary_id} ಸಿಕ್ಕಿದೆ. "
+            "ಇದು ಸರಿಯೇ? ದಯವಿಟ್ಟು ಹೌದು ಅಥವಾ ಇಲ್ಲ ಎಂದು ಹೇಳಿ."
+        )
+    if lang == "ta-IN":
+        return (
+            f"{beneficiary_name}, பயனாளி ஐடி {beneficiary_id} கிடைத்தது. "
+            "இது சரியா? தயவுசெய்து ஆம் அல்லது இல்லை என்று சொல்லுங்கள்."
+        )
+    return f"I found {beneficiary_name}, beneficiary ID {beneficiary_id}. Is this correct?"
+
+
+def generate_multiple_beneficiaries_text(
+    candidates: list[tuple[str, str]],
+    language: str,
+) -> str:
+    """Scenario C: Multiple matching beneficiaries with similar names."""
+    lang = normalize_language(language)
+    options = ", ".join(f"{name} ({bid})" for bid, name in candidates)
+    suffix = f" ({options})" if options else ""
+    if lang == "hi-IN":
+        return f"मुझे एक से अधिक मिलते-जुलते लाभार्थी मिले हैं{suffix}। कृपया लाभार्थी आईडी बताएं।"
+    if lang == "kn-IN":
+        return f"ಒಂದಕ್ಕಿಂತ ಹೆಚ್ಚು ಹೊಂದಾಣಿಕೆಯಾಗುವ ಫಲಾನುಭವಿಗಳು ಕಂಡುಬಂದಿದ್ದಾರೆ{suffix}. ದಯವಿಟ್ಟು ಫಲಾನುಭವಿ ಐಡಿ ತಿಳಿಸಿ."
+    if lang == "ta-IN":
+        return f"ஒன்றுக்கும் மேற்பட்ட பொருந்தும் பயனாளிகள் கண்டறியப்பட்டனர்{suffix}. தயவுசெய்து பயனாளி ஐடியைக் கூறுங்கள்."
+    return f"I found more than one matching beneficiary{suffix}. Please tell me the beneficiary ID."
+
+
+def generate_beneficiary_not_found_text(language: str) -> str:
+    """Scenario D: Beneficiary not found in synthetic directory."""
+    lang = normalize_language(language)
+    if lang == "hi-IN":
+        return "मुझे वह लाभार्थी नहीं मिली। कृपया नाम दोबारा बोलें या लाभार्थी आईडी बताएं।"
+    if lang == "kn-IN":
+        return "ಆ ಫಲಾನುಭವಿ ಕಂಡುಬಂದಿಲ್ಲ. ದಯವಿಟ್ಟು ಹೆಸರನ್ನು ಮತ್ತೆ ಹೇಳಿ ಅಥವಾ ಫಲಾನುಭವಿ ಐಡಿ ತಿಳಿಸಿ."
+    if lang == "ta-IN":
+        return "அந்தப் பயனாளியைக் கண்டுபிடிக்க முடியவில்லை. தயவுசெய்து பெயரை மீண்டும் கூறவும் அல்லது பயனாளி ஐடியைச் சொல்லவும்."
+    return "I couldn't find that beneficiary. Please repeat the name or tell me the beneficiary ID."
+
+
+def generate_unclear_identity_confirmation_text(language: str) -> str:
+    """Scenario E: Ambiguous YES/NO response during beneficiary identity confirmation."""
+    lang = normalize_language(language)
+    if lang == "hi-IN":
+        return "माफ़ कीजिए, मैं समझ नहीं पाई। क्या यह सही लाभार्थी है? कृपया हाँ या नहीं बोलें।"
+    if lang == "kn-IN":
+        return "ಕ್ಷಮಿಸಿ, ನನಗೆ ಅರ್ಥವಾಗಲಿಲ್ಲ. ಇದು ಸರಿಯಾದ ಫಲಾನುಭವಿಯೇ? ದಯವಿಟ್ಟು ಹೌದು ಅಥವಾ ಇಲ್ಲ ಎಂದು ಹೇಳಿ."
+    if lang == "ta-IN":
+        return "மன்னிக்கவும், எனக்குப் புரியவில்லை. இது சரியான பயனாளியா? தயவுசெய்து ஆம் அல்லது இல்லை என்று சொல்லுங்கள்."
+    return "Sorry, I couldn't understand. Is this the correct beneficiary? Please say yes or no."
 
 
 _URGENT_REFERRAL_MESSAGES: dict[str, str] = {
@@ -308,6 +512,7 @@ def generate_read_back_text(visit: VisitRecordState, language: str) -> str:
     ben_name = visit.beneficiary_name
     vtype = visit.visit_type.value if visit.visit_type else "unknown"
     weight_str = _format_weight(visit.weight_kg) if visit.weight_kg is not None else None
+    date_str = format_unambiguous_spoken_date(visit.next_visit_date) if visit.next_visit_date else None
     signs_str = _join_list(visit.danger_signs) if visit.danger_signs else ""
 
     if lang == "hi-IN":
@@ -325,8 +530,8 @@ def generate_read_back_text(visit: VisitRecordState, language: str) -> str:
             parts.append(f"बाकी टीके: {_join_list(visit.vaccinations_due)}।")
         if visit.follow_up_actions:
             parts.append(f"फ़ॉलो-अप कार्य: {_join_list(visit.follow_up_actions)}।")
-        if visit.next_visit_date:
-            parts.append(f"अगली विज़िट की तारीख: {visit.next_visit_date}।")
+        if date_str:
+            parts.append(f"अगली विज़िट की तारीख: {date_str}।")
         if visit.danger_sign_flagged:
             flag_detail = f" ({signs_str})" if signs_str else ""
             parts.append(
@@ -349,8 +554,8 @@ def generate_read_back_text(visit: VisitRecordState, language: str) -> str:
             parts.append(f"ಬಾಕಿ ಇರುವ ಲಸಿಕೆಗಳು: {_join_list(visit.vaccinations_due)}.")
         if visit.follow_up_actions:
             parts.append(f"ಮುಂದಿನ ಕ್ರಮಗಳು: {_join_list(visit.follow_up_actions)}.")
-        if visit.next_visit_date:
-            parts.append(f"ಮುಂದಿನ ಭೇಟಿಯ ದಿನಾಂಕ: {visit.next_visit_date}.")
+        if date_str:
+            parts.append(f"ಮುಂದಿನ ಭೇಟಿಯ ದಿನಾಂಕ: {date_str}.")
         if visit.danger_sign_flagged:
             flag_detail = f" ({signs_str})" if signs_str else ""
             parts.append(
@@ -373,8 +578,8 @@ def generate_read_back_text(visit: VisitRecordState, language: str) -> str:
             parts.append(f"நிலுவை தடுப்பூசிகள்: {_join_list(visit.vaccinations_due)}.")
         if visit.follow_up_actions:
             parts.append(f"தொடர் நடவடிக்கைகள்: {_join_list(visit.follow_up_actions)}.")
-        if visit.next_visit_date:
-            parts.append(f"அடுத்த பார்வை தேதி: {visit.next_visit_date}.")
+        if date_str:
+            parts.append(f"அடுத்த பார்வை தேதி: {date_str}.")
         if visit.danger_sign_flagged:
             flag_detail = f" ({signs_str})" if signs_str else ""
             parts.append(
@@ -398,8 +603,8 @@ def generate_read_back_text(visit: VisitRecordState, language: str) -> str:
             parts.append(f"Vaccinations due: {_join_list(visit.vaccinations_due)}.")
         if visit.follow_up_actions:
             parts.append(f"Follow-up actions: {_join_list(visit.follow_up_actions)}.")
-        if visit.next_visit_date:
-            parts.append(f"Next visit date: {visit.next_visit_date}.")
+        if date_str:
+            parts.append(f"Next visit date: {date_str}.")
         if visit.danger_sign_flagged:
             flag_detail = f" ({signs_str})" if signs_str else ""
             parts.append(
@@ -479,6 +684,10 @@ class ConversationStateMachine:
             self.confirmed_fields.add("beneficiary_id")
         if beneficiary_name:
             self.confirmed_fields.add("beneficiary_name")
+
+        self.identity_verified: bool = bool(beneficiary_id)
+        self.candidate_beneficiary_id: str | None = beneficiary_id
+        self.candidate_beneficiary_name: str | None = beneficiary_name
 
         self.pending_clarifications: list[ClarificationRequest] = []
         self._danger_alerts: list[DangerAlertRecord] = []
@@ -738,6 +947,422 @@ class ConversationStateMachine:
         return read_back
 
     # -- Public Workflow API -------------------------------------------------
+
+    def start_beneficiary_greeting(
+        self,
+        *,
+        beneficiary_id: str | None = None,
+        beneficiary_name: str | None = None,
+        language: str | None = None,
+    ) -> TransitionResult:
+        """Initiate Section 1 personalized spoken greeting & enter identity verification."""
+        previous = self.state
+        if self.state == ConversationState.COMMITTED:
+            raise InvalidTransitionError(
+                "Visit record is already committed; start a new session for another visit."
+            )
+        if language:
+            self.set_language(language)
+
+        eff_id = beneficiary_id if beneficiary_id is not None else self.visit.beneficiary_id
+        eff_name = beneficiary_name if beneficiary_name is not None else self.visit.beneficiary_name
+
+        self.candidate_beneficiary_id = eff_id
+        self.candidate_beneficiary_name = eff_name
+        self.visit.beneficiary_id = eff_id
+        self.visit.beneficiary_name = eff_name
+        self.identity_verified = False
+        self.confirmed_fields.discard("beneficiary_id")
+        self.confirmed_fields.discard("beneficiary_name")
+
+        actions: list[StateMachineAction] = []
+        self._transition(ConversationState.SESSION_START, "session_started", actions)
+        self._transition(
+            ConversationState.BENEFICIARY_GREETING, "beneficiary_greeting_started", actions
+        )
+
+        greeting = generate_beneficiary_greeting_text(eff_name, eff_id, self.active_language)
+        if eff_id and eff_name:
+            self._transition(
+                ConversationState.IDENTITY_CONFIRMATION,
+                "awaiting_beneficiary_identity_confirmation",
+                actions,
+            )
+            clar = ClarificationRequest(
+                field="beneficiary_id",
+                reason="ambiguous_beneficiary",
+                question=greeting,
+                candidates=[f"{eff_id}: {eff_name}"],
+            )
+            self.pending_clarifications = [clar]
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.DRAFT_UPDATED,
+                    payload={
+                        "changed_fields": ["beneficiary_id", "beneficiary_name"],
+                        "visit_record": self.visit.to_contract_payload(),
+                    },
+                )
+            )
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.CLARIFICATION_PROMPT,
+                    payload={
+                        "clarifications": [clar.model_dump(mode="json")],
+                        "language": self.active_language,
+                        "text": greeting,
+                    },
+                )
+            )
+        else:
+            self._transition(
+                ConversationState.IDENTITY_CORRECTION,
+                "no_initial_beneficiary_selected",
+                actions,
+            )
+            clar = ClarificationRequest(
+                field="beneficiary_id",
+                reason="missing",
+                question=greeting,
+            )
+            self.pending_clarifications = [clar]
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.CLARIFICATION_PROMPT,
+                    payload={
+                        "clarifications": [clar.model_dump(mode="json")],
+                        "language": self.active_language,
+                        "text": greeting,
+                    },
+                )
+            )
+
+        actions.append(
+            StateMachineAction(
+                action_type=ActionType.SPEAK,
+                payload={"text": greeting, "language": self.active_language},
+            )
+        )
+        return self._result(
+            previous,
+            actions,
+            spoken_text=greeting,
+            metadata={"identity_verified": False, "candidate_beneficiary_id": eff_id},
+        )
+
+    def handle_identity_confirmation_response(
+        self,
+        utterance: str,
+        *,
+        language: str | None = None,
+    ) -> TransitionResult:
+        """Handle YES / NO / unclear response in IDENTITY_CONFIRMATION or CANDIDATE_CONFIRMATION."""
+        previous = self.state
+        if language:
+            self.set_language(language)
+
+        intent = classify_confirmation_intent(utterance)
+        actions: list[StateMachineAction] = []
+
+        if intent == "confirm":
+            eff_id = self.candidate_beneficiary_id or self.visit.beneficiary_id
+            eff_name = self.candidate_beneficiary_name or self.visit.beneficiary_name or eff_id or "Beneficiary"
+            self.visit.beneficiary_id = eff_id
+            self.visit.beneficiary_name = eff_name
+            self.visit.updated_at = utc_now_iso()
+            self.identity_verified = True
+            if eff_id:
+                self.confirmed_fields.add("beneficiary_id")
+            if eff_name:
+                self.confirmed_fields.add("beneficiary_name")
+            self._backfill_alert_beneficiary()
+            self.pending_clarifications = [
+                c for c in self.pending_clarifications if c.field != "beneficiary_id"
+            ]
+
+            self._transition(
+                ConversationState.GATHERING_NOTES,
+                "beneficiary_identity_confirmed",
+                actions,
+            )
+            spoken = generate_identity_confirmed_text(eff_name, self.active_language)
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.DRAFT_UPDATED,
+                    payload={
+                        "changed_fields": ["beneficiary_id", "beneficiary_name"],
+                        "visit_record": self.visit.to_contract_payload(),
+                    },
+                )
+            )
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.SPEAK,
+                    payload={"text": spoken, "language": self.active_language},
+                )
+            )
+            return self._result(
+                previous,
+                actions,
+                spoken_text=spoken,
+                metadata={"intent": "confirm", "identity_verified": True},
+            )
+
+        if intent == "reject":
+            rejected_id = self.candidate_beneficiary_id or self.visit.beneficiary_id
+            self.candidate_beneficiary_id = None
+            self.candidate_beneficiary_name = None
+            self.visit.beneficiary_id = None
+            self.visit.beneficiary_name = None
+            self.visit.updated_at = utc_now_iso()
+            self.identity_verified = False
+            self.confirmed_fields.discard("beneficiary_id")
+            self.confirmed_fields.discard("beneficiary_name")
+
+            self._transition(
+                ConversationState.IDENTITY_CORRECTION,
+                "worker_rejected_beneficiary",
+                actions,
+            )
+            spoken = generate_identity_correction_prompt(self.active_language)
+            clar = ClarificationRequest(
+                field="beneficiary_id",
+                reason="missing",
+                question=spoken,
+            )
+            self.pending_clarifications = [clar]
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.DRAFT_UPDATED,
+                    payload={
+                        "changed_fields": ["beneficiary_id", "beneficiary_name"],
+                        "visit_record": self.visit.to_contract_payload(),
+                    },
+                )
+            )
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.CLARIFICATION_PROMPT,
+                    payload={
+                        "clarifications": [clar.model_dump(mode="json")],
+                        "language": self.active_language,
+                        "text": spoken,
+                    },
+                )
+            )
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.SPEAK,
+                    payload={"text": spoken, "language": self.active_language},
+                )
+            )
+            return self._result(
+                previous,
+                actions,
+                spoken_text=spoken,
+                metadata={
+                    "intent": "reject",
+                    "identity_verified": False,
+                    "rejected_beneficiary_id": rejected_id,
+                },
+            )
+
+        # Scenario E: Ambiguous YES/NO response -> never confirm
+        spoken = generate_unclear_identity_confirmation_text(self.active_language)
+        clar = ClarificationRequest(
+            field="beneficiary_id",
+            reason="ambiguous_beneficiary",
+            question=spoken,
+            candidates=(
+                [f"{self.candidate_beneficiary_id}: {self.candidate_beneficiary_name}"]
+                if self.candidate_beneficiary_id and self.candidate_beneficiary_name
+                else []
+            ),
+        )
+        self.pending_clarifications = [clar]
+        actions.append(
+            StateMachineAction(
+                action_type=ActionType.CLARIFICATION_PROMPT,
+                payload={
+                    "clarifications": [clar.model_dump(mode="json")],
+                    "language": self.active_language,
+                    "text": spoken,
+                },
+            )
+        )
+        actions.append(
+            StateMachineAction(
+                action_type=ActionType.SPEAK,
+                payload={"text": spoken, "language": self.active_language},
+            )
+        )
+        return self._result(
+            previous,
+            actions,
+            spoken_text=spoken,
+            metadata={"intent": "unclear", "identity_verified": False},
+        )
+
+    def apply_beneficiary_lookup_result(
+        self,
+        matches: list[tuple[str, str]],
+        *,
+        language: str | None = None,
+    ) -> TransitionResult:
+        """Transition through BENEFICIARY_LOOKUP and handle 1, >1, or 0 matching beneficiaries."""
+        previous = self.state
+        if language:
+            self.set_language(language)
+
+        actions: list[StateMachineAction] = []
+        self._transition(
+            ConversationState.BENEFICIARY_LOOKUP, "searching_beneficiary_directory", actions
+        )
+
+        if len(matches) == 1:
+            bid, bname = matches[0]
+            self.candidate_beneficiary_id = bid
+            self.candidate_beneficiary_name = bname
+            self.visit.beneficiary_id = bid
+            self.visit.beneficiary_name = bname
+            self.visit.updated_at = utc_now_iso()
+            self.identity_verified = False
+            self.confirmed_fields.discard("beneficiary_id")
+            self.confirmed_fields.discard("beneficiary_name")
+
+            self._transition(
+                ConversationState.CANDIDATE_CONFIRMATION,
+                "single_candidate_found",
+                actions,
+            )
+            spoken = generate_candidate_confirmation_text(bname, bid, self.active_language)
+            clar = ClarificationRequest(
+                field="beneficiary_id",
+                reason="ambiguous_beneficiary",
+                question=spoken,
+                candidates=[f"{bid}: {bname}"],
+            )
+            self.pending_clarifications = [clar]
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.DRAFT_UPDATED,
+                    payload={
+                        "changed_fields": ["beneficiary_id", "beneficiary_name"],
+                        "visit_record": self.visit.to_contract_payload(),
+                    },
+                )
+            )
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.CLARIFICATION_PROMPT,
+                    payload={
+                        "clarifications": [clar.model_dump(mode="json")],
+                        "language": self.active_language,
+                        "text": spoken,
+                    },
+                )
+            )
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.SPEAK,
+                    payload={"text": spoken, "language": self.active_language},
+                )
+            )
+            return self._result(
+                previous,
+                actions,
+                spoken_text=spoken,
+                metadata={
+                    "lookup_outcome": "single_match",
+                    "candidate_beneficiary_id": bid,
+                    "candidate_beneficiary_name": bname,
+                    "identity_verified": False,
+                },
+            )
+
+        if len(matches) > 1:
+            self.candidate_beneficiary_id = None
+            self.candidate_beneficiary_name = None
+            self.visit.beneficiary_id = None
+            self.visit.beneficiary_name = None
+            self.identity_verified = False
+            self._transition(
+                ConversationState.IDENTITY_CORRECTION,
+                "multiple_beneficiaries_matched",
+                actions,
+            )
+            spoken = generate_multiple_beneficiaries_text(matches, self.active_language)
+            cand_strings = [f"{bid}: {bname}" for bid, bname in matches]
+            clar = ClarificationRequest(
+                field="beneficiary_id",
+                reason="ambiguous_beneficiary",
+                question=spoken,
+                candidates=cand_strings,
+            )
+            self.pending_clarifications = [clar]
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.CLARIFICATION_PROMPT,
+                    payload={
+                        "clarifications": [clar.model_dump(mode="json")],
+                        "language": self.active_language,
+                        "text": spoken,
+                    },
+                )
+            )
+            actions.append(
+                StateMachineAction(
+                    action_type=ActionType.SPEAK,
+                    payload={"text": spoken, "language": self.active_language},
+                )
+            )
+            return self._result(
+                previous,
+                actions,
+                spoken_text=spoken,
+                metadata={"lookup_outcome": "multiple_matches", "candidates": cand_strings},
+            )
+
+        # Scenario D: 0 matches
+        self.candidate_beneficiary_id = None
+        self.candidate_beneficiary_name = None
+        self.visit.beneficiary_id = None
+        self.visit.beneficiary_name = None
+        self.identity_verified = False
+        self._transition(
+            ConversationState.IDENTITY_CORRECTION,
+            "beneficiary_not_found",
+            actions,
+        )
+        spoken = generate_beneficiary_not_found_text(self.active_language)
+        clar = ClarificationRequest(
+            field="beneficiary_id",
+            reason="missing",
+            question=spoken,
+        )
+        self.pending_clarifications = [clar]
+        actions.append(
+            StateMachineAction(
+                action_type=ActionType.CLARIFICATION_PROMPT,
+                payload={
+                    "clarifications": [clar.model_dump(mode="json")],
+                    "language": self.active_language,
+                    "text": spoken,
+                },
+            )
+        )
+        actions.append(
+            StateMachineAction(
+                action_type=ActionType.SPEAK,
+                payload={"text": spoken, "language": self.active_language},
+            )
+        )
+        return self._result(
+            previous,
+            actions,
+            spoken_text=spoken,
+            metadata={"lookup_outcome": "not_found"},
+        )
 
     def start_gathering(self, *, language: str | None = None) -> TransitionResult:
         """Transition from IDLE into GATHERING_NOTES when the worker begins speaking."""

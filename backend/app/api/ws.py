@@ -32,6 +32,7 @@ async def voice_session_ws(
     language: str | None = None,
     disable_vad: bool = False,
     mode: str = "healthcare",
+    greet: bool = False,
 ) -> None:
     """Real-time full-duplex audio + structured event WebSocket for a voice session.
 
@@ -121,6 +122,8 @@ async def voice_session_ws(
             mode=mode,
         )
         await orchestrator.start()
+        if greet and pipeline is not None:
+            await pipeline.start_session_greeting(orchestrator)
 
         while True:
             message = await websocket.receive()

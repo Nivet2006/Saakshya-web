@@ -57,6 +57,8 @@ export const VoiceVisitWorkspace: React.FC<VoiceVisitWorkspaceProps> = ({
     worker,
     language,
     selectedBeneficiary,
+    beneficiaries,
+    onSelectBeneficiary,
     onDataCommitted: onVisitCommitted,
   });
 
