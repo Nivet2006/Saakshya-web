@@ -3,6 +3,12 @@
 import React, { useMemo, useState } from 'react';
 import { EmptyState } from '@/components/ui/ClinicalUI';
 import { useTranslation } from '@/lib/i18n/LanguageContext';
+import {
+  localizeBeneficiaryName,
+  localizePriority,
+  localizeStatus,
+  localizeTaskType,
+} from '@/lib/i18n/task-translations';
 import type { FollowUpTask, ImmunisationScheduleItem } from '@/types';
 import { CalendarClock, CheckCircle2, Search, Syringe } from 'lucide-react';
 
@@ -17,7 +23,7 @@ export const FollowUpQueueView: React.FC<FollowUpQueueViewProps> = ({
   immunisations,
   onToggleFollowUp,
 }) => {
-  const { ui } = useTranslation();
+  const { ui, language } = useTranslation();
   const [tab, setTab] = useState<'upcoming' | 'overdue' | 'vaccines' | 'completed'>('upcoming');
   const [search, setSearch] = useState('');
 
@@ -140,7 +146,7 @@ export const FollowUpQueueView: React.FC<FollowUpQueueViewProps> = ({
                       : 'bg-amber-100 text-amber-800'
                   }`}
                 >
-                  {v.status}
+                  {localizeStatus(v.status, language)}
                 </span>
               </div>
             ))}
@@ -166,7 +172,7 @@ export const FollowUpQueueView: React.FC<FollowUpQueueViewProps> = ({
               <button
                 type="button"
                 onClick={() => onToggleFollowUp(task.id)}
-                aria-label={`Mark ${task.task_type} as ${
+                aria-label={`Mark ${localizeTaskType(task.task_type, language)} as ${
                   task.status === 'COMPLETED' ? 'pending' : 'completed'
                 }`}
                 className="mt-0.5 text-slate-400 hover:text-clinical-primary shrink-0"
@@ -187,7 +193,7 @@ export const FollowUpQueueView: React.FC<FollowUpQueueViewProps> = ({
                         : 'text-clinical-text'
                     }`}
                   >
-                    {task.task_type}
+                    {localizeTaskType(task.task_type, language)}
                   </p>
                   <span
                     className={`text-[11px] font-bold uppercase px-2.5 py-0.5 rounded-full ${
@@ -198,11 +204,11 @@ export const FollowUpQueueView: React.FC<FollowUpQueueViewProps> = ({
                         : 'bg-slate-100 text-slate-700'
                     }`}
                   >
-                    {task.priority}
+                    {localizePriority(task.priority, language)}
                   </span>
                 </div>
                 <p className="text-xs text-slate-600 mt-1">
-                  {ui.beneficiaryLabel}: <strong>{task.beneficiary_name || task.beneficiary_id}</strong> · {ui.dueLabel}{' '}
+                  {ui.beneficiaryLabel}: <strong>{localizeBeneficiaryName(task.beneficiary_name, language) || task.beneficiary_id}</strong> · {ui.dueLabel}{' '}
                   <span className="tabular-nums font-semibold">{task.due_date}</span>
                 </p>
                 {task.notes && <p className="text-xs text-slate-500 mt-1">{task.notes}</p>}

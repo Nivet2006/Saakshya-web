@@ -4,6 +4,11 @@ import React, { useMemo, useState } from 'react';
 import { AddPatientModal, type NewPatientInput } from '@/components/asha/AddPatientModal';
 import { EmptyState } from '@/components/ui/ClinicalUI';
 import { useTranslation } from '@/lib/i18n/LanguageContext';
+import {
+  localizePriority,
+  localizeStatus,
+  localizeTaskType,
+} from '@/lib/i18n/task-translations';
 import type {
   Beneficiary,
   FollowUpTask,
@@ -43,7 +48,7 @@ export const BeneficiaryDirectoryView: React.FC<BeneficiaryDirectoryViewProps> =
   onAddBeneficiary,
   currentLanguage = 'hi-IN',
 }) => {
-  const { ui } = useTranslation();
+  const { ui, language } = useTranslation();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [selectedProfile, setSelectedProfile] = useState<Beneficiary | null>(null);
@@ -334,7 +339,7 @@ export const BeneficiaryDirectoryView: React.FC<BeneficiaryDirectoryViewProps> =
                             : 'bg-amber-100 text-amber-800'
                         }`}
                       >
-                        {im.status}
+                        {localizeStatus(im.status, language)}
                       </span>
                     </li>
                   ))}
@@ -357,10 +362,10 @@ export const BeneficiaryDirectoryView: React.FC<BeneficiaryDirectoryViewProps> =
                       className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs flex justify-between gap-2"
                     >
                       <div>
-                        <p className="font-bold text-clinical-text">{f.task_type}</p>
+                        <p className="font-bold text-clinical-text">{localizeTaskType(f.task_type, language)}</p>
                         <p className="text-slate-500 tabular-nums">{ui.dueLabel}: {f.due_date}</p>
                       </div>
-                      <span className="font-bold text-[11px]">{f.status}</span>
+                      <span className="font-bold text-[11px]">{localizeStatus(f.status, language)}</span>
                     </li>
                   ))}
                 </ul>

@@ -4,6 +4,11 @@ import React from 'react';
 import { DangerAlertBanner } from '@/components/DangerAlertBanner';
 import type { AshaNavSection } from '@/components/layout/AppShell';
 import { useTranslation } from '@/lib/i18n/LanguageContext';
+import {
+  localizeBeneficiaryName,
+  localizePriority,
+  localizeTaskType,
+} from '@/lib/i18n/task-translations';
 import type {
   Beneficiary,
   DangerAlert,
@@ -179,7 +184,9 @@ export const AshaHomeView: React.FC<AshaHomeViewProps> = ({
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-bold text-clinical-text">{task.task_type}</span>
+                  <span className="font-bold text-clinical-text">
+                    {localizeTaskType(task.task_type, language)}
+                  </span>
                   <span
                     className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
                       task.priority === 'URGENT'
@@ -187,11 +194,11 @@ export const AshaHomeView: React.FC<AshaHomeViewProps> = ({
                         : 'bg-white text-slate-700 border border-slate-200'
                     }`}
                   >
-                    {task.priority}
+                    {localizePriority(task.priority, language)}
                   </span>
                 </div>
                 <p className="text-slate-600 mt-1">
-                  {task.beneficiary_name || task.beneficiary_id} · {ui.dueLabel}{' '}
+                  {localizeBeneficiaryName(task.beneficiary_name, language) || task.beneficiary_id} · {ui.dueLabel}{' '}
                   <span className="tabular-nums font-semibold">{task.due_date}</span>
                 </p>
               </li>
