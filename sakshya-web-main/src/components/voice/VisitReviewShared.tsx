@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { FieldStatusPill, NativeConfirmDialog } from '@/components/ui/ClinicalUI';
+import { ClinicalRiskBadge } from '@/components/clinical/ClinicalRiskBadge';
 import { useTranslation } from '@/lib/i18n/LanguageContext';
 import type { FieldConfirmStatus, VisitDraft } from '@/types';
 import {
@@ -427,6 +428,35 @@ export const VisitSummaryCard: React.FC<{
         requiresReReadBack={requiresReReadBack || summaryOutdated}
         onPausePlayback={onPausePlayback}
         onResumePlayback={onResumePlayback}
+      />
+
+      {/* Explainable Deterministic Clinical Risk Assessment */}
+      <ClinicalRiskBadge
+        structured={{
+          symptoms: [
+            ...(draft.danger_signs || []),
+            ...(draft.danger_alerts?.map((a) => a.canonical_name) || []),
+            ...(draft.observations?.map((o) => `${o.label}: ${o.value}`) || []),
+            ...(draft.raw_transcript_summary ? [draft.raw_transcript_summary] : []),
+          ],
+          bleeding:
+            draft.danger_signs?.some((s) => s.toLowerCase().includes('bleeding')) ||
+            draft.danger_alerts?.some((a) => a.canonical_name.toLowerCase().includes('bleeding')),
+          breathingIssue:
+            draft.danger_signs?.some(
+              (s) => s.toLowerCase().includes('breath') || s.toLowerCase().includes('chest indrawing')
+            ) ||
+            draft.danger_alerts?.some((a) => a.canonical_name.toLowerCase().includes('breath')),
+          highBP: draft.observations?.some(
+            (o) => o.key.toLowerCase().includes('bp') || o.label.toLowerCase().includes('blood pressure')
+          ),
+          swelling:
+            draft.danger_signs?.some(
+              (s) => s.toLowerCase().includes('swell') || s.toLowerCase().includes('edema')
+            ) ||
+            draft.observations?.some((o) => o.key.toLowerCase().includes('swell')),
+        }}
+        patientType={draft.visit_type || 'general'}
       />
 
       {/* Section B: Captured Information */}

@@ -15,6 +15,7 @@ from app.core.config import get_settings
 from app.core.telemetry import telemetry_registry
 from app.danger_signs.detector import detect_danger_signs, get_referral_message
 from app.healthcare.pipeline import format_danger_alert_contract, session_registry
+from app.healthcare.risk_engine import assess_clinical_risk
 from app.services.beneficiaries import SyntheticBeneficiaryDirectory
 
 router = APIRouter()
@@ -286,6 +287,27 @@ async def record_client_playback_metric(
 @router.get("/api/v1/metrics/summary")
 async def get_aggregate_metrics_summary() -> dict[str, Any]:
     return telemetry_registry.aggregate_summary()
+
+
+class ClinicalRiskRequest(BaseModel):
+    schema_version: str = "v1"
+    patient_type: str = Field(
+        default="general",
+        description="Patient category: pregnant, child, elder, adult, ANC, PNC, Newborn, etc.",
+    )
+    structured: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Structured clinical factors: feverDays, highBP, swelling, bleeding, breathingIssue, symptoms",
+    )
+
+
+@router.post("/api/v1/clinical/assess-risk")
+async def assess_clinical_risk_endpoint(req: ClinicalRiskRequest) -> dict[str, Any]:
+    assessment = assess_clinical_risk(req.structured, req.patient_type)
+    return {
+        "schema_version": "v1",
+        "assessment": assessment.model_dump(),
+    }
 
 
 def get_session_metadata(session_id: str) -> dict[str, Any] | None:
