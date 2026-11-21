@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -1108,7 +1108,11 @@ class VisitFieldExtractor:
         if not normalized:
             return ExtractionResult()
 
-        ref_date = reference_date or datetime.now(ZoneInfo(self._timezone_name)).date()
+        try:
+            tz = ZoneInfo(self._timezone_name)
+        except Exception:
+            tz = timezone(timedelta(hours=5, minutes=30))
+        ref_date = reference_date or datetime.now(tz).date()
 
         patch: dict[str, Any] = {}
         clarifications: list[FieldClarification] = []

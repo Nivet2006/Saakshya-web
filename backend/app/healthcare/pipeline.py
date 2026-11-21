@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -45,7 +45,10 @@ from app.voice.interfaces import TranscriptEvent
 from app.voice.orchestration.session import VoiceSessionOrchestrator
 
 logger = logging.getLogger(__name__)
-IST = ZoneInfo("Asia/Kolkata")
+try:
+    IST = ZoneInfo("Asia/Kolkata")
+except Exception:
+    IST = timezone(timedelta(hours=5, minutes=30))
 
 _MATCH_TYPE_TO_CONTRACT: dict[str, str] = {
     "exact": "exact_phrase",
