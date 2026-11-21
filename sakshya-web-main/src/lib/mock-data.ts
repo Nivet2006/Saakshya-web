@@ -259,57 +259,13 @@ export const SYNTHETIC_BENEFICIARIES: Beneficiary[] = [
   },
 ];
 
-export const SYNTHETIC_DANGER_ALERTS: DangerAlert[] = [
-  {
-    id: 'e0000000-0000-0000-0000-000000000001',
-    alert_id: 'alrt_demo_nb_001',
-    session_id: 'sess_seed_1044',
-    visit_id: 'vis_nb_demo_1044',
-    beneficiary_id: 'BEN-1044',
-    beneficiary_name: 'Baby of Kavitha Rao',
-    asha_worker_id: 'b0000000-0000-0000-0000-000000000001',
-    asha_worker_name: 'Sunita Verma (ASHA)',
-    phc_id: 'a0000000-0000-0000-0000-000000000001',
-    canonical_danger_sign_id: 'newborn_chest_indrawing',
-    canonical_name: 'Severe chest indrawing / difficulty breathing',
-    subject: 'newborn',
-    category: 'Newborn',
-    supporting_evidence: 'baby ka chest indrawing ho raha hai',
-    match_type: 'code_mixed_pattern',
-    source_guideline_ref: 'NHM HBNC 2014 Annexure 1c §E, p. 22',
-    referral_message:
-      'Chetavni: Navjat shishu mein chest indrawing ek gambhir khatre ka lakshan hai. Kripya bachche ko turant nazdeeki PHC ya SNCU le jayein.',
-    escalation_language: 'hi-IN',
-    status: 'active',
-    acknowledged_by: null,
-    acknowledged_at: null,
-    detected_at: new Date(Date.now() - 42 * 60000).toISOString(),
-    priority: 'urgent',
-    danger_sign_flagged: true,
-    referral_facility_type: 'SNCU',
-  },
-];
+export const SYNTHETIC_DANGER_ALERTS: DangerAlert[] = [];
 
 const todayIsoDate = new Date().toISOString().split('T')[0];
 
 export const SYNTHETIC_INITIAL_VISITS: VisitDraft[] = [];
 
 export const SYNTHETIC_FOLLOW_UPS: FollowUpTask[] = [
-  {
-    id: '10000000-0000-0000-0000-000000000001',
-    beneficiary_uuid: 'c0000000-0000-0000-0000-000000001044',
-    beneficiary_id: 'BEN-1044',
-    beneficiary_name: 'Baby of Kavitha Rao',
-    asha_worker_id: 'b0000000-0000-0000-0000-000000000001',
-    phc_id: 'a0000000-0000-0000-0000-000000000001',
-    due_date: todayIsoDate,
-    task_type: 'Urgent PHC / SNCU Referral Check (Chest Indrawing)',
-    action_type: 'phc_referral',
-    priority: 'URGENT',
-    status: 'PENDING',
-    notes: 'Confirm mother and newborn reached Rampur PHC / SNCU immediately.',
-    created_at: new Date(Date.now() - 40 * 60000).toISOString(),
-  },
   {
     id: '10000000-0000-0000-0000-000000000002',
     beneficiary_uuid: 'c0000000-0000-0000-0000-000000001042',

@@ -35,6 +35,7 @@ interface AshaHomeViewProps {
   onNavigateSection: (section: AshaNavSection) => void;
   onAcknowledgeAlert: (alertId: string) => void;
   onClearVisits?: () => void;
+  onClearAlerts?: () => void;
 }
 
 export const AshaHomeView: React.FC<AshaHomeViewProps> = ({
@@ -49,6 +50,7 @@ export const AshaHomeView: React.FC<AshaHomeViewProps> = ({
   onNavigateSection,
   onAcknowledgeAlert,
   onClearVisits,
+  onClearAlerts,
 }) => {
   const { ui } = useTranslation(language);
   const todayStr = new Date().toISOString().split('T')[0];
@@ -88,6 +90,20 @@ export const AshaHomeView: React.FC<AshaHomeViewProps> = ({
       {/* Active Critical Alerts */}
       {activeAlerts.length > 0 && (
         <div className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-xs font-bold text-red-800 uppercase tracking-wider">
+              Active Danger Alerts ({activeAlerts.length})
+            </span>
+            {onClearAlerts && (
+              <button
+                type="button"
+                onClick={onClearAlerts}
+                className="text-xs font-semibold text-red-700 hover:text-red-900 bg-red-100 hover:bg-red-200 border border-red-300 px-2.5 py-1 rounded-lg transition-colors"
+              >
+                Clear all alerts
+              </button>
+            )}
+          </div>
           {activeAlerts.map((alert) => (
             <DangerAlertBanner
               key={alert.alert_id}

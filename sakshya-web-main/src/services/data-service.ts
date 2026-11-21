@@ -27,7 +27,7 @@ import type {
 } from '@/types';
 
 const STORAGE_VISITS_KEY = 'sakshya_visits_v3';
-const STORAGE_ALERTS_KEY = 'sakshya_alerts_v2';
+const STORAGE_ALERTS_KEY = 'sakshya_alerts_v3';
 const STORAGE_FOLLOWUPS_KEY = 'sakshya_followups_v2';
 const STORAGE_AUDIT_KEY = 'sakshya_audit_v2';
 
@@ -47,6 +47,8 @@ class DataService {
     try {
       localStorage.removeItem('sakshya_visits_v1');
       localStorage.removeItem('sakshya_visits_v2');
+      localStorage.removeItem('sakshya_alerts_v1');
+      localStorage.removeItem('sakshya_alerts_v2');
       const v = localStorage.getItem(STORAGE_VISITS_KEY);
       if (v) this.visits = JSON.parse(v);
       const a = localStorage.getItem(STORAGE_ALERTS_KEY);
@@ -58,6 +60,22 @@ class DataService {
     } catch {
       // ignore storage errors
     }
+  }
+
+  /** Clears all danger alerts from memory and localStorage. */
+  clearAllDangerAlerts(): void {
+    this.hydrateFromLocalStorage();
+    this.dangerAlerts = [];
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem(STORAGE_ALERTS_KEY);
+        localStorage.removeItem('sakshya_alerts_v2');
+        localStorage.removeItem('sakshya_alerts_v1');
+      } catch {
+        // ignore
+      }
+    }
+    this.persistLocalStorage();
   }
 
   /** Clears all saved visits from memory, localStorage, and offline indexeddb store. */

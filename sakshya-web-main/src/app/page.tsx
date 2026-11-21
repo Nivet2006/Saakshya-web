@@ -175,6 +175,11 @@ export default function HomePage() {
     refreshAllData();
   };
 
+  const handleClearAlerts = () => {
+    dataService.clearAllDangerAlerts();
+    refreshAllData();
+  };
+
   // Real computed Supervisor Aggregates
   const supervisorStats = useMemo(
     () =>
@@ -254,6 +259,7 @@ export default function HomePage() {
               onNavigateSection={setAshaSection}
               onAcknowledgeAlert={handleAcknowledgeAlert}
               onClearVisits={handleClearVisits}
+              onClearAlerts={handleClearAlerts}
             />
           )}
 
