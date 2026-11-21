@@ -1005,6 +1005,7 @@ GRAM_UNITS = (
 WEIGHT_CUES = (
     "weight",
     "wt",
+    "wight",
     "wajan",
     "vajan",
     "wazan",
@@ -1017,6 +1018,18 @@ WEIGHT_CUES = (
     "भार",
     "ತೂಕ",
     "எடை",
+    "வெயிட்",
+    "edai",
+    "బరువు",
+    "వెయిట్",
+    "baruvu",
+    "ഭാരം",
+    "തൂക്കം",
+    "thookam",
+    "ওজন",
+    "ojon",
+    "વજન",
+    "ਭਾਰ",
 )
 
 KG_UNIT_RE = "(?:" + "|".join(re.escape(u) for u in KG_UNITS) + ")"
@@ -1030,7 +1043,13 @@ WEIGHT_CUE_RE = "(?:" + "|".join(re.escape(c) for c in WEIGHT_CUES) + ")"
 CUE_CONN_RE = (
     r"(?:should\s+be|will\s+be|needs\s+to\s+be|is\s+now|recorded\s+as|"
     r"changed\s+to|updated\s+to|change\s+to|update\s+to|make\s+(?:it|that)|"
-    r"to|as|is|was|are|hai|है|था|=|:)?"
+    r"is\s+around|is\s+about|around|about|nearly|almost|"
+    r"to|as|is|was|are|hai|है|था|का|की|लगभग|"
+    r"வந்து|உள்ளது|ஆக|என்பது|சுமார்|"
+    r"వచ్చేసి|ఉంది|అంటే|సుమారు|"
+    r"ಆಗಿದೆ|ಇದೆ|ಸುಮಾರು|"
+    r"ആണ്|ആയി|ഏകദേശം|"
+    r"=|:)?"
 )
 
 QTY_START_TOKEN = (

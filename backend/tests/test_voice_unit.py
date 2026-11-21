@@ -440,3 +440,23 @@ async def test_preselected_beneficiary_understands_clinical_notes_without_explic
     assert pipeline.sm.visit.next_visit_date == "2026-11-28"
     await orch.close()
 
+
+def test_codemixed_indic_english_baby_weight_and_vlbw() -> None:
+    from datetime import date
+    from app.extraction.extractor import VisitFieldExtractor
+    from app.extraction.models import VisitDraft
+
+    ext = VisitFieldExtractor()
+    draft = VisitDraft(visit_id="v_mix", beneficiary_id="BEN-1042")
+
+    # Tamil-English, Telugu-English, and English "baby's weight is two" on ANC mother profile
+    for phrase in (
+        "the baby's weight is two",
+        "குழந்தையின் எடை வந்து two",
+        "బేబీ వెయిట్ వచ్చేసి two",
+        "बच्चे का वजन दो",
+    ):
+        res = ext.extract(phrase, reference_date=date(2026, 11, 21), existing_draft=draft)
+        assert res.patch.get("weight_kg") == 2.0, f"Failed for {phrase!r}: {res}"
+        assert not any(c.field_name == "weight_kg" for c in res.clarifications)
+

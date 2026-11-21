@@ -1419,6 +1419,13 @@ class VisitFieldExtractor:
         effective_beneficiary: SyntheticBeneficiary | None,
         text: str,
     ) -> tuple[float, float, str]:
+        if re.search(
+            rf"{_LB}(?:newborn|navjat|shishu|baby|bacch[ae]|bacha|infant){_RB}|{_LB}(?:नवजात|शिशु|बच्च|बेबी|குழந்தை|பச்சிளம்|பேபி|ಮಗು|ನವಜಾತ|ಬೇಬಿ|శిశు|బిడ్డ|పాప|బేబీ|കുഞ്ഞ|നവಜാത|ബേബി|শিশু|বেবি|નવજાત|ਬੱਚ)",
+            text,
+            re.IGNORECASE,
+        ):
+            return 0.4, 15.0, "newborn/infant"
+
         if effective_visit_type == "Newborn" or (
             effective_beneficiary is not None
             and effective_beneficiary.category in {"newborn", "infant"}
@@ -1430,11 +1437,6 @@ class VisitFieldExtractor:
             and effective_beneficiary.category in {"pregnant_woman", "postnatal_mother"}
         ):
             return 25.0, 150.0, "adult maternal"
-
-        if re.search(
-            rf"{_LB}(?:newborn|navjat|shishu|baby|नवजात|शिशु){_RB}", text, re.IGNORECASE
-        ):
-            return 0.4, 15.0, "newborn/infant"
 
         return 0.4, 150.0, "human"
 

@@ -894,6 +894,34 @@ class HealthcareSessionPipeline:
             existing_draft=existing_draft,
         )
 
+        # If spoken/unitless baby weight < 1.8 kg was extracted (e.g. "baby weight is one point five"),
+        # ensure Layer 1 NB_VLBW urgent referral triggers even without explicit "kg" digits.
+        ext_weight = extraction.patch.get("weight_kg")
+        if (
+            not danger_fired
+            and isinstance(ext_weight, (int, float))
+            and 0.3 <= float(ext_weight) < 1.8
+            and (
+                self._is_baby_context()
+                or extraction.patch.get("visit_type") == "Newborn"
+                or bool(
+                    re.search(
+                        r"baby|newborn|infant|navjat|shishu|बच्च|नवजात|बेबी|குழந்தை|பேபி|ಮಗು|ಬೇಬಿ|బిడ్డ|శిశువు|బేబీ",
+                        event.text or "",
+                        re.IGNORECASE,
+                    )
+                )
+            )
+        ):
+            vlbw_res = self._run_danger_check(
+                f"newborn birth weight {ext_weight} kg", language=lang, is_partial=False
+            )
+            if vlbw_res.danger_sign_flagged and vlbw_res.matches:
+                danger_res = vlbw_res
+                danger_fired = await self._trigger_danger_escalation(
+                    vlbw_res, orchestrator, is_partial=False
+                )
+
         # 2a-bis. If worker rejected a confirmation and repeated a bare value (e.g. "101.2",
         # "120 by 80", "11.4", "2.8"), re-extract with the awaited field cue if needed.
         if self._awaiting_numeric_repeat_field:
@@ -1327,6 +1355,31 @@ class HealthcareSessionPipeline:
         # Pending confirmation of an ambiguous or uncertain numeric value (Section F)
         if self._pending_numeric_confirmations and not explicit_fields:
             amb_intent = classify_confirmation_intent(event.text)
+            pending_field = next(iter(self._pending_numeric_confirmations))
+            # If the worker repeats the exact same pending value (e.g., "2 kg", "two", "yes 2 kg")
+            # instead of saying bare "yes", treat that as explicit confirmation to prevent loops.
+            if amb_intent != "confirm" and amb_intent != "reject":
+                pending_patch: ExtractionUpdate = self._pending_numeric_confirmations[pending_field]["patch"]
+                pending_cands = [
+                    c for c in extraction.clarifications if c.field_name == pending_field and c.candidates
+                ]
+                if pending_field == "weight_kg" and pending_patch.weight_kg is not None:
+                    if any(
+                        abs(float(cand) - float(pending_patch.weight_kg)) < 1e-3
+                        for c in pending_cands
+                        for cand in c.candidates
+                    ):
+                        amb_intent = "confirm"
+                    else:
+                        from app.extraction.numbers import find_weight_candidates, parse_decimal_phrase
+
+                        w_cands = find_weight_candidates(event.text)
+                        if any(abs(float(wc.value_kg) - float(pending_patch.weight_kg)) < 1e-3 for wc in w_cands):
+                            amb_intent = "confirm"
+                        else:
+                            bare_dec = parse_decimal_phrase((event.text or "").strip())
+                            if bare_dec is not None and abs(float(bare_dec) - float(pending_patch.weight_kg)) < 1e-3:
+                                amb_intent = "confirm"
             if amb_intent == "confirm":
                 pending_field = next(iter(self._pending_numeric_confirmations))
                 entry = self._pending_numeric_confirmations.pop(pending_field)
