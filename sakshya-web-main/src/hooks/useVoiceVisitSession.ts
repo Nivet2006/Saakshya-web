@@ -11,6 +11,7 @@ import { syncManager } from '@/lib/sync/sync-manager';
 import {
   BrowserVoiceClient,
   listAudioInputDevices,
+  type AudioDiagnostics,
   type AudioInputDeviceInfo,
   type VoiceLatencyMetrics,
 } from '@/lib/voice/voice-client';
@@ -100,6 +101,8 @@ export function mergeVisitV1IntoDraft(
     danger_sign_flagged: record.danger_sign_flagged,
     danger_alerts: options?.attachedAlerts || prev?.danger_alerts || [],
     follow_up_actions: [...record.follow_up_actions],
+    observations: record.observations ? [...record.observations] : prev?.observations,
+    events: record.events ? [...record.events] : prev?.events,
     missing_required_fields: options?.missingRequiredFields || prev?.missing_required_fields || [],
     updated_fields: options?.updatedFields,
     field_statuses: nextStatuses,
@@ -188,6 +191,7 @@ export function useVoiceVisitSession(params: {
     useState<IdentityVerificationStatus>('idle');
   const [verificationPrompt, setVerificationPrompt] = useState<string | null>(null);
   const [latencyMetrics, setLatencyMetrics] = useState<VoiceLatencyMetrics | null>(null);
+  const [audioDiagnostics, setAudioDiagnostics] = useState<AudioDiagnostics | null>(null);
   const [reviewPhase, setReviewPhase] = useState<VisitReviewPhase>('editing');
   const [summaryOutdated, setSummaryOutdated] = useState(false);
 
@@ -602,6 +606,9 @@ export function useVoiceVisitSession(params: {
             : prev
         );
       },
+      onAudioDiagnostics: (diag) => {
+        setAudioDiagnostics(diag);
+      },
       onError: (code, message, retryable) => {
         setError({ code, message, retryable });
       },
@@ -748,6 +755,51 @@ export function useVoiceVisitSession(params: {
     []
   );
 
+  const removeObservationVisually = useCallback((key: string) => {
+    setVisitDraft((prev) => {
+      if (!prev) return prev;
+      const nextObs = (prev.observations || []).filter((o) => o.key !== key);
+      const nextDraft: VisitDraft = {
+        ...prev,
+        observations: nextObs,
+        status: 'draft',
+        updated_at: new Date().toISOString(),
+      };
+      if (prev.read_back_summary) setSummaryOutdated(true);
+      saveDraftLocally(nextDraft).catch(() => {});
+      return nextDraft;
+    });
+    setReviewPhase('editing');
+    setRequiresReReadBack(true);
+    if (clientRef.current?.isConnected()) {
+      clientRef.current.sendRemoveObservation(key);
+    }
+  }, []);
+
+  const removeEventVisually = useCallback((name: string) => {
+    setVisitDraft((prev) => {
+      if (!prev) return prev;
+      const targetLow = name.toLowerCase();
+      const nextEvents = (prev.events || []).filter((e) => e.name.toLowerCase() !== targetLow);
+      const nextDraft: VisitDraft = {
+        ...prev,
+        events: nextEvents,
+        vaccinations_completed: prev.vaccinations_completed.filter((v) => v.toLowerCase() !== targetLow),
+        vaccinations_due: prev.vaccinations_due.filter((v) => v.toLowerCase() !== targetLow),
+        status: 'draft',
+        updated_at: new Date().toISOString(),
+      };
+      if (prev.read_back_summary) setSummaryOutdated(true);
+      saveDraftLocally(nextDraft).catch(() => {});
+      return nextDraft;
+    });
+    setReviewPhase('editing');
+    setRequiresReReadBack(true);
+    if (clientRef.current?.isConnected()) {
+      clientRef.current.sendRemoveEvent(name);
+    }
+  }, []);
+
   const submitVoiceTextInput = useCallback((text: string) => {
     if (!text.trim()) return false;
     return clientRef.current?.sendTextInput(text.trim(), language) ?? false;
@@ -854,6 +906,7 @@ export function useVoiceVisitSession(params: {
     identityVerificationStatus,
     verificationPrompt,
     latencyMetrics,
+    audioDiagnostics,
     reviewPhase,
     summaryOutdated,
     startVoiceSession,
@@ -872,6 +925,8 @@ export function useVoiceVisitSession(params: {
     respondReadbackPreference,
     respondSubmissionConfirmation,
     patchFieldsVisually,
+    removeObservationVisually,
+    removeEventVisually,
     submitVoiceTextInput,
     confirmAndSaveVisit,
     patchFieldStatus,

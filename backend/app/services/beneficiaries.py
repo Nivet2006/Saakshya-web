@@ -192,43 +192,11 @@ SYNTHETIC_BENEFICIARIES: tuple[SyntheticBeneficiary, ...] = (
 
 
 def extract_spoken_beneficiary_id(text: str) -> str | None:
-    """Extract a canonical `BEN-XXXX` ID from spoken digits or number words."""
-    norm = unicodedata.normalize("NFC", text).translate(_INDIC_DIGIT_TRANS)
-    # 1. Direct BEN-1042 or B E N 1 0 4 2
-    m_direct = re.search(
-        r"\bB\s*E\s*N[\s\-_]*(\d)\s*(\d)\s*(\d)\s*(\d)\b",
-        norm,
-        re.IGNORECASE,
-    )
-    if m_direct:
-        return f"BEN-{''.join(m_direct.groups())}"
+    """Extract a canonical `BEN-XXXX` ID from spoken digits, Indic words, or ASR artifacts."""
+    from app.extraction.numbers import resolve_beneficiary_id_mention
 
-    m_ben = re.search(r"\bB\s*E\s*N[\s\-_]*(\d{3,6})\b", norm, re.IGNORECASE)
-    if m_ben:
-        return f"BEN-{m_ben.group(1)}"
-
-    # 2. Spoken digit words after BEN / ID / beneficiary (e.g. "BEN one zero five six", "ID 1042")
-    tokens = re.findall(r"[A-Za-z0-9\u0900-\u097F]+", norm.lower())
-    for idx, tok in enumerate(tokens):
-        if tok in {"ben", "id", "आईडी"}:
-            digits: list[str] = []
-            for sub in tokens[idx + 1 : idx + 7]:
-                if sub.isdigit():
-                    digits.append(sub)
-                elif sub in _SPOKEN_DIGIT_WORDS:
-                    digits.append(_SPOKEN_DIGIT_WORDS[sub])
-                elif digits:
-                    break
-            joined = "".join(digits)
-            if len(joined) == 4 and joined.isdigit():
-                return f"BEN-{joined}"
-
-    # 3. Standalone 4-digit ID (1040..1099) when utterance is short
-    m_four = re.search(r"\b(10\d{2})\b", norm)
-    if m_four and len(tokens) <= 6:
-        return f"BEN-{m_four.group(1)}"
-
-    return None
+    selected_id, _src, _is_corr, _conflicts = resolve_beneficiary_id_mention(text)
+    return selected_id
 
 
 class SyntheticBeneficiaryDirectory:

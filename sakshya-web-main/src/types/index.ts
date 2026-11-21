@@ -1,6 +1,8 @@
 import type {
   ContractVisitType,
   DangerAlertV1,
+  DynamicEventV1,
+  DynamicObservationV1,
   FollowUpActionV1,
   VisitRecordV1,
 } from '@/lib/contracts/v1';
@@ -151,6 +153,8 @@ export interface VisitDraft {
   danger_sign_flagged: boolean;
   danger_alerts: DangerAlert[];
   follow_up_actions: FollowUpActionV1[];
+  observations?: DynamicObservationV1[];
+  events?: DynamicEventV1[];
   missing_required_fields: string[];
   updated_fields?: string[];
   field_statuses?: Record<string, FieldConfirmStatus>;

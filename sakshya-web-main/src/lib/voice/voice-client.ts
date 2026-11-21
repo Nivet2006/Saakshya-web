@@ -36,6 +36,24 @@ export interface AudioInputDeviceInfo {
   label: string;
 }
 
+export interface AudioDiagnostics {
+  captureSampleRate: number;
+  channelCount: number;
+  echoCancellation: boolean;
+  noiseSuppression: boolean;
+  autoGainControl: boolean;
+  usedAudioWorklet: boolean;
+  framesSent: number;
+  bytesSent: number;
+  droppedFrames: number;
+  clippedSamples: number;
+  lastRms: number;
+  ambientNoiseRms: number;
+  staleChunksDiscarded: number;
+  localBargeInCount: number;
+  localPlaybackStopMs: number | null;
+}
+
 export interface VoiceLatencyMetrics {
   lastTtfaMs: number | null;
   p50TtfaMs: number | null;
@@ -79,6 +97,7 @@ export interface VoiceClientCallbacks {
   onPersistenceRejected?: (event: ServerPersistenceRejectedEventV1) => void;
   onDangerAlert: (event: ServerDangerAlertEventV1) => void;
   onLatencyUpdate?: (metrics: VoiceLatencyMetrics) => void;
+  onAudioDiagnostics?: (diag: AudioDiagnostics) => void;
   onError: (code: string, message: string, retryable: boolean) => void;
 }
 
@@ -137,6 +156,8 @@ export class BrowserVoiceClient {
   private playbackContext: AudioContext | null = null;
   private mediaStream: MediaStream | null = null;
   private processor: ScriptProcessorNode | null = null;
+  private workletNode: AudioWorkletNode | null = null;
+  private hpFilter: BiquadFilterNode | null = null;
   private audioSource: MediaStreamAudioSourceNode | null = null;
   private analyser: AnalyserNode | null = null;
   private silentGain: GainNode | null = null;
@@ -145,10 +166,32 @@ export class BrowserVoiceClient {
 
   private pendingPcmSamples: number[] = [];
   private activeTurnId = 0;
+  private minPlayableTurnId = 0;
+  private cancelledTurnIds = new Set<number>();
   private playingSources: AudioBufferSourceNode[] = [];
   private nextPlaybackTime = 0;
   private isPlaybackPaused = false;
   private isPlayingAudio = false;
+  private ambientNoiseFloorRms = 0.008;
+  private localBargeInStreak = 0;
+  private localBargeInSentTurnId = -1;
+  private audioDiag: AudioDiagnostics = {
+    captureSampleRate: TARGET_SAMPLE_RATE,
+    channelCount: 1,
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+    usedAudioWorklet: false,
+    framesSent: 0,
+    bytesSent: 0,
+    droppedFrames: 0,
+    clippedSamples: 0,
+    lastRms: 0,
+    ambientNoiseRms: 0.008,
+    staleChunksDiscarded: 0,
+    localBargeInCount: 0,
+    localPlaybackStopMs: null,
+  };
 
   private sessionId = '';
   private language: LanguageCode = 'hi-IN';
@@ -205,6 +248,11 @@ export class BrowserVoiceClient {
     this.beneficiaryId = config.beneficiaryId ?? null;
     this.isMicStreaming = config.handsFree ?? true;
     this.activeTurnId = 0;
+    this.minPlayableTurnId = 0;
+    this.cancelledTurnIds.clear();
+    this.localBargeInStreak = 0;
+    this.localBargeInSentTurnId = -1;
+    this.ambientNoiseFloorRms = 0.008;
 
     this.callbacks.onStateChange('connecting');
 
@@ -234,17 +282,43 @@ export class BrowserVoiceClient {
       return null;
     }
 
-    // 2. Initialize Web Audio Capture + Analyser + Playback contexts from user gesture
+    // 2. Initialize Web Audio Capture (native rate + 85Hz high-pass) & Playback contexts
     try {
+      const track = this.mediaStream.getAudioTracks()[0];
+      const settings = track?.getSettings?.() ?? {};
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      this.captureContext = new AudioCtx({ sampleRate: TARGET_SAMPLE_RATE });
+      this.captureContext = new AudioCtx();
       if (this.captureContext.state === 'suspended') {
         await this.captureContext.resume();
       }
       this.audioSource = this.captureContext.createMediaStreamSource(this.mediaStream);
+      this.hpFilter = this.captureContext.createBiquadFilter();
+      this.hpFilter.type = 'highpass';
+      this.hpFilter.frequency.value = 85;
+      this.hpFilter.Q.value = 0.707;
       this.analyser = this.captureContext.createAnalyser();
       this.analyser.fftSize = 64;
-      this.audioSource.connect(this.analyser);
+      this.audioSource.connect(this.hpFilter);
+      this.hpFilter.connect(this.analyser);
+
+      this.audioDiag = {
+        captureSampleRate: this.captureContext.sampleRate,
+        channelCount: Number(settings.channelCount || 1),
+        echoCancellation: Boolean(settings.echoCancellation ?? true),
+        noiseSuppression: Boolean(settings.noiseSuppression ?? true),
+        autoGainControl: Boolean(settings.autoGainControl ?? true),
+        usedAudioWorklet: false,
+        framesSent: 0,
+        bytesSent: 0,
+        droppedFrames: 0,
+        clippedSamples: 0,
+        lastRms: 0,
+        ambientNoiseRms: this.ambientNoiseFloorRms,
+        staleChunksDiscarded: 0,
+        localBargeInCount: 0,
+        localPlaybackStopMs: null,
+      };
+      this.callbacks.onAudioDiagnostics?.({ ...this.audioDiag });
 
       this.playbackContext = new AudioCtx({ sampleRate: TARGET_SAMPLE_RATE });
       if (this.playbackContext.state === 'suspended') {
@@ -353,26 +427,103 @@ export class BrowserVoiceClient {
     };
   }
 
-  private startPcmUplink(): void {
+  private async startPcmUplink(): Promise<void> {
     if (!this.captureContext || !this.audioSource) return;
+    const captureNode = this.hpFilter || this.audioSource;
 
+    const handleFrameStats = (rms: number, clipped: number) => {
+      this.audioDiag.lastRms = rms;
+      if (clipped > 0) {
+        this.audioDiag.clippedSamples += clipped;
+      }
+      if (!this.isPlayingAudio && rms > 0.0005) {
+        // Track quiet ambient floor for adaptive local barge-in thresholding
+        const alpha = rms < this.ambientNoiseFloorRms * 2.5 ? 0.08 : 0.015;
+        this.ambientNoiseFloorRms = this.ambientNoiseFloorRms * (1 - alpha) + rms * alpha;
+        this.audioDiag.ambientNoiseRms = this.ambientNoiseFloorRms;
+      }
+      if (this.isPlayingAudio && !this.isPlaybackPaused && this.isMicStreaming) {
+        const bargeInRmsFloor = Math.max(0.055, this.ambientNoiseFloorRms * 3.8);
+        if (rms >= bargeInRmsFloor) {
+          this.localBargeInStreak += 1;
+          if (
+            this.localBargeInStreak >= 4 &&
+            this.localBargeInSentTurnId !== this.activeTurnId
+          ) {
+            this.localBargeInSentTurnId = this.activeTurnId;
+            this.localBargeInStreak = 0;
+            this.triggerBargeIn('local_vad');
+          }
+        } else {
+          this.localBargeInStreak = Math.max(0, this.localBargeInStreak - 1);
+        }
+      } else {
+        this.localBargeInStreak = 0;
+      }
+    };
+
+    if (this.captureContext.audioWorklet) {
+      try {
+        await this.captureContext.audioWorklet.addModule('/audio-capture-worklet.js');
+        if (!this.captureContext || this.isClosing) return;
+        this.workletNode = new AudioWorkletNode(
+          this.captureContext,
+          'sakshya-capture-processor',
+          { numberOfInputs: 1, numberOfOutputs: 0, channelCount: 1 }
+        );
+        this.workletNode.port.onmessage = (ev: MessageEvent) => {
+          const payload = ev.data as {
+            pcmBuffer?: ArrayBuffer;
+            rms?: number;
+            clippedSamples?: number;
+          };
+          if (!payload?.pcmBuffer) return;
+          if (!this.isMicStreaming) return;
+          if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            this.audioDiag.droppedFrames += 1;
+            return;
+          }
+          handleFrameStats(Number(payload.rms || 0), Number(payload.clippedSamples || 0));
+          this.ws.send(payload.pcmBuffer);
+          this.audioDiag.framesSent += 1;
+          this.audioDiag.bytesSent += payload.pcmBuffer.byteLength;
+          if (this.audioDiag.framesSent % 20 === 0) {
+            this.callbacks.onAudioDiagnostics?.({ ...this.audioDiag });
+          }
+        };
+        captureNode.connect(this.workletNode);
+        this.audioDiag.usedAudioWorklet = true;
+        this.callbacks.onAudioDiagnostics?.({ ...this.audioDiag });
+        return;
+      } catch (err) {
+        console.warn('AudioWorklet init failed, falling back to ScriptProcessorNode:', err);
+      }
+    }
+
+    // Fallback: ScriptProcessorNode if AudioWorklet unavailable
     const inputRate = this.captureContext.sampleRate;
     this.processor = this.captureContext.createScriptProcessor(1024, 1, 1);
     this.silentGain = this.captureContext.createGain();
     this.silentGain.gain.value = 0;
 
-    this.audioSource.connect(this.processor);
+    captureNode.connect(this.processor);
     this.processor.connect(this.silentGain);
     this.silentGain.connect(this.captureContext.destination);
 
     this.processor.onaudioprocess = (ev) => {
-      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
       if (!this.isMicStreaming) return;
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        this.audioDiag.droppedFrames += 1;
+        return;
+      }
 
       const rawFloat = ev.inputBuffer.getChannelData(0);
       const resampled = resampleLinear(rawFloat, inputRate, TARGET_SAMPLE_RATE);
 
       for (let i = 0; i < resampled.length; i++) {
+        if (Math.abs(resampled[i]) >= 0.999) {
+          this.audioDiag.clippedSamples += 1;
+        }
         const clamped = Math.max(-1, Math.min(1, resampled[i]));
         const sample = clamped < 0 ? Math.round(clamped * 0x8000) : Math.round(clamped * 0x7fff);
         this.pendingPcmSamples.push(sample);
@@ -381,7 +532,18 @@ export class BrowserVoiceClient {
       while (this.pendingPcmSamples.length >= TARGET_FRAME_SAMPLES) {
         const chunk = this.pendingPcmSamples.splice(0, TARGET_FRAME_SAMPLES);
         const frame = new Int16Array(chunk);
+        let energy = 0;
+        for (let i = 0; i < frame.length; i++) {
+          const norm = frame[i] / 32768.0;
+          energy += norm * norm;
+        }
+        handleFrameStats(Math.sqrt(energy / frame.length), 0);
         this.ws.send(frame.buffer);
+        this.audioDiag.framesSent += 1;
+        this.audioDiag.bytesSent += frame.buffer.byteLength;
+        if (this.audioDiag.framesSent % 20 === 0) {
+          this.callbacks.onAudioDiagnostics?.({ ...this.audioDiag });
+        }
       }
     };
   }
@@ -478,19 +640,28 @@ export class BrowserVoiceClient {
       }
       case 'tts_start': {
         const turnId = Number(raw.turn_id || 1);
+        if (turnId < this.minPlayableTurnId || this.cancelledTurnIds.has(turnId)) {
+          return;
+        }
         if (turnId > this.activeTurnId) {
           this.activeTurnId = turnId;
         }
         this.isPlaybackPaused = false;
         this.isPlayingAudio = true;
+        this.localBargeInSentTurnId = -1;
         this.callbacks.onStateChange('speaking', 'speaking');
         this.callbacks.onTtsPlaybackChange?.(true, false, turnId);
         break;
       }
       case 'tts_audio_chunk': {
         const turnId = Number(raw.turn_id || 0);
-        if (turnId !== this.activeTurnId) {
-          // Zero-stale-audio rule: silently drop stale chunks
+        if (
+          turnId < this.minPlayableTurnId ||
+          this.cancelledTurnIds.has(turnId) ||
+          turnId !== this.activeTurnId
+        ) {
+          // Zero-stale-audio rule: discard stale chunks synchronously before decoding
+          this.audioDiag.staleChunksDiscarded += 1;
           return;
         }
         const seq = Number(raw.seq || 1);
@@ -512,6 +683,9 @@ export class BrowserVoiceClient {
       }
       case 'tts_complete': {
         const turnId = Number(raw.turn_id || this.activeTurnId);
+        if (turnId < this.minPlayableTurnId || this.cancelledTurnIds.has(turnId)) {
+          return;
+        }
         this.isPlayingAudio = false;
         this.callbacks.onTtsPlaybackChange?.(false, false, turnId);
         this.callbacks.onStateChange('listening', 'listening');
@@ -519,16 +693,22 @@ export class BrowserVoiceClient {
       }
       case 'barge_in': {
         const ev = raw as unknown as ServerBargeInEventV1;
-        this.activeTurnId = ev.new_turn_id;
+        this.cancelledTurnIds.add(ev.cancelled_turn_id);
+        this.minPlayableTurnId = Math.max(this.minPlayableTurnId, ev.new_turn_id);
+        this.activeTurnId = Math.max(this.activeTurnId, ev.new_turn_id);
         this.flushAudioPlayback();
+        this.callbacks.onTtsPlaybackChange?.(false, false, ev.cancelled_turn_id);
         this.callbacks.onBargeIn?.(ev);
         this.callbacks.onStateChange('interrupted');
         break;
       }
       case 'tts_cancelled': {
         const cancelledTurnId = Number(raw.cancelled_turn_id || 0);
-        if (cancelledTurnId >= this.activeTurnId) {
-          this.activeTurnId = cancelledTurnId + 1;
+        this.cancelledTurnIds.add(cancelledTurnId);
+        const nextAllowed = cancelledTurnId + 1;
+        this.minPlayableTurnId = Math.max(this.minPlayableTurnId, nextAllowed);
+        if (this.activeTurnId <= cancelledTurnId) {
+          this.activeTurnId = nextAllowed;
         }
         this.flushAudioPlayback();
         this.callbacks.onTtsPlaybackChange?.(false, false, cancelledTurnId);
@@ -700,7 +880,17 @@ export class BrowserVoiceClient {
   }
 
   triggerBargeIn(reason = 'user_tap'): void {
+    const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const cancelledTurn = this.activeTurnId;
+    this.cancelledTurnIds.add(cancelledTurn);
+    this.minPlayableTurnId = Math.max(this.minPlayableTurnId, cancelledTurn + 1);
+    this.activeTurnId = this.minPlayableTurnId;
     this.flushAudioPlayback();
+    const stopMs = Math.round(((typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0) * 100) / 100;
+    this.audioDiag.localBargeInCount += 1;
+    this.audioDiag.localPlaybackStopMs = stopMs;
+    this.callbacks.onTtsPlaybackChange?.(false, false, cancelledTurn);
+    this.callbacks.onAudioDiagnostics?.({ ...this.audioDiag });
     this.callbacks.onStateChange('interrupted');
     this.sendJson({
       schema_version: 'v1',
@@ -745,6 +935,22 @@ export class BrowserVoiceClient {
       schema_version: 'v1',
       type: 'patch_fields',
       fields,
+    });
+  }
+
+  sendRemoveObservation(key: string): boolean {
+    return this.sendJson({
+      schema_version: 'v1',
+      type: 'remove_observation',
+      key,
+    });
+  }
+
+  sendRemoveEvent(name: string): boolean {
+    return this.sendJson({
+      schema_version: 'v1',
+      type: 'remove_event',
+      name,
     });
   }
 
@@ -799,9 +1005,18 @@ export class BrowserVoiceClient {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
     }
+    if (this.workletNode) {
+      this.workletNode.port.onmessage = null;
+      this.workletNode.disconnect();
+      this.workletNode = null;
+    }
     if (this.processor) {
       this.processor.disconnect();
       this.processor = null;
+    }
+    if (this.hpFilter) {
+      this.hpFilter.disconnect();
+      this.hpFilter = null;
     }
     if (this.silentGain) {
       this.silentGain.disconnect();

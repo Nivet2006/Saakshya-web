@@ -12,9 +12,11 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.api.routes import get_session_metadata
 from app.conversation.state_machine import InvalidTransitionError
-from app.core.config import get_settings
+from app.core.config import build_contextual_stt_options, get_settings
 from app.core.logging import log_event
+from app.extraction.secondary_recognition import GnaniRestSecondaryRecognizer
 from app.healthcare.pipeline import session_registry
+from app.services.beneficiaries import SyntheticBeneficiaryDirectory
 from app.voice.llm.gemini_adapter import build_llm_adapter
 from app.voice.orchestration.session import VoiceSessionOrchestrator
 from app.voice.stt.gnani_prisma import GnaniPrismaSTTAdapter
@@ -73,9 +75,32 @@ async def voice_session_ws(
             except Exception:
                 pass
 
-    stt = GnaniPrismaSTTAdapter.from_settings(settings, language_code=stt_lang)
+    ben_id = meta.get("beneficiary_id")
+    ben_obj = SyntheticBeneficiaryDirectory().get_by_id(ben_id) if ben_id else None
+    stt_ctx = build_contextual_stt_options(
+        beneficiary_name=ben_obj.full_name if ben_obj else None,
+        beneficiary_id=ben_obj.beneficiary_id if ben_obj else ben_id,
+    )
+
+    stt = GnaniPrismaSTTAdapter.from_settings(
+        settings,
+        language_code=stt_lang,
+        keywords=stt_ctx["keywords"],
+        speaker_names=stt_ctx["speaker_names"],
+        previous_text=stt_ctx["previous_text"],
+        topic=stt_ctx["topic"],
+    )
     tts = GnaniTimbreTTSAdapter.from_settings(settings)
     llm = build_llm_adapter(settings)
+    secondary_recognizer = (
+        GnaniRestSecondaryRecognizer(
+            api_key=settings.gnani_api_key.get_secret_value(),
+            secondary_format=settings.gnani_stt_secondary_format,
+            model=settings.gnani_stt_model or "prisma-v3.0",
+        )
+        if settings.gnani_stt_secondary_enabled and settings.gnani_api_key.get_secret_value().strip()
+        else None
+    )
     vad = (
         None
         if disable_vad
@@ -97,6 +122,10 @@ async def voice_session_ws(
         if mode != "voice_only"
         else None
     )
+    if pipeline is not None:
+        if secondary_recognizer is not None:
+            pipeline.set_secondary_recognizer(secondary_recognizer)
+        pipeline.confirm_important_numbers = settings.mandatory_numeric_confirmation
 
     orchestrator = VoiceSessionOrchestrator(
         session_id=session_id,
@@ -180,6 +209,14 @@ async def voice_session_ws(
                 fields = data.get("fields")
                 if isinstance(fields, dict):
                     await pipeline.handle_visual_patch(fields, orchestrator)
+            elif ev_type == "remove_observation" and pipeline is not None:
+                key = str(data.get("key", "")).strip()
+                if key:
+                    await pipeline.handle_remove_item(observation_key=key, orchestrator=orchestrator)
+            elif ev_type == "remove_event" and pipeline is not None:
+                name = str(data.get("name", "")).strip()
+                if name:
+                    await pipeline.handle_remove_item(event_name=name, orchestrator=orchestrator)
             elif ev_type in ("finish_notes", "request_review") and pipeline is not None:
                 await pipeline.handle_finish_review_command(orchestrator)
             elif ev_type == "silence_timeout" and pipeline is not None:

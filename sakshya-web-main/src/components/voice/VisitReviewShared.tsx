@@ -319,6 +319,8 @@ export const VisitSummaryCard: React.FC<{
   onResumePlayback: () => void;
   onVoiceCorrectField?: (fieldKey: string) => void;
   onVisualPatchFields?: (fields: Record<string, unknown>) => void;
+  onRemoveObservation?: (key: string) => void;
+  onRemoveEvent?: (name: string) => void;
   onSpeakToMakeChanges?: () => void;
 }> = ({
   draft,
@@ -331,9 +333,14 @@ export const VisitSummaryCard: React.FC<{
   onResumePlayback,
   onVoiceCorrectField,
   onVisualPatchFields,
+  onRemoveObservation,
+  onRemoveEvent,
   onSpeakToMakeChanges,
 }) => {
   const statuses = draft.field_statuses || {};
+  const [addingNote, setAddingNote] = useState(false);
+  const [newObsLabel, setNewObsLabel] = useState('');
+  const [newObsValue, setNewObsValue] = useState('');
 
   const vaccineText =
     draft.vaccinations_due.length > 0 || draft.vaccinations_completed.length > 0
@@ -454,49 +461,225 @@ export const VisitSummaryCard: React.FC<{
             onVisualSave={onVisualPatchFields ? handleFieldVisualSave : undefined}
             activeCorrectionField={activeCorrectionField}
           />
-          <CapturedField
-            fieldKey="weight_kg"
-            label="Weight"
-            value={draft.weight_kg !== null ? `${draft.weight_kg} kg` : null}
-            rawEditValue={draft.weight_kg !== null ? String(draft.weight_kg) : ''}
-            editType="number"
-            sourcePhrase={draft.weight_source_text}
-            status={statuses.weight_kg || (draft.weight_kg !== null ? 'extracted' : 'missing')}
-            onVoiceCorrect={onVoiceCorrectField}
-            onVisualSave={onVisualPatchFields ? handleFieldVisualSave : undefined}
-            activeCorrectionField={activeCorrectionField}
-          />
-          <CapturedField
-            fieldKey="vaccinations_due"
-            label="Vaccinations / Immunisation"
-            value={vaccineText}
-            rawEditValue={draft.vaccinations_due.join(', ')}
-            status={statuses.vaccinations_due || (vaccineText ? 'extracted' : 'missing')}
-            onVoiceCorrect={onVoiceCorrectField}
-            onVisualSave={onVisualPatchFields ? handleFieldVisualSave : undefined}
-            activeCorrectionField={activeCorrectionField}
-          />
-          <CapturedField
-            fieldKey="next_visit_date"
-            label="Next Visit Date"
-            value={draft.next_visit_date}
-            rawEditValue={draft.next_visit_date || ''}
-            editType="date"
-            sourcePhrase={draft.next_visit_date_source_text}
-            status={statuses.next_visit_date || (draft.next_visit_date ? 'extracted' : 'missing')}
-            onVoiceCorrect={onVoiceCorrectField}
-            onVisualSave={onVisualPatchFields ? handleFieldVisualSave : undefined}
-            activeCorrectionField={activeCorrectionField}
-          />
-          <CapturedField
-            fieldKey="follow_up_actions"
-            label="Follow-Up Action"
-            value={followUpText}
-            status={statuses.follow_up_actions || (followUpText ? 'extracted' : 'missing')}
-            onVoiceCorrect={onVoiceCorrectField}
-            activeCorrectionField={activeCorrectionField}
-          />
+          {(draft.weight_kg !== null || statuses.weight_kg === 'needs_clarification') && (
+            <CapturedField
+              fieldKey="weight_kg"
+              label="Weight"
+              value={draft.weight_kg !== null ? `${draft.weight_kg} kg` : null}
+              rawEditValue={draft.weight_kg !== null ? String(draft.weight_kg) : ''}
+              editType="number"
+              sourcePhrase={draft.weight_source_text}
+              status={statuses.weight_kg || (draft.weight_kg !== null ? 'extracted' : 'missing')}
+              onVoiceCorrect={onVoiceCorrectField}
+              onVisualSave={onVisualPatchFields ? handleFieldVisualSave : undefined}
+              activeCorrectionField={activeCorrectionField}
+            />
+          )}
+          {(vaccineText !== null || statuses.vaccinations_due === 'needs_clarification') && !(draft.events && draft.events.length > 0) && (
+            <CapturedField
+              fieldKey="vaccinations_due"
+              label="Vaccinations / Immunisation"
+              value={vaccineText}
+              rawEditValue={draft.vaccinations_due.join(', ')}
+              status={statuses.vaccinations_due || (vaccineText ? 'extracted' : 'missing')}
+              onVoiceCorrect={onVoiceCorrectField}
+              onVisualSave={onVisualPatchFields ? handleFieldVisualSave : undefined}
+              activeCorrectionField={activeCorrectionField}
+            />
+          )}
+          {(draft.next_visit_date !== null || statuses.next_visit_date === 'needs_clarification') && (
+            <CapturedField
+              fieldKey="next_visit_date"
+              label="Next Visit Date"
+              value={draft.next_visit_date}
+              rawEditValue={draft.next_visit_date || ''}
+              editType="date"
+              sourcePhrase={draft.next_visit_date_source_text}
+              status={statuses.next_visit_date || (draft.next_visit_date ? 'extracted' : 'missing')}
+              onVoiceCorrect={onVoiceCorrectField}
+              onVisualSave={onVisualPatchFields ? handleFieldVisualSave : undefined}
+              activeCorrectionField={activeCorrectionField}
+            />
+          )}
+          {followUpText !== null && (
+            <CapturedField
+              fieldKey="follow_up_actions"
+              label="Follow-Up Action"
+              value={followUpText}
+              status={statuses.follow_up_actions || (followUpText ? 'extracted' : 'missing')}
+              onVoiceCorrect={onVoiceCorrectField}
+              activeCorrectionField={activeCorrectionField}
+            />
+          )}
         </div>
+
+        {/* Dynamic Captured Clinical Observations (rendered only when captured or added) */}
+        {draft.observations && draft.observations.length > 0 && (
+          <div className="pt-2 space-y-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 block">
+              Captured Clinical Observations ({draft.observations.length})
+            </span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {draft.observations.map((obs) => (
+                <div
+                  key={obs.key}
+                  className={`p-3 rounded-xl border flex items-start justify-between gap-2 ${
+                    obs.status === 'needs_confirmation'
+                      ? 'bg-amber-50/70 border-amber-300'
+                      : 'bg-slate-50/70 border-slate-200'
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-semibold text-slate-700">{obs.label}</span>
+                      {obs.status === 'needs_confirmation' && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 text-amber-950">
+                          Needs Confirmation
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm font-bold text-clinical-text mt-0.5 break-words">
+                      {String(obs.value ?? '')}
+                      {obs.unit ? ` ${obs.unit}` : ''}
+                    </p>
+                    {obs.source_text && (
+                      <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                        Source: &ldquo;{obs.source_text}&rdquo;
+                      </p>
+                    )}
+                  </div>
+                  {onRemoveObservation && draft.status === 'draft' && (
+                    <button
+                      type="button"
+                      onClick={() => onRemoveObservation(obs.key)}
+                      aria-label={`Remove ${obs.label}`}
+                      className="compact-chip p-1 rounded-lg text-slate-500 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <X className="h-3.5 w-3.5" aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Repeatable Clinical & Immunisation Events */}
+        {draft.events && draft.events.length > 0 && (
+          <div className="pt-2 space-y-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 block">
+              Recorded Events &amp; Vaccinations ({draft.events.length})
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {draft.events.map((ev) => (
+                <div
+                  key={`${ev.event_type}:${ev.name}`}
+                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs ${
+                    ev.status === 'completed'
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
+                      : 'bg-sky-50 border-sky-200 text-sky-950'
+                  }`}
+                >
+                  <span className="font-bold">{ev.name}</span>
+                  <span className="uppercase text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/80 border border-current/15">
+                    {ev.status}
+                  </span>
+                  {onVisualPatchFields && draft.status === 'draft' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const toggled = (draft.events || []).map((item) =>
+                          item.name === ev.name && item.event_type === ev.event_type
+                            ? { ...item, status: item.status === 'completed' ? 'due' : 'completed' }
+                            : item
+                        );
+                        onVisualPatchFields({ events: toggled });
+                      }}
+                      className="compact-chip text-[11px] underline font-semibold hover:opacity-80"
+                    >
+                      {ev.status === 'completed' ? 'Mark Due' : 'Mark Given'}
+                    </button>
+                  )}
+                  {onRemoveEvent && draft.status === 'draft' && (
+                    <button
+                      type="button"
+                      onClick={() => onRemoveEvent(ev.name)}
+                      aria-label={`Remove event ${ev.name}`}
+                      className="compact-chip p-0.5 rounded text-slate-500 hover:text-red-700"
+                    >
+                      <X className="h-3.5 w-3.5" aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Quick add custom observation */}
+        {onVisualPatchFields && draft.status === 'draft' && (
+          <div className="pt-1">
+            {!addingNote ? (
+              <button
+                type="button"
+                onClick={() => setAddingNote(true)}
+                className="compact-chip inline-flex items-center gap-1 text-xs font-semibold text-clinical-primary hover:underline"
+              >
+                <Edit3 className="h-3 w-3" aria-hidden="true" />
+                <span>+ Add Observation / Note</span>
+              </button>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                <input
+                  type="text"
+                  value={newObsLabel}
+                  onChange={(e) => setNewObsLabel(e.target.value)}
+                  placeholder="Label (e.g. Feeding, BP)"
+                  className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white flex-1 min-w-[130px]"
+                />
+                <input
+                  type="text"
+                  value={newObsValue}
+                  onChange={(e) => setNewObsValue(e.target.value)}
+                  placeholder="Observed value or note"
+                  className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white flex-[2] min-w-[160px]"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!newObsLabel.trim() || !newObsValue.trim()) return;
+                    const key = newObsLabel.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
+                    const nextObs = [
+                      ...(draft.observations || []).filter((o) => o.key !== key),
+                      {
+                        key,
+                        label: newObsLabel.trim(),
+                        value: newObsValue.trim(),
+                        value_type: 'text' as const,
+                        status: 'confirmed' as const,
+                        source_text: `${newObsLabel.trim()}: ${newObsValue.trim()}`,
+                      },
+                    ];
+                    onVisualPatchFields({ observations: nextObs });
+                    setNewObsLabel('');
+                    setNewObsValue('');
+                    setAddingNote(false);
+                  }}
+                  className="compact-chip px-3 py-1.5 rounded-lg bg-clinical-primary text-white text-xs font-bold"
+                >
+                  Save Note
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAddingNote(false)}
+                  className="compact-chip px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Danger Signs Summary Row */}
         <div

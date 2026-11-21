@@ -194,6 +194,11 @@ class SessionTelemetryTracker:
         self._last_stt_latency_ms: float | None = None
         self.barge_in_count: int = 0
         self.correction_count: int = 0
+        self.secondary_recognition_runs: int = 0
+        self.secondary_recognition_conflicts: int = 0
+        self.numeric_confirmations_requested: int = 0
+        self.numeric_confirmations_accepted: int = 0
+        self.numeric_confirmations_rejected: int = 0
 
     def mark_speech_start(self, ts: float | None = None) -> None:
         now = ts or time.time()
@@ -297,6 +302,13 @@ class SessionTelemetryTracker:
             "ttfa_stats": ttfa_stats,
             "barge_in_count": self.barge_in_count,
             "correction_count": self.correction_count,
+            "numeric_telemetry": {
+                "secondary_recognition_runs": self.secondary_recognition_runs,
+                "secondary_recognition_conflicts": self.secondary_recognition_conflicts,
+                "numeric_confirmations_requested": self.numeric_confirmations_requested,
+                "numeric_confirmations_accepted": self.numeric_confirmations_accepted,
+                "numeric_confirmations_rejected": self.numeric_confirmations_rejected,
+            },
             "task_success": self.steps.to_dict(),
             "turns": [r.to_dict() for r in sorted(self.turns.values(), key=lambda x: x.turn_id)],
         }

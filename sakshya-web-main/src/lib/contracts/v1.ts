@@ -30,6 +30,42 @@ export interface FollowUpActionV1 {
   source_phrase: string | null;
 }
 
+export type DynamicObservationStatusV1 =
+  | 'needs_confirmation'
+  | 'confirmed'
+  | 'corrected'
+  | 'uncertain'
+  | 'removed';
+
+export interface DynamicObservationV1 {
+  id?: string;
+  key: string;
+  label: string;
+  value: string | number | boolean | null;
+  value_type?: 'number' | 'text' | 'boolean' | 'date' | 'structured';
+  unit?: string | null;
+  source_text?: string | null;
+  turn_id?: number | null;
+  confidence?: number | null;
+  extraction_stage?: 'direct' | 'normalized' | 'inferred' | 'uncertain' | 'corrected';
+  status?: DynamicObservationStatusV1;
+  updated_at?: string | null;
+}
+
+export type DynamicEventStatusV1 = 'completed' | 'due' | 'scheduled' | 'deferred' | 'cancelled';
+
+export interface DynamicEventV1 {
+  id?: string;
+  event_type: string;
+  name: string;
+  status: DynamicEventStatusV1;
+  date?: string | null;
+  attributes?: Record<string, unknown>;
+  source_text?: string | null;
+  turn_id?: number | null;
+  confirmation_status?: DynamicObservationStatusV1;
+}
+
 export interface VisitRecordV1 {
   schema_version: 'v1';
   visit_id: string;
@@ -47,6 +83,8 @@ export interface VisitRecordV1 {
   danger_signs: string[];
   danger_sign_flagged: boolean;
   follow_up_actions: FollowUpActionV1[];
+  observations?: DynamicObservationV1[];
+  events?: DynamicEventV1[];
   status: VisitLifecycleStatus;
   confirmed_at: string | null;
   committed_at: string | null;
@@ -314,6 +352,18 @@ export interface ClientPatchFieldsEventV1 {
   fields: Record<string, unknown>;
 }
 
+export interface ClientRemoveObservationEventV1 {
+  schema_version?: 'v1';
+  type: 'remove_observation';
+  key: string;
+}
+
+export interface ClientRemoveEventEventV1 {
+  schema_version?: 'v1';
+  type: 'remove_event';
+  name: string;
+}
+
 export interface ClientFinishNotesEventV1 {
   schema_version?: 'v1';
   type: 'finish_notes';
@@ -329,6 +379,8 @@ export type ClientWebSocketEventV1 =
   | ClientPingEventV1
   | ClientEndSessionEventV1
   | ClientPatchFieldsEventV1
+  | ClientRemoveObservationEventV1
+  | ClientRemoveEventEventV1
   | ClientFinishNotesEventV1;
 
 // ---------- WebSocket Server -> Client Events (voice-events.schema.json) ----------

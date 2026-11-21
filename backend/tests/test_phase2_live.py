@@ -127,10 +127,11 @@ async def run_live_phase2_verification() -> None:
             await asyncio.sleep(0.5)
 
             print("[LIVE-P2] Streaming ANC visit note...", flush=True)
+            silence_frames = max(60, (settings.endpoint_silence_ms // 32) + 20)
             for i in range(0, len(anc_pcm), FRAME_BYTES):
                 await ws.send(anc_pcm[i : i + FRAME_BYTES])
                 await asyncio.sleep(0.028)
-            for _ in range(38):
+            for _ in range(silence_frames):
                 await ws.send(b"\x00" * FRAME_BYTES)
                 await asyncio.sleep(0.028)
 
@@ -140,7 +141,7 @@ async def run_live_phase2_verification() -> None:
             for i in range(0, len(danger_pcm), FRAME_BYTES):
                 await ws.send(danger_pcm[i : i + FRAME_BYTES])
                 await asyncio.sleep(0.028)
-            for _ in range(38):
+            for _ in range(silence_frames):
                 await ws.send(b"\x00" * FRAME_BYTES)
                 await asyncio.sleep(0.028)
 

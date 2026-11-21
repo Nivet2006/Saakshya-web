@@ -19,6 +19,7 @@ class TranscriptEvent:
     segment_id: str | None = None
     seq: int | None = None
     latency_ms: int | None = None
+    confidence: float | None = None
     error_message: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -33,6 +34,10 @@ class VADDecision:
     is_speech: bool
     barge_in_triggered: bool = False
     pre_roll_pcm: bytes = b""
+    speech_started: bool = False
+    speech_ended: bool = False
+    clipped_samples: int = 0
+    snr_db: float = 0.0
 
 
 @dataclass(slots=True)

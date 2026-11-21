@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -16,8 +16,10 @@ ROOT_ENV_FILE = REPO_ROOT / ".env"
 DEFAULT_GNANI_STT_WS_URL = "wss://api.vachana.ai/stt/v3/stream"
 DEFAULT_GNANI_TTS_WS_URL = "wss://api.vachana.ai/api/v1/tts"
 
-# Verified ASHA domain keywords for Gnani Prisma v3.0 x-keywords biasing (<= 200 items)
-ASHA_DOMAIN_KEYWORDS: tuple[str, ...] = (
+# Focused ASHA clinical & measurement keyterms for Gnani Prisma v3.0 biasing (<= 200 items).
+# Beneficiary names & IDs are injected dynamically ONLY for the active session context
+# so prompts are never overloaded with irrelevant vocabulary.
+ASHA_CORE_KEYWORDS: tuple[str, ...] = (
     "ASHA",
     "ANC",
     "ANC checkup",
@@ -40,9 +42,12 @@ ASHA_DOMAIN_KEYWORDS: tuple[str, ...] = (
     "MR vaccine",
     "Rotavirus",
     "PCV",
+    "IPV",
     "kilo",
     "kilogram",
+    "kilograms",
     "gram",
+    "grams",
     "bleeding",
     "convulsions",
     "fits",
@@ -57,29 +62,59 @@ ASHA_DOMAIN_KEYWORDS: tuple[str, ...] = (
     "naal",
     "blurred vision",
     "severe headache",
-    "Lakshmi Devi",
-    "Kavitha Rao",
-    "Baby of Kavitha Rao",
-    "Sunita Kumari",
-    "Meena Selvam",
-    "Anita Devi",
-    "Lakshmi Narayanan",
-    "Anitha Sharma",
-    "BEN-1042",
-    "BEN-1043",
-    "BEN-1044",
-    "BEN-1045",
-    "BEN-1046",
-    "BEN-1047",
-    "BEN-1048",
-    "BEN-1056",
-    "point",
-    "fifty-two",
-    "fifty-three",
-    "twenty-eighth",
-    "November",
-    "December",
+    "weight",
+    "vajan",
+    "wajan",
+    "next visit",
 )
+
+# Backward-compatible alias
+ASHA_DOMAIN_KEYWORDS: tuple[str, ...] = ASHA_CORE_KEYWORDS
+
+DEFAULT_ASHA_STT_TOPIC = (
+    "ASHA community health worker home visit notes including maternal or newborn weight "
+    "in kilograms or grams, vaccinations, danger signs, and follow-up visit dates."
+)
+
+
+def build_contextual_stt_options(
+    *,
+    beneficiary_name: str | None = None,
+    beneficiary_id: str | None = None,
+    extra_speaker_names: list[str] | None = None,
+    previous_text: str | None = None,
+) -> dict[str, Any]:
+    """Build focused, non-overloaded Prisma v3.0 context options for a session."""
+    keywords = list(ASHA_CORE_KEYWORDS)
+    speaker_names: list[str] = []
+
+    def _add_name(name: str | None) -> None:
+        if not name:
+            return
+        cleaned = name.strip()
+        if cleaned and cleaned not in speaker_names and len(speaker_names) < 4:
+            speaker_names.append(cleaned)
+        if cleaned and cleaned not in keywords and len(keywords) < 200:
+            keywords.append(cleaned)
+
+    _add_name(beneficiary_name)
+    if beneficiary_name and beneficiary_name.lower().startswith("baby of "):
+        _add_name(beneficiary_name[8:].strip())
+    if extra_speaker_names:
+        for nm in extra_speaker_names:
+            _add_name(nm)
+
+    if beneficiary_id and beneficiary_id.strip():
+        bid = beneficiary_id.strip()
+        if bid not in keywords and len(keywords) < 200:
+            keywords.append(bid)
+
+    return {
+        "keywords": keywords[:200],
+        "speaker_names": speaker_names[:4],
+        "previous_text": (previous_text or "").strip()[-600:],
+        "topic": DEFAULT_ASHA_STT_TOPIC,
+    }
 
 
 class Settings(BaseSettings):
@@ -99,8 +134,17 @@ class Settings(BaseSettings):
     gnani_stt_ws_url: str = Field(default="", alias="GNANI_STT_WS_URL")
     gnani_tts_ws_url: str = Field(default="", alias="GNANI_TTS_WS_URL")
     gnani_tts_voice: str = Field(default="Shivani", alias="GNANI_TTS_VOICE")
-    gnani_stt_format: str = Field(default="codemix", alias="GNANI_STT_FORMAT")
+    gnani_stt_format: str = Field(default="transcribe", alias="GNANI_STT_FORMAT")
     gnani_stt_enable_partials: bool = Field(default=True, alias="GNANI_STT_ENABLE_PARTIALS")
+    gnani_stt_secondary_enabled: bool = Field(
+        default=True, alias="GNANI_STT_SECONDARY_ENABLED"
+    )
+    gnani_stt_secondary_format: str = Field(
+        default="codemix", alias="GNANI_STT_SECONDARY_FORMAT"
+    )
+    mandatory_numeric_confirmation: bool = Field(
+        default=False, alias="MANDATORY_NUMERIC_CONFIRMATION"
+    )
 
     # LLM Configuration
     llm_provider: str = Field(default="gemini", alias="LLM_PROVIDER")
@@ -125,9 +169,9 @@ class Settings(BaseSettings):
     )
     audio_sample_rate: int = Field(default=16000, alias="AUDIO_SAMPLE_RATE")
     vad_threshold: float = Field(default=0.6, alias="VAD_THRESHOLD")
-    barge_in_vad_threshold: float = Field(default=0.72, alias="BARGE_IN_VAD_THRESHOLD")
-    barge_in_min_speech_ms: int = Field(default=300, alias="BARGE_IN_MIN_SPEECH_MS")
-    endpoint_silence_ms: int = Field(default=700, alias="ENDPOINT_SILENCE_MS")
+    barge_in_vad_threshold: float = Field(default=0.70, alias="BARGE_IN_VAD_THRESHOLD")
+    barge_in_min_speech_ms: int = Field(default=192, alias="BARGE_IN_MIN_SPEECH_MS")
+    endpoint_silence_ms: int = Field(default=1350, alias="ENDPOINT_SILENCE_MS")
 
     # Safety & Synthetic Guardrails
     synthetic_data_only: bool = Field(default=True, alias="SYNTHETIC_DATA_ONLY")

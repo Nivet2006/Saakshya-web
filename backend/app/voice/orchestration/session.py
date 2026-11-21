@@ -91,6 +91,21 @@ class VoiceSessionOrchestrator:
         self._debounce_task: asyncio.Task[None] | None = None
         self._turn_debounce_s: float = 0.06
         self.telemetry: SessionTelemetryTracker = telemetry_registry.get_or_create(self.session_id)
+        self.audio_frames_received: int = 0
+        self.audio_bytes_received: int = 0
+        self.vad_clipped_samples: int = 0
+        self.last_snr_db: float = 0.0
+        # Bounded in-memory rolling PCM ring buffer (never persisted to disk) +
+        # per-utterance byte ranges keyed by utterance_id for accurate secondary ASR.
+        self._pcm_bytes_per_ms: int = (16000 * 2) // 1000  # 32 bytes/ms @ 16kHz mono s16le
+        self._pcm_ring_max_bytes: int = 45 * 16000 * 2  # 45s rolling window
+        self._pcm_ring: bytearray = bytearray()
+        self._pcm_ring_start_offset: int = 0
+        self._session_audio_bytes_total: int = 0
+        self._last_final_offset: int = 0
+        self._utterance_start_offsets: dict[str, int] = {}
+        self._completed_utterance_pcm: dict[str, bytes] = {}
+        self._active_local_utterance_start: int | None = None
 
     def _envelope(self, event_type: str, **payload: Any) -> dict[str, Any]:
         return {
@@ -138,12 +153,34 @@ class VoiceSessionOrchestrator:
         """Process incoming 16kHz PCM_S16LE audio from client mic/WAV."""
         if self._closed or not pcm_bytes:
             return
+        self.audio_frames_received += 1
+        self.audio_bytes_received += len(pcm_bytes)
+
+        chunk_start_offset = self._session_audio_bytes_total
+
+        # Append incoming PCM to bounded timestamp-indexed rolling ring buffer BEFORE VAD/STT
+        self._pcm_ring.extend(pcm_bytes)
+        self._session_audio_bytes_total += len(pcm_bytes)
+        if len(self._pcm_ring) > self._pcm_ring_max_bytes:
+            excess = len(self._pcm_ring) - self._pcm_ring_max_bytes
+            del self._pcm_ring[:excess]
+            self._pcm_ring_start_offset += excess
 
         # 1. Local VAD + dual-gate barge-in detection while assistant is speaking
         if self._vad is not None:
             decision = self._vad.process_frame(
                 pcm_bytes, assistant_speaking=self.assistant_speaking
             )
+            self.vad_clipped_samples += decision.clipped_samples
+            self.last_snr_db = decision.snr_db
+            if decision.speech_started:
+                self.telemetry.mark_speech_start()
+                pre_roll_len = len(decision.pre_roll_pcm) if decision.pre_roll_pcm else 0
+                self._active_local_utterance_start = max(
+                    self._pcm_ring_start_offset, chunk_start_offset - pre_roll_len
+                )
+            if decision.speech_ended:
+                self.telemetry.mark_speech_end()
             if decision.barge_in_triggered:
                 await self.interrupt(trigger="vad")
 
@@ -210,8 +247,6 @@ class VoiceSessionOrchestrator:
                 await self._response_task
         self._response_task = None
 
-        await self._tts.cancel_active()
-
         if was_active or trigger in ("client", "vad", "danger_sign"):
             self.telemetry.barge_in_count += 1
             log_event(
@@ -233,6 +268,8 @@ class VoiceSessionOrchestrator:
                 cancelled_turn_id=cancelled_turn,
                 reason=trigger,
             )
+
+        await self._tts.cancel_active()
 
         if not self._closed:
             await self._set_state("listening")
@@ -300,6 +337,9 @@ class VoiceSessionOrchestrator:
             self._tts.close(),
             return_exceptions=True,
         )
+        self._pcm_ring.clear()
+        self._utterance_start_offsets.clear()
+        self._completed_utterance_pcm.clear()
         self.state = "closed"
         log_event(logger, "session_closed", session=self.session_id)
 
@@ -322,17 +362,66 @@ class VoiceSessionOrchestrator:
                 retryable=True,
             )
 
+    def _slice_pcm_ring(self, start_offset: int, end_offset: int) -> bytes:
+        """Extract PCM bytes in [start_offset, end_offset] from the rolling ring buffer."""
+        if not self._pcm_ring or end_offset <= start_offset:
+            return b""
+        ring_end = self._pcm_ring_start_offset + len(self._pcm_ring)
+        clamped_start = max(self._pcm_ring_start_offset, start_offset)
+        clamped_end = min(ring_end, end_offset)
+        if clamped_end <= clamped_start:
+            return b""
+        rel_start = clamped_start - self._pcm_ring_start_offset
+        rel_end = clamped_end - self._pcm_ring_start_offset
+        return bytes(self._pcm_ring[rel_start:rel_end])
+
     async def _dispatch_stt_event(self, event: TranscriptEvent) -> None:
         if event.event_type == "connected":
             return
 
         if event.event_type == "speech_start":
             self.telemetry.mark_speech_start()
+            uid = event.utterance_id or "_active"
+            # Prefer local VAD start if within recent 2s; otherwise preserve 0.5s pre-roll
+            default_start = max(
+                self._pcm_ring_start_offset,
+                self._session_audio_bytes_total - 16000,
+            )
+            if (
+                self._vad is not None
+                and self._active_local_utterance_start is not None
+                and (self._session_audio_bytes_total - self._active_local_utterance_start) <= 64000
+            ):
+                start_off = self._active_local_utterance_start
+            else:
+                start_off = max(default_start, self._last_final_offset)
+            self._utterance_start_offsets[uid] = start_off
+            if len(self._utterance_start_offsets) > 12:
+                oldest = next(iter(self._utterance_start_offsets))
+                self._utterance_start_offsets.pop(oldest, None)
             await self.emit_event("speech_start", utterance_id=event.utterance_id)
             return
 
         if event.event_type == "speech_end":
             self.telemetry.mark_speech_end()
+            uid = event.utterance_id or "_active"
+            end_off = self._session_audio_bytes_total
+            start_off = self._utterance_start_offsets.get(uid)
+            if start_off is None:
+                audio_ms = event.metadata.get("audio_ms")
+                if isinstance(audio_ms, (int, float)) and audio_ms > 0:
+                    start_off = max(
+                        self._pcm_ring_start_offset,
+                        end_off - int(audio_ms * self._pcm_bytes_per_ms) - 9600,
+                    )
+                else:
+                    start_off = max(self._pcm_ring_start_offset, self._last_final_offset)
+            sliced = self._slice_pcm_ring(start_off, end_off)
+            if sliced:
+                self._completed_utterance_pcm[uid] = sliced
+                if len(self._completed_utterance_pcm) > 8:
+                    oldest = next(iter(self._completed_utterance_pcm))
+                    self._completed_utterance_pcm.pop(oldest, None)
             await self.emit_event("speech_end", utterance_id=event.utterance_id)
             return
 
@@ -378,6 +467,37 @@ class VoiceSessionOrchestrator:
 
         if event.event_type == "final":
             self.telemetry.mark_transcript_finalized(stt_latency_ms=event.latency_ms)
+            uid = event.utterance_id or "_active"
+            utterance_pcm = self._completed_utterance_pcm.pop(uid, None)
+            start_off = self._utterance_start_offsets.pop(uid, None)
+            if utterance_pcm is None:
+                if uid != "_active":
+                    utterance_pcm = self._completed_utterance_pcm.pop("_active", None)
+                if start_off is None and uid != "_active":
+                    start_off = self._utterance_start_offsets.pop("_active", None)
+            end_off = self._session_audio_bytes_total
+            if utterance_pcm is None:
+                if start_off is not None:
+                    utterance_pcm = self._slice_pcm_ring(start_off, end_off)
+                elif isinstance(event.metadata.get("audio_duration_ms"), (int, float)):
+                    dur_ms = float(event.metadata["audio_duration_ms"])
+                    dur_start = max(
+                        self._pcm_ring_start_offset,
+                        end_off - int(dur_ms * self._pcm_bytes_per_ms) - 9600,
+                    )
+                    utterance_pcm = self._slice_pcm_ring(dur_start, end_off)
+                elif self._active_local_utterance_start is not None:
+                    utterance_pcm = self._slice_pcm_ring(self._active_local_utterance_start, end_off)
+                else:
+                    utterance_pcm = self._slice_pcm_ring(self._last_final_offset, end_off)
+            self._last_final_offset = end_off
+            self._active_local_utterance_start = None
+            if utterance_pcm:
+                event.metadata.setdefault("utterance_pcm", utterance_pcm)
+                event.metadata.setdefault("sample_rate", self._tts.sample_rate)
+            append_ctx = getattr(self._stt, "append_previous_context", None)
+            if callable(append_ctx) and event.text:
+                append_ctx(event.text)
             await self.emit_event(
                 "final_transcript",
                 text=event.text,

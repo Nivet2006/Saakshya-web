@@ -24,10 +24,14 @@ All Gnani services authenticate via the HTTP/WebSocket upgrade header `X-API-Key
   - `x-model`: `prisma-v3.0` (required; server defaults to `prisma-v2.5` if omitted)
   - `lang_code`: `indic-auto` (auto-detect per utterance, `prisma-v3.0` only) or BCP-47 code (`hi-IN`, `en-IN`, `kn-IN`, `ta-IN`, `te-IN`, `mr-IN`, `bn-IN`, `gu-IN`, `ml-IN`, `pa-IN`)
   - `x-language-candidates`: comma-separated 2–4 BCP-47 hints (only valid with `lang_code=indic-auto` and `prisma-v3.0`), e.g. `hi-IN,en-IN,kn-IN,ta-IN`
-  - `x-format`: `codemix` (keeps English medical terms in Latin script alongside Indic script; `prisma-v3.0` also supports `verbatim`, `transcribe`, `transliterate`)
+  - `x-format`: `transcribe` (primary default — enables Inverse Text Normalization (ITN) so spoken numbers, decimals, dates, and IDs normalize to digits; `prisma-v3.0` also supports `verbatim`, `codemix`, `transliterate`). Note: `codemix` keeps numbers as spoken words and is used only as an optional secondary recognition fallback (`POST /stt/v3`).
   - `x-sample-rate`: `16000` (supported streaming rates: `8000`, `16000`, `44100`, `48000`)
   - `x-partials`: `true` (**live-verified**: enables `partial_transcript` events every `partial_interval_ms=450` ms!)
-  - `x-keywords`: JSON-encoded ASCII-escaped list of up to 200 domain hint phrases (e.g. `["ANC checkup", "PNC", "HBNC", "TT injection", "IFA goli", "BCG", "OPV", "Pentavalent", "PHC", "ASHA", "kilo", "convulsions", "bleeding"]`)
+  - `x-keywords`: JSON-encoded ASCII-escaped list of up to 200 focused clinical/measurement hint phrases plus the active session beneficiary (`ASHA_CORE_KEYWORDS` + active beneficiary name/ID)
+  - `x-speaker-names`: JSON-encoded ASCII-escaped list of 1–4 active beneficiary/speaker names (fixed for the WS connection; also passed on REST secondary recognition)
+  - `x-previous-text`: ASCII-safe rolling prior context (up to last 600 chars)
+  - `x-topic`: concise ASHA home-visit domain description (up to 1600 chars)
+  - Mid-session WebSocket `{"type": "update_settings", "format": ..., "language_code": ...}` is supported for `format`/`language_code` switching (returns `settings_updated`); context fields (`keywords`, `speaker_names`, `previous_text`, `topic`) are fixed per WS handshake and refreshed on reconnect / REST secondary recognition.
   - Optional server-side VAD tuning headers (from `gnani.stt.client.STREAM_TUNING_OPTIONS`):
     - `x-vad-threshold`: `0.0`–`1.0` (server default `0.7`)
     - `x-min-silence-ms`: `100`–`2000` (server default `500`)

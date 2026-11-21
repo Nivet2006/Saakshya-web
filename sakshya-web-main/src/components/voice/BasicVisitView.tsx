@@ -122,21 +122,35 @@ export const BasicVisitView: React.FC<BasicVisitViewProps> = ({
               </div>
             </div>
 
-            {voice.latencyMetrics && (
-              <div
-                className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-white/90 border border-slate-200 text-[11px] font-mono text-slate-700"
-                title="End-of-speech to First Audible Assistant Audio (TTFA)"
-              >
-                <Clock className="h-3.5 w-3.5 text-clinical-primary shrink-0" aria-hidden="true" />
-                <span>
-                  {voice.latencyMetrics.lastTtfaMs !== null
-                    ? `TTFA: ${voice.latencyMetrics.lastTtfaMs}ms (P50: ${voice.latencyMetrics.p50TtfaMs ?? '-'}ms · P95: ${voice.latencyMetrics.p95TtfaMs ?? '-'}ms)`
-                    : voice.latencyMetrics.greetingLatencyMs !== null
-                    ? `Greeting: ${voice.latencyMetrics.greetingLatencyMs}ms`
-                    : 'Measuring TTFA...'}
-                </span>
-              </div>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {voice.latencyMetrics && (
+                <div
+                  className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-white/90 border border-slate-200 text-[11px] font-mono text-slate-700"
+                  title="End-of-speech to First Audible Assistant Audio (TTFA)"
+                >
+                  <Clock className="h-3.5 w-3.5 text-clinical-primary shrink-0" aria-hidden="true" />
+                  <span>
+                    {voice.latencyMetrics.lastTtfaMs !== null
+                      ? `TTFA: ${voice.latencyMetrics.lastTtfaMs}ms (P50: ${voice.latencyMetrics.p50TtfaMs ?? '-'}ms · P95: ${voice.latencyMetrics.p95TtfaMs ?? '-'}ms)`
+                      : voice.latencyMetrics.greetingLatencyMs !== null
+                      ? `Greeting: ${voice.latencyMetrics.greetingLatencyMs}ms`
+                      : 'Measuring TTFA...'}
+                  </span>
+                </div>
+              )}
+              {voice.audioDiagnostics && (
+                <div
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/90 border border-slate-200 text-[11px] font-mono text-slate-600"
+                  title="Web Audio capture pipeline & barge-in diagnostics"
+                >
+                  <span>
+                    {voice.audioDiagnostics.usedAudioWorklet ? 'Worklet' : 'ScriptProc'} ·{' '}
+                    {voice.audioDiagnostics.captureSampleRate}Hz→16kHz · Stale:{' '}
+                    {voice.audioDiagnostics.staleChunksDiscarded}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         </section>
       )}
@@ -191,6 +205,8 @@ export const BasicVisitView: React.FC<BasicVisitViewProps> = ({
             onResumePlayback={voice.resumeReadBack}
             onVoiceCorrectField={(fieldKey) => voice.startVoiceCorrection(fieldKey)}
             onVisualPatchFields={voice.patchFieldsVisually}
+            onRemoveObservation={voice.removeObservationVisually}
+            onRemoveEvent={voice.removeEventVisually}
             onSpeakToMakeChanges={voice.speakToMakeChanges}
           />
 

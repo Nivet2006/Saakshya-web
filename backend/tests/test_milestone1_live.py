@@ -137,11 +137,12 @@ async def run_live_milestone1_verification() -> None:
 
             # 3. Stream Utterance 1 in real-time 32ms PCM chunks + trailing silence
             print("[LIVE-M1] Step 3: Streaming Utterance 1 to /ws/voice/live_m1_verify...", flush=True)
+            silence_frames = max(60, (settings.endpoint_silence_ms // 32) + 20)
             t0 = time.perf_counter()
             for i in range(0, len(utt1_pcm), FRAME_BYTES):
                 await ws.send(utt1_pcm[i : i + FRAME_BYTES])
                 await asyncio.sleep(0.028)
-            for _ in range(38):
+            for _ in range(silence_frames):
                 await ws.send(b"\x00" * FRAME_BYTES)
                 await asyncio.sleep(0.028)
 
@@ -154,7 +155,7 @@ async def run_live_milestone1_verification() -> None:
             for i in range(0, len(utt2_pcm), FRAME_BYTES):
                 await ws.send(utt2_pcm[i : i + FRAME_BYTES])
                 await asyncio.sleep(0.028)
-            for _ in range(38):
+            for _ in range(silence_frames):
                 await ws.send(b"\x00" * FRAME_BYTES)
                 await asyncio.sleep(0.028)
 

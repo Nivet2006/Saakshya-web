@@ -23,11 +23,30 @@ from typing import Any
 import websockets
 from websockets.exceptions import ConnectionClosed
 
-from app.core.config import ASHA_DOMAIN_KEYWORDS, DEFAULT_GNANI_STT_WS_URL, Settings
+from app.core.config import (
+    ASHA_CORE_KEYWORDS,
+    DEFAULT_ASHA_STT_TOPIC,
+    DEFAULT_GNANI_STT_WS_URL,
+    Settings,
+)
 from app.core.logging import log_event, safe_text_preview
 from app.voice.interfaces import TranscriptEvent
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_context_text(value: str) -> str:
+    """Strip Prisma reserved tag markers (`<|`, `|>`) and normalize whitespace."""
+    return value.replace("<|", "").replace("|>", "").strip()
+
+
+def _ascii_header_value(value: str) -> str:
+    """Ensure HTTP WebSocket upgrade header values are valid ASCII."""
+    try:
+        value.encode("ascii")
+        return value
+    except UnicodeEncodeError:
+        return json.dumps(value, ensure_ascii=True)
 
 
 class GnaniPrismaSTTAdapter:
@@ -41,10 +60,13 @@ class GnaniPrismaSTTAdapter:
         model: str = "prisma-v3.0",
         language_code: str = "indic-auto",
         language_candidates: Sequence[str] | None = None,
-        output_format: str = "codemix",
+        output_format: str = "transcribe",
         sample_rate: int = 16000,
         enable_partials: bool = True,
-        keywords: Sequence[str] | None = ASHA_DOMAIN_KEYWORDS,
+        keywords: Sequence[str] | None = ASHA_CORE_KEYWORDS,
+        speaker_names: Sequence[str] | None = None,
+        previous_text: str | None = None,
+        topic: str | None = DEFAULT_ASHA_STT_TOPIC,
         vad_threshold: float | None = None,
         min_silence_ms: int | None = None,
         min_speech_ms: int | None = None,
@@ -58,10 +80,19 @@ class GnaniPrismaSTTAdapter:
         self._model = model or "prisma-v3.0"
         self._language_code = language_code
         self._language_candidates = list(language_candidates or [])
-        self._output_format = output_format
+        self._output_format = output_format or "transcribe"
         self._sample_rate = sample_rate
         self._enable_partials = enable_partials
-        self._keywords = list(keywords or [])[:200]
+        self._keywords = [
+            _sanitize_context_text(k) for k in (keywords or []) if _sanitize_context_text(k)
+        ][:200]
+        self._speaker_names = [
+            _sanitize_context_text(n).replace("\n", " ").replace("\r", " ")
+            for n in (speaker_names or [])
+            if _sanitize_context_text(n)
+        ][:4]
+        self._previous_text = _sanitize_context_text(previous_text or "")[-600:]
+        self._topic = _sanitize_context_text(topic or "")[:1600]
         self._vad_threshold = vad_threshold
         self._min_silence_ms = min_silence_ms
         self._min_speech_ms = min_speech_ms
@@ -75,6 +106,7 @@ class GnaniPrismaSTTAdapter:
         self._connect_lock = asyncio.Lock()
         self._request_id: str = ""
         self._connected_config: dict[str, Any] = {}
+        self._last_request_headers: dict[str, str] = {}
 
     @classmethod
     def from_settings(
@@ -82,6 +114,10 @@ class GnaniPrismaSTTAdapter:
         settings: Settings,
         *,
         language_code: str | None = None,
+        keywords: Sequence[str] | None = None,
+        speaker_names: Sequence[str] | None = None,
+        previous_text: str | None = None,
+        topic: str | None = DEFAULT_ASHA_STT_TOPIC,
     ) -> GnaniPrismaSTTAdapter:
         """Build an adapter from root `.env` Settings."""
         lang = language_code or "indic-auto"
@@ -92,9 +128,13 @@ class GnaniPrismaSTTAdapter:
             model=settings.gnani_stt_model or "prisma-v3.0",
             language_code=lang,
             language_candidates=candidates,
-            output_format=settings.gnani_stt_format or "codemix",
+            output_format=settings.gnani_stt_format or "transcribe",
             sample_rate=settings.audio_sample_rate,
             enable_partials=settings.gnani_stt_enable_partials,
+            keywords=keywords if keywords is not None else ASHA_CORE_KEYWORDS,
+            speaker_names=speaker_names,
+            previous_text=previous_text,
+            topic=topic,
             min_silence_ms=min(max(settings.endpoint_silence_ms, 100), 2000),
         )
 
@@ -112,6 +152,71 @@ class GnaniPrismaSTTAdapter:
     def connected_config(self) -> dict[str, Any]:
         return dict(self._connected_config)
 
+    def update_context(
+        self,
+        *,
+        previous_text: str | None = None,
+        speaker_names: Sequence[str] | None = None,
+        keywords: Sequence[str] | None = None,
+        topic: str | None = None,
+    ) -> None:
+        """Update session context for subsequent reconnects and secondary recognition."""
+        if previous_text is not None:
+            self._previous_text = _sanitize_context_text(previous_text)[-600:]
+        if speaker_names is not None:
+            self._speaker_names = [
+                _sanitize_context_text(n).replace("\n", " ").replace("\r", " ")
+                for n in speaker_names
+                if _sanitize_context_text(n)
+            ][:4]
+        if keywords is not None:
+            self._keywords = [
+                _sanitize_context_text(k) for k in keywords if _sanitize_context_text(k)
+            ][:200]
+        if topic is not None:
+            self._topic = _sanitize_context_text(topic)[:1600]
+
+    def append_previous_context(self, utterance_text: str) -> None:
+        """Append a finalized utterance to the rolling 600-char previous_text window."""
+        cleaned = _sanitize_context_text(utterance_text)
+        if not cleaned:
+            return
+        combined = f"{self._previous_text} {cleaned}".strip() if self._previous_text else cleaned
+        self._previous_text = combined[-600:]
+
+    def context_snapshot(self) -> dict[str, Any]:
+        """Return current Prisma v3.0 context options (for REST secondary recognition & inspection)."""
+        return {
+            "language_code": self._language_code,
+            "language_candidates": list(self._language_candidates),
+            "keywords": list(self._keywords),
+            "speaker_names": list(self._speaker_names),
+            "previous_text": self._previous_text,
+            "topic": self._topic,
+        }
+
+    def inspect_connection_config(self) -> dict[str, Any]:
+        """Return redacted outgoing WebSocket request config & server-confirmed config."""
+        redacted_headers = {
+            k: ("***" if k.lower() == "x-api-key-id" else v)
+            for k, v in (self._last_request_headers or self.build_headers("preview")).items()
+        }
+        return {
+            "ws_url": self._ws_url,
+            "model": self._model,
+            "output_format": self._output_format,
+            "language_code": self._language_code,
+            "language_candidates": list(self._language_candidates),
+            "sample_rate": self._sample_rate,
+            "partials_enabled": self._enable_partials,
+            "keywords_count": len(self._keywords),
+            "speaker_names": list(self._speaker_names),
+            "has_previous_text": bool(self._previous_text),
+            "topic": self._topic,
+            "outgoing_headers": redacted_headers,
+            "server_connected_config": dict(self._connected_config),
+        }
+
     def build_headers(self, request_id: str) -> dict[str, str]:
         """Construct verified Prisma v3.0 WebSocket upgrade headers."""
         headers: dict[str, str] = {
@@ -127,8 +232,15 @@ class GnaniPrismaSTTAdapter:
             headers["x-partials"] = "true"
         if self._language_code == "indic-auto" and len(self._language_candidates) >= 2:
             headers["x-language-candidates"] = ",".join(self._language_candidates[:4])
-        if self._keywords and self._model.lower() == "prisma-v3.0":
-            headers["x-keywords"] = json.dumps(self._keywords, ensure_ascii=True)
+        if self._model.lower() == "prisma-v3.0":
+            if self._keywords:
+                headers["x-keywords"] = json.dumps(self._keywords, ensure_ascii=True)
+            if self._speaker_names:
+                headers["x-speaker-names"] = json.dumps(self._speaker_names, ensure_ascii=True)
+            if self._previous_text:
+                headers["x-previous-text"] = _ascii_header_value(self._previous_text)
+            if self._topic:
+                headers["x-topic"] = _ascii_header_value(self._topic)
         if self._vad_threshold is not None:
             headers["x-vad-threshold"] = str(self._vad_threshold)
         if self._min_silence_ms is not None:
@@ -137,7 +249,39 @@ class GnaniPrismaSTTAdapter:
             headers["x-min-speech-ms"] = str(self._min_speech_ms)
         if self._idle_timeout_sec is not None:
             headers["x-idle-timeout-sec"] = str(self._idle_timeout_sec)
+        self._last_request_headers = dict(headers)
         return headers
+
+    async def update_stream_settings(
+        self,
+        *,
+        format: str | None = None,
+        language_code: str | None = None,
+    ) -> None:
+        """Send a verified `update_settings` control frame on the open Prisma WS."""
+        payload: dict[str, Any] = {"type": "update_settings"}
+        if format is not None:
+            self._output_format = format
+            payload["format"] = format
+        if language_code is not None:
+            self._language_code = language_code
+            payload["language_code"] = language_code
+        if len(payload) > 1 and self.is_connected and self._ws is not None:
+            await self._ws.send(json.dumps(payload))
+
+    async def reconnect_with_context(self) -> None:
+        """Close and reopen the Prisma WebSocket so updated handshake context takes effect.
+
+        Live probes confirmed `update_settings` only applies `format` and `language_code`;
+        `x-speaker-names`, `x-keywords`, and `x-previous-text` are handshake headers.
+        """
+        if self._closed:
+            return
+        async with self._connect_lock:
+            if self._closed:
+                return
+            await self._close_socket_only()
+        await self.connect()
 
     async def connect(self) -> None:
         """Open the Prisma v3.0 WebSocket and await the `connected` handshake event."""
@@ -330,6 +474,11 @@ class GnaniPrismaSTTAdapter:
                 utterance_id=payload.get("utterance_id"),
                 segment_id=payload.get("segment_id"),
                 latency_ms=payload.get("latency"),
+                confidence=(
+                    float(payload["confidence"])
+                    if isinstance(payload.get("confidence"), (int, float))
+                    else None
+                ),
                 metadata={
                     "audio_duration_ms": payload.get("audio_duration_ms"),
                     "segment_index": payload.get("segment_index"),

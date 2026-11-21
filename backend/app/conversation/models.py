@@ -272,6 +272,9 @@ class VisitRecordState(BaseModel):
     danger_signs: list[str] = Field(default_factory=list)
     danger_sign_flagged: bool = False
     follow_up_actions: list[str] = Field(default_factory=list)
+    observations: list[dict[str, Any]] = Field(default_factory=list)
+    events: list[dict[str, Any]] = Field(default_factory=list)
+    utterance_traces: list[dict[str, Any]] = Field(default_factory=list)
     status: VisitStatus = VisitStatus.DRAFT
     updated_at: str = Field(default_factory=utc_now_iso)
 
@@ -295,6 +298,8 @@ class VisitRecordState(BaseModel):
             self.weight_kg is not None
             or len(self.vaccinations_due) > 0
             or len(self.vaccinations_completed) > 0
+            or len(self.observations) > 0
+            or len(self.events) > 0
             or self.next_visit_date is not None
             or self.danger_sign_flagged
         )
@@ -315,6 +320,11 @@ class ExtractionUpdate(BaseModel):
     vaccinations_due: list[str] | None = None
     next_visit_date: str | None = None
     follow_up_actions: list[str] | None = None
+    observations: list[dict[str, Any]] | None = None
+    events: list[dict[str, Any]] | None = None
+    remove_observation_keys: set[str] = Field(default_factory=set)
+    remove_event_names: set[str] = Field(default_factory=set)
+    trace: dict[str, Any] | None = None
     clarifications: list[ClarificationRequest] = Field(default_factory=list)
     explicit_fields: set[str] | None = None
     clear_fields: set[str] = Field(default_factory=set)
@@ -345,6 +355,8 @@ class ExtractionUpdate(BaseModel):
             "vaccinations_due",
             "next_visit_date",
             "follow_up_actions",
+            "observations",
+            "events",
         )
         if self.explicit_fields is not None:
             return {f for f in self.explicit_fields if f in patchable}

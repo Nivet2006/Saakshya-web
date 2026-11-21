@@ -10,45 +10,54 @@ from __future__ import annotations
 import re
 import unicodedata
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from app.extraction.dates import (
+    AMBIGUOUS_DATE_RE,
+    find_date_candidates,
+    resolve_date_candidates,
+)
 from app.extraction.models import (
+    DynamicEvent,
+    DynamicObservation,
     ExtractionResult,
     FieldClarification,
     FollowUpAction,
+    UtteranceExtractionTrace,
     VisitDraft,
     VisitType,
+)
+from app.extraction.numbers import (
+    INDIC_CHAR_CLASS,
+    INDIC_DIGIT_TRANS,
+    LB,
+    QTY_PHRASE,
+    RB,
+    decimal_to_float,
+    find_weight_candidates,
+    format_decimal_clean,
+    normalize_numeric_text,
+    parse_decimal_phrase,
+    resolve_beneficiary_id_mention,
+    resolve_repeated_candidates,
 )
 from app.services.beneficiaries import (
     SyntheticBeneficiary,
     SyntheticBeneficiaryDirectory,
-    extract_spoken_beneficiary_id,
 )
 
-# ---------------------------------------------------------------------------
-# Digit & text normalization tables
-# ---------------------------------------------------------------------------
-
-_INDIC_DIGIT_TRANS = str.maketrans(
-    "०१२३४५६७८९"  # Devanagari
-    "೦೧೨೩೪೫೬೭೮೯"  # Kannada
-    "௦௧௨௩௪௫௬௭௮௯",  # Tamil
-    "0123456789" * 3,
-)
-
-# Boundary helpers that work reliably with Indic combining marks (matras/virama).
-_INDIC_CHAR_CLASS = r"A-Za-z0-9_\u0900-\u097F\u0B80-\u0BFF\u0C80-\u0CFF"
-_LB = rf"(?<![{_INDIC_CHAR_CLASS}])"
-_RB = rf"(?![{_INDIC_CHAR_CLASS}])"
+_INDIC_DIGIT_TRANS = INDIC_DIGIT_TRANS
+_INDIC_CHAR_CLASS = INDIC_CHAR_CLASS
+_LB = LB
+_RB = RB
+_QTY_PHRASE = QTY_PHRASE
 
 
 def _normalize_text(text: str) -> str:
     """Normalize Unicode NFC, Indic numerals to ASCII digits, spaced decimals, and whitespace."""
-    normalized = unicodedata.normalize("NFC", text).translate(_INDIC_DIGIT_TRANS)
-    # Collapse ASR spaced decimals like "2 . 8" -> "2.8" so decimal weights are never split
-    normalized = re.sub(r"(?<=\d)\s*\.\s*(?=\d)", ".", normalized)
-    return re.sub(r"\s+", " ", normalized).strip()
+    return normalize_numeric_text(text)
 
 
 def _wb_pattern(phrase: str) -> str:
@@ -58,531 +67,11 @@ def _wb_pattern(phrase: str) -> str:
     return rf"{_LB}{escaped}{_RB}"
 
 
-# ---------------------------------------------------------------------------
-# Number word dictionaries (English + Hindi / Hinglish / Devanagari)
-# ---------------------------------------------------------------------------
-
-_EN_UNITS: dict[str, int] = {
-    "zero": 0,
-    "one": 1,
-    "two": 2,
-    "three": 3,
-    "four": 4,
-    "five": 5,
-    "six": 6,
-    "seven": 7,
-    "eight": 8,
-    "nine": 9,
-    "ten": 10,
-    "eleven": 11,
-    "twelve": 12,
-    "thirteen": 13,
-    "fourteen": 14,
-    "fifteen": 15,
-    "sixteen": 16,
-    "seventeen": 17,
-    "eighteen": 18,
-    "nineteen": 19,
-}
-
-_EN_TENS: dict[str, int] = {
-    "twenty": 20,
-    "thirty": 30,
-    "forty": 40,
-    "fourty": 40,  # common ASR spelling
-    "fifty": 50,
-    "sixty": 60,
-    "seventy": 70,
-    "eighty": 80,
-    "ninety": 90,
-}
-
-_EN_ORDINALS: dict[str, int] = {
-    "first": 1,
-    "second": 2,
-    "third": 3,
-    "fourth": 4,
-    "fifth": 5,
-    "sixth": 6,
-    "seventh": 7,
-    "eighth": 8,
-    "ninth": 9,
-    "tenth": 10,
-    "eleventh": 11,
-    "twelfth": 12,
-    "thirteenth": 13,
-    "fourteenth": 14,
-    "fifteenth": 15,
-    "sixteenth": 16,
-    "seventeenth": 17,
-    "eighteenth": 18,
-    "nineteenth": 19,
-    "twentieth": 20,
-    "thirtieth": 30,
-}
-
-# Hindi / Hinglish cardinals (0..100 + multipliers)
-_HI_NUMBERS: dict[str, int] = {
-    "shunya": 0,
-    "ek": 1,
-    "do": 2,
-    "teen": 3,
-    "tin": 3,
-    "char": 4,
-    "chaar": 4,
-    "panch": 5,
-    "paanch": 5,
-    "chhe": 6,
-    "cheh": 6,
-    "chhah": 6,
-    "saat": 7,
-    "sat": 7,
-    "aath": 8,
-    "ath": 8,
-    "nau": 9,
-    "das": 10,
-    "gyarah": 11,
-    "gyara": 11,
-    "barah": 12,
-    "bara": 12,
-    "terah": 13,
-    "tera": 13,
-    "chaudah": 14,
-    "chauda": 14,
-    "pandrah": 15,
-    "pandra": 15,
-    "solah": 16,
-    "satrah": 17,
-    "atharah": 18,
-    "unnis": 19,
-    "bees": 20,
-    "bis": 20,
-    "ikkis": 21,
-    "bais": 22,
-    "teis": 23,
-    "chaubis": 24,
-    "pachchis": 25,
-    "pachis": 25,
-    "chhabbis": 26,
-    "sattais": 27,
-    "atthais": 28,
-    "untis": 29,
-    "tees": 30,
-    "tis": 30,
-    "paitis": 35,
-    "paintis": 35,
-    "chalis": 40,
-    "chaalis": 40,
-    "bayalis": 42,
-    "paintalis": 45,
-    "paitalis": 45,
-    "adtalis": 48,
-    "artalis": 48,
-    "pachas": 50,
-    "pachaas": 50,
-    "ikyawan": 51,
-    "bawan": 52,
-    "baawan": 52,
-    "tirpan": 53,
-    "chauwan": 54,
-    "pachpan": 55,
-    "chhappan": 56,
-    "sattawan": 57,
-    "atthawan": 58,
-    "unsath": 59,
-    "saath": 60,
-    "sath": 60,
-    "iksath": 61,
-    "basath": 62,
-    "painsath": 65,
-    "sattar": 70,
-    "pachhattar": 75,
-    "assi": 80,
-    "nabbe": 90,
-    "sau": 100,
-    # Devanagari
-    "शून्य": 0,
-    "एक": 1,
-    "दो": 2,
-    "तीन": 3,
-    "चार": 4,
-    "पांच": 5,
-    "पाँच": 5,
-    "छह": 6,
-    "छे": 6,
-    "सात": 7,
-    "आठ": 8,
-    "नौ": 9,
-    "दस": 10,
-    "ग्यारह": 11,
-    "बारह": 12,
-    "तेरह": 13,
-    "चौदह": 14,
-    "पंद्रह": 15,
-    "पन्द्रह": 15,
-    "सोलह": 16,
-    "सत्रह": 17,
-    "अठारह": 18,
-    "उन्नीस": 19,
-    "बीस": 20,
-    "इक्कीस": 21,
-    "बाईस": 22,
-    "तेईस": 23,
-    "चौबीस": 24,
-    "पच्चीस": 25,
-    "छब्बीस": 26,
-    "सत्ताईस": 27,
-    "अट्ठाईस": 28,
-    "अठ्ठाईस": 28,
-    "उनतीस": 29,
-    "तीस": 30,
-    "इकतीस": 31,
-    "पैंतीस": 35,
-    "चालीस": 40,
-    "बयालीस": 42,
-    "पैंतालीस": 45,
-    "अड़तालीस": 48,
-    "पचास": 50,
-    "इक्यावन": 51,
-    "बावन": 52,
-    "तिरपन": 53,
-    "चौवन": 54,
-    "पचपन": 55,
-    "छप्पन": 56,
-    "सत्तावन": 57,
-    "अट्ठावन": 58,
-    "उनसठ": 59,
-    "साठ": 60,
-    "बासठ": 62,
-    "पैंसठ": 65,
-    "सत्तर": 70,
-    "पचहत्तर": 75,
-    "अस्सी": 80,
-    "नब्बे": 90,
-    "सौ": 100,
-    # Kannada spoken number words
-    "ಸೊನ್ನೆ": 0,
-    "ಒಂದು": 1,
-    "ಎರಡು": 2,
-    "ಮೂರು": 3,
-    "ನಾಲ್ಕು": 4,
-    "ಐದು": 5,
-    "ಆರು": 6,
-    "ಏಳು": 7,
-    "ಎಂಟು": 8,
-    "ಒಂಬತ್ತು": 9,
-    "ಹತ್ತು": 10,
-    "ಇಪ್ಪತ್ತು": 20,
-    "ಇಪ್ಪತ್ತೈದು": 25,
-    "ಇಪ್ಪತ್ತೆಂಟು": 28,
-    "ಮೂವತ್ತು": 30,
-    "ನಲವತ್ತು": 40,
-    "ಐವತ್ತು": 50,
-    "ಐವತ್ತೆರಡು": 52,
-    "ಐವತ್ತಮೂರು": 53,
-    "ಅರವತ್ತು": 60,
-    # Tamil spoken number words
-    "பூஜ்ஜியம்": 0,
-    "ஒன்று": 1,
-    "இரண்டு": 2,
-    "ரெண்டு": 2,
-    "மூன்று": 3,
-    "நான்கு": 4,
-    "ஐந்து": 5,
-    "ஆறு": 6,
-    "ஏழு": 7,
-    "எட்டு": 8,
-    "ஒன்பது": 9,
-    "பத்து": 10,
-    "இருபது": 20,
-    "இருபத்து ஐந்து": 25,
-    "இருபத்து எட்டு": 28,
-    "முப்பது": 30,
-    "நாற்பது": 40,
-    "ஐம்பது": 50,
-    "ஐம்பத்து இரண்டு": 52,
-    "ஐம்பத்து மூன்று": 53,
-    "அறுபது": 60,
-}
-
-_MULTIPLIERS: dict[str, int] = {
-    "hundred": 100,
-    "sau": 100,
-    "सौ": 100,
-    "thousand": 1000,
-    "hazar": 1000,
-    "hazaar": 1000,
-    "हजार": 1000,
-    "हज़ार": 1000,
-}
-
-_DECIMAL_WORDS: frozenset[str] = frozenset(
-    {
-        "point",
-        "dot",
-        "dashamlav",
-        "दशमलव",
-        "पॉइंट",
-        "प्वाइंट",
-        "ಪಾಯಿಂಟ್",
-        "ದಶಮಾಂಶ",
-        "புள்ளி",
-        "பாயிண்ட்",
-    }
-)
-
-_FRACTION_IDIOMS: dict[str, float] = {
-    "half": 0.5,
-    "aadha": 0.5,
-    "adha": 0.5,
-    "आधा": 0.5,
-    "dedh": 1.5,
-    "derh": 1.5,
-    "डेढ़": 1.5,
-    "डेढ": 1.5,
-    "dhai": 2.5,
-    "dhaai": 2.5,
-    "adhaai": 2.5,
-    "ढाई": 2.5,
-    "अढ़ाई": 2.5,
-}
-
-_PREFIX_FRACTIONS: dict[str, float] = {
-    "sawa": 0.25,
-    "sava": 0.25,
-    "सवा": 0.25,
-    "sadhe": 0.5,
-    "saadhe": 0.5,
-    "साढ़े": 0.5,
-    "साढे": 0.5,
-    "paune": -0.25,
-    "पौने": -0.25,
-}
-
-_CONNECTOR_WORDS: frozenset[str] = frozenset({"and", "a", "aur", "और"})
-
-# Tokens allowed to START a spoken numeric expression (excludes connectors like "and"/"aur"/"a").
-_NUMBER_START_TOKENS: frozenset[str] = (
-    frozenset(_EN_UNITS)
-    | frozenset(_EN_TENS)
-    | frozenset(_EN_ORDINALS)
-    | frozenset(_HI_NUMBERS)
-    | frozenset(_MULTIPLIERS)
-    | frozenset(_FRACTION_IDIOMS)
-    | frozenset(_PREFIX_FRACTIONS)
-)
-
-# All tokens allowed inside a spoken numeric expression.
-_NUMBER_WORD_TOKENS: frozenset[str] = (
-    _NUMBER_START_TOKENS | _DECIMAL_WORDS | _CONNECTOR_WORDS
-)
-
-
-def _parse_int_tokens(tokens: list[str]) -> int | None:
-    """Parse a sequence of integer number words (English/Hindi/digits) into an int."""
-    if not tokens:
-        return None
-    total = 0
-    current = 0
-    consumed_number = False
-    i = 0
-    while i < len(tokens):
-        tok = tokens[i]
-        if tok in {"and", "a", "aur", "और"}:
-            i += 1
-            continue
-        if re.fullmatch(r"\d+", tok):
-            current += int(tok)
-            consumed_number = True
-        elif tok in _EN_UNITS:
-            current += _EN_UNITS[tok]
-            consumed_number = True
-        elif tok in _EN_TENS:
-            current += _EN_TENS[tok]
-            consumed_number = True
-        elif tok in _EN_ORDINALS:
-            current += _EN_ORDINALS[tok]
-            consumed_number = True
-        elif tok in _HI_NUMBERS:
-            val = _HI_NUMBERS[tok]
-            if val == 100:
-                current = (current or 1) * 100
-            else:
-                current += val
-            consumed_number = True
-        elif tok in _MULTIPLIERS:
-            mult = _MULTIPLIERS[tok]
-            if mult >= 1000:
-                total += (current or 1) * mult
-                current = 0
-            else:
-                current = (current or 1) * mult
-            consumed_number = True
-        else:
-            return None
-        i += 1
-    if not consumed_number:
-        return None
-    return total + current
-
-
 def _parse_number_phrase(phrase: str) -> float | None:
-    """Parse numeric, spoken English, spoken Hindi, or fractional quantity phrases."""
-    cleaned = phrase.strip().lower().replace("-", " ")
-    if not cleaned:
-        return None
+    """Backward-compatible wrapper returning float from exact Decimal parser."""
+    dec = parse_decimal_phrase(phrase)
+    return decimal_to_float(dec) if dec is not None else None
 
-    tokens = [t for t in cleaned.split() if t]
-    while tokens and tokens[0] in _CONNECTOR_WORDS:
-        tokens.pop(0)
-    while tokens and tokens[-1] in _CONNECTOR_WORDS:
-        tokens.pop()
-    if not tokens:
-        return None
-
-    # Direct float/int
-    if len(tokens) == 1 and re.fullmatch(r"\d+(?:\.\d+)?", tokens[0]):
-        return float(tokens[0])
-
-    # Single-word Hindi/English fraction idioms ("dhai", "ढाई", "dedh", "आधा")
-    if len(tokens) == 1 and tokens[0] in _FRACTION_IDIOMS:
-        return _FRACTION_IDIOMS[tokens[0]]
-
-    # Standalone "sawa" (= 1.25)
-    if len(tokens) == 1 and tokens[0] in {"sawa", "sava", "सवा"}:
-        return 1.25
-
-    # Prefix fractions: "साढ़े तीन" -> 3.5, "सवा तीन" -> 3.25, "पौने तीन" -> 2.75
-    if tokens[0] in _PREFIX_FRACTIONS and len(tokens) >= 2:
-        base = _parse_int_tokens(tokens[1:])
-        if base is not None and base > 0:
-            return base + _PREFIX_FRACTIONS[tokens[0]]
-
-    # "three and a half" / "two and half" / "3 and a half"
-    if len(tokens) >= 3 and tokens[-1] == "half" and tokens[-2] in {"a", "and"}:
-        cut = -3 if tokens[-2] == "a" and len(tokens) >= 4 and tokens[-3] == "and" else -2
-        base = _parse_int_tokens(tokens[:cut])
-        if base is not None:
-            return base + 0.5
-
-    # Decimal word: "two point eight", "48 point 5", "दो दशमलव आठ"
-    for idx, tok in enumerate(tokens):
-        if tok in _DECIMAL_WORDS and 0 < idx < len(tokens) - 1:
-            int_part = _parse_int_tokens(tokens[:idx])
-            frac_tokens = tokens[idx + 1 :]
-            if int_part is None:
-                return None
-            # Support single-digit sequence ("point eight five" -> .85) or numeric ("point 8")
-            if len(frac_tokens) == 1 and re.fullmatch(r"\d+", frac_tokens[0]):
-                return float(f"{int_part}.{frac_tokens[0]}")
-            frac_digits: list[str] = []
-            for ft in frac_tokens:
-                if re.fullmatch(r"\d+", ft):
-                    frac_digits.append(ft)
-                elif ft in _EN_UNITS and _EN_UNITS[ft] < 10:
-                    frac_digits.append(str(_EN_UNITS[ft]))
-                elif ft in _HI_NUMBERS and _HI_NUMBERS[ft] < 10:
-                    frac_digits.append(str(_HI_NUMBERS[ft]))
-                else:
-                    return None
-            return float(f"{int_part}.{''.join(frac_digits)}")
-
-    int_val = _parse_int_tokens(tokens)
-    return float(int_val) if int_val is not None else None
-
-
-# ---------------------------------------------------------------------------
-# Weight extraction patterns
-# ---------------------------------------------------------------------------
-
-_KG_UNITS = (
-    "kilograms",
-    "kilogram",
-    "kilos",
-    "kilo",
-    "kgs",
-    "kg",
-    "किलोग्राम",
-    "किग्रा",
-    "किलो",
-    "केजी",
-    "ಕೆಜಿ",
-    "கிலோ",
-)
-_GRAM_UNITS = (
-    "grams",
-    "gram",
-    "gms",
-    "gm",
-    "g",
-    "ग्राम",
-    "गराम",
-    "ಗ್ರಾಂ",
-    "கிராம்",
-)
-_WEIGHT_CUES = (
-    "weight",
-    "wt",
-    "wajan",
-    "vajan",
-    "wazan",
-    "vazan",
-    "ववेट",  # real Gnani Prisma ASR artifact
-    "वेइट",
-    "वेट",
-    "वज़न",
-    "वजन",
-    "भार",
-    "ತೂಕ",
-    "எடை",
-)
-
-_KG_UNIT_RE = "(?:" + "|".join(re.escape(u) for u in _KG_UNITS) + ")"
-_GRAM_UNIT_RE = "(?:" + "|".join(re.escape(u) for u in _GRAM_UNITS) + ")"
-_WEIGHT_CUE_RE = "(?:" + "|".join(re.escape(c) for c in _WEIGHT_CUES) + ")"
-
-# Token pattern for a spoken or numeric quantity (1..6 tokens; cannot start with connectors)
-_QTY_START_TOKEN = (
-    r"(?:\d+(?:\.\d+)?|"
-    + "|".join(re.escape(w) for w in sorted(_NUMBER_START_TOKENS, key=len, reverse=True))
-    + r")"
-)
-_QTY_CONT_TOKEN = (
-    r"(?:\d+(?:\.\d+)?|"
-    + "|".join(re.escape(w) for w in sorted(_NUMBER_WORD_TOKENS, key=len, reverse=True))
-    + r")"
-)
-_QTY_PHRASE = rf"(?:{_QTY_START_TOKEN}(?:[\s\-]+{_QTY_CONT_TOKEN}){{0,5}})"
-
-# Pattern 1: Compound kg + gram ("3 kilo 200 gram", "three kilo two hundred grams")
-_COMPOUND_WEIGHT_PATTERN = re.compile(
-    rf"(?P<cue>{_LB}{_WEIGHT_CUE_RE}{_RB}\s*(?:is|hai|है|=|:)?\s*)?"
-    rf"(?P<kg_qty>{_LB}{_QTY_PHRASE}{_RB})\s*(?P<kg_unit>{_KG_UNIT_RE}{_RB})"
-    rf"\s*(?:and|aur|और|,)?\s*"
-    rf"(?P<g_qty>{_LB}{_QTY_PHRASE}{_RB})\s*(?P<g_unit>{_GRAM_UNIT_RE}{_RB})",
-    re.IGNORECASE,
-)
-
-# Pattern 2: Numeric+attached unit or spoken phrase + kg unit
-_KG_WEIGHT_PATTERN = re.compile(
-    rf"(?P<cue>{_LB}{_WEIGHT_CUE_RE}{_RB}\s*(?:is|hai|है|=|:)?\s*)?"
-    rf"(?P<qty>{_LB}{_QTY_PHRASE})\s*(?P<unit>{_KG_UNIT_RE}{_RB})",
-    re.IGNORECASE,
-)
-
-# Pattern 3: Numeric+attached unit or spoken phrase + gram unit
-_GRAM_WEIGHT_PATTERN = re.compile(
-    rf"(?P<cue>{_LB}{_WEIGHT_CUE_RE}{_RB}\s*(?:is|hai|है|=|:)?\s*)?"
-    rf"(?P<qty>{_LB}{_QTY_PHRASE})\s*(?P<unit>{_GRAM_UNIT_RE}{_RB})",
-    re.IGNORECASE,
-)
-
-# Pattern 4: Explicit weight cue followed by unitless quantity ("weight is 2.8", "वजन 52")
-_CUE_ONLY_WEIGHT_PATTERN = re.compile(
-    rf"(?P<cue>{_LB}{_WEIGHT_CUE_RE}{_RB})\s*(?:is|was|hai|है|था|=|:)?\s*"
-    rf"(?P<qty>{_LB}{_QTY_PHRASE}{_RB})",
-    re.IGNORECASE,
-)
 
 # ---------------------------------------------------------------------------
 # Visit type patterns
@@ -897,188 +386,6 @@ _VACCINE_COMPLETED_CUES: tuple[re.Pattern[str], ...] = tuple(
 )
 
 # ---------------------------------------------------------------------------
-# Date parsing tables & patterns
-# ---------------------------------------------------------------------------
-
-_MONTH_NAMES: dict[str, int] = {
-    "jan": 1,
-    "january": 1,
-    "जनवरी": 1,
-    "feb": 2,
-    "february": 2,
-    "फरवरी": 2,
-    "mar": 3,
-    "march": 3,
-    "मार्च": 3,
-    "apr": 4,
-    "april": 4,
-    "अप्रैल": 4,
-    "may": 5,
-    "मई": 5,
-    "jun": 6,
-    "june": 6,
-    "जून": 6,
-    "jul": 7,
-    "july": 7,
-    "जुलाई": 7,
-    "aug": 8,
-    "august": 8,
-    "अगस्त": 8,
-    "sep": 9,
-    "sept": 9,
-    "september": 9,
-    "सितंबर": 9,
-    "सितम्बर": 9,
-    "oct": 10,
-    "october": 10,
-    "अक्टूबर": 10,
-    "अक्तूबर": 10,
-    "nov": 11,
-    "november": 11,
-    "नवंबर": 11,
-    "नवम्बर": 11,
-    "dec": 12,
-    "december": 12,
-    "दिसंबर": 12,
-    "दिसम्बर": 12,
-}
-
-_WEEKDAY_FULL_NAMES: dict[str, int] = {
-    "monday": 0,
-    "somwar": 0,
-    "somvar": 0,
-    "सोमवार": 0,
-    "tuesday": 1,
-    "mangalwar": 1,
-    "mangalvar": 1,
-    "मंगलवार": 1,
-    "wednesday": 2,
-    "budhwar": 2,
-    "budhvar": 2,
-    "बुधवार": 2,
-    "thursday": 3,
-    "guruwar": 3,
-    "guruvar": 3,
-    "brihaspatiwar": 3,
-    "गुरुवार": 3,
-    "बृहस्पतिवार": 3,
-    "friday": 4,
-    "shukrawar": 4,
-    "shukravar": 4,
-    "शुक्रवार": 4,
-    "saturday": 5,
-    "shaniwar": 5,
-    "shanivar": 5,
-    "शनिवार": 5,
-    "sunday": 6,
-    "rabiwar": 6,
-    "raviwar": 6,
-    "ravivar": 6,
-    "रविवार": 6,
-}
-
-_WEEKDAY_ABBR_NAMES: dict[str, int] = {
-    "mon": 0,
-    "tue": 1,
-    "tues": 1,
-    "wed": 2,
-    "thu": 3,
-    "thurs": 3,
-    "fri": 4,
-    "sat": 5,
-    "sun": 6,
-}
-
-_WEEKDAY_NAMES: dict[str, int] = {**_WEEKDAY_FULL_NAMES, **_WEEKDAY_ABBR_NAMES}
-
-_MONTH_RE = "(?:" + "|".join(re.escape(m) for m in sorted(_MONTH_NAMES, key=len, reverse=True)) + ")"
-_WEEKDAY_FULL_RE = "(?:" + "|".join(re.escape(w) for w in sorted(_WEEKDAY_FULL_NAMES, key=len, reverse=True)) + ")"
-_WEEKDAY_ABBR_RE = "(?:" + "|".join(re.escape(w) for w in sorted(_WEEKDAY_ABBR_NAMES, key=len, reverse=True)) + ")"
-
-_DAY_WORD_TOKENS = (
-    frozenset(_EN_UNITS)
-    | frozenset(_EN_TENS)
-    | frozenset(_EN_ORDINALS)
-    | frozenset(k for k, v in _HI_NUMBERS.items() if 1 <= v <= 31)
-)
-_DAY_WORD_RE = "(?:" + "|".join(re.escape(w) for w in sorted(_DAY_WORD_TOKENS, key=len, reverse=True)) + ")"
-_DAY_EXPR_RE = rf"(?:\d{{1,2}}(?:st|nd|rd|th)?|{_DAY_WORD_RE}(?:[\s\-]+{_DAY_WORD_RE})?)"
-
-_ISO_DATE_RE = re.compile(rf"{_LB}(?P<y>\d{{4}})-(?P<m>\d{{1,2}})-(?P<d>\d{{1,2}}){_RB}")
-_DMY_DATE_RE = re.compile(
-    rf"{_LB}(?P<d>\d{{1,2}})[/\-\.](?P<m>\d{{1,2}})[/\-\.](?P<y>\d{{2,4}}){_RB}"
-)
-_DAY_MONTH_RE = re.compile(
-    rf"{_LB}(?P<day>{_DAY_EXPR_RE})(?:\s+of)?\s+(?P<month>{_MONTH_RE})(?:,?\s+(?P<year>\d{{4}}))?{_RB}",
-    re.IGNORECASE,
-)
-_MONTH_DAY_RE = re.compile(
-    rf"{_LB}(?P<month>{_MONTH_RE})\s+(?P<day>{_DAY_EXPR_RE})(?:,?\s+(?P<year>\d{{4}}))?{_RB}",
-    re.IGNORECASE,
-)
-
-_COUNT_TOKEN_RE = (
-    r"(?:\d+|"
-    + "|".join(
-        re.escape(w)
-        for w in sorted(
-            frozenset(_EN_UNITS)
-            | frozenset(_EN_TENS)
-            | frozenset(_HI_NUMBERS)
-            | frozenset({"a", "an"}),
-            key=len,
-            reverse=True,
-        )
-    )
-    + r")"
-)
-
-_COUNT_EXPR_RE = rf"(?:{_COUNT_TOKEN_RE}(?:[\s\-]+{_COUNT_TOKEN_RE})?)"
-
-_AFTER_DAYS_RE = re.compile(
-    rf"(?:{_LB}(?:after|in)\s+(?P<n1>{_COUNT_EXPR_RE})\s+(?:days?|din){_RB}|"
-    rf"{_LB}(?P<n2>{_COUNT_EXPR_RE})\s+(?:days?\s+(?:later|from\s+now)|din\s+(?:baad|bad|mein|me)|दिन\s+(?:बाद|में)){_RB})",
-    re.IGNORECASE,
-)
-_AFTER_WEEKS_RE = re.compile(
-    rf"(?:{_LB}(?:after|in)\s+(?P<n1>{_COUNT_EXPR_RE})\s+(?:weeks?|hafte|hafta|saptah){_RB}|"
-    rf"{_LB}(?P<n2>{_COUNT_EXPR_RE})\s+(?:weeks?\s+(?:later|from\s+now)|hafte\s+(?:baad|bad)|saptah\s+(?:baad|bad)|हफ्ते\s+बाद|सप्ताह\s+बाद){_RB})",
-    re.IGNORECASE,
-)
-_NEXT_WEEK_RE = re.compile(
-    rf"{_LB}(?:next\s+week|agle\s+hafte|agla\s+hafta|agle\s+saptah|अगले\s+हफ्ते|अगले\s+सप्ताह){_RB}",
-    re.IGNORECASE,
-)
-_WEEKDAY_NEXT_RE = re.compile(
-    rf"(?:{_LB}(?:(?:next|coming|on|agle|agla|अगले)\s+)?(?P<wd1>{_WEEKDAY_FULL_RE})(?:\s+(?:ko|को))?{_RB}|"
-    rf"{_LB}(?:next|coming|on|agle|agla)\s+(?P<wd2>{_WEEKDAY_ABBR_RE}){_RB})",
-    re.IGNORECASE,
-)
-_TOMORROW_RE = re.compile(rf"{_LB}(?:tomorrow|kal|कल){_RB}", re.IGNORECASE)
-_DAY_AFTER_TOMORROW_RE = re.compile(
-    rf"{_LB}(?:day\s+after\s+tomorrow|parso|parson|परसों|परसो){_RB}", re.IGNORECASE
-)
-_PAST_KAL_GUARD_RE = re.compile(
-    rf"{_LB}(?:kal|parso|parson|कल|परसों|परसो)\s+(?:se|tha|thi|the|hua|hui|raat|subah\s+se|sham\s+se|aayi|aaya|gaya|gayi|से|था|थी|थे|हुआ|हुई|रात){_RB}",
-    re.IGNORECASE,
-)
-_AMBIGUOUS_DATE_RE = re.compile(
-    rf"{_LB}(?:"
-    r"some\s*day\s+next\s+month|"
-    r"some\s*time\s+next\s+month|"
-    r"some\s*day\s+next\s+week|"
-    r"some\s*time\s+next\s+week|"
-    r"some\s*time\s+later|"
-    r"next\s+month|"
-    r"agle\s+mahine(?:\s+kisi\s+din)?|"
-    r"अगले\s+महीने(?:\s+किसी\s+दिन)?|"
-    r"kisi\s+din|"
-    r"किसी\s+दिन"
-    rf"){_RB}",
-    re.IGNORECASE,
-)
-
-# ---------------------------------------------------------------------------
 # Follow-up action cues
 # ---------------------------------------------------------------------------
 
@@ -1129,9 +436,6 @@ _CORRECTION_INLINE_RE = re.compile(
     rf"ತಪ್ಪಾಗಿದೆ|ಬದಲಾಯಿಸಿ|ನಿಜವಾಗಿ|தவறு|மாற்று|உண்மையில்){_RB}",
     re.IGNORECASE,
 )
-
-# Beneficiary ID regex
-_BEN_ID_RE = re.compile(rf"{_LB}B\s*E\s*N[\s\-_]?(\d{{3,6}}){_RB}", re.IGNORECASE)
 
 # Category <-> VisitType compatibility for disambiguation
 _VISIT_TYPE_CATEGORIES: dict[VisitType, frozenset[str]] = {
@@ -1198,9 +502,11 @@ class VisitFieldExtractor:
         )
 
         # 3. Beneficiary resolution against SyntheticBeneficiaryDirectory
-        ben, ben_source, ben_clar = self._extract_beneficiary(
+        ben, ben_source, ben_clar, ben_inline_corr = self._extract_beneficiary(
             normalized, effective_visit_type=effective_visit_type
         )
+        if ben_inline_corr:
+            detected_correction = True
         if ben is not None:
             patch["beneficiary_id"] = ben.beneficiary_id
             patch["beneficiary_name"] = ben.full_name
@@ -1214,17 +520,44 @@ class VisitFieldExtractor:
         if effective_ben is None and existing_draft and existing_draft.beneficiary_id:
             effective_ben = self._directory.get_by_id(existing_draft.beneficiary_id)
 
-        # 4. Weight normalization & physiological bounds validation
-        weight_kg, weight_source, weight_clar = self._extract_weight(
+        # 4. Weight normalization & physiological bounds validation (exact Decimal)
+        weight_kg, weight_source, weight_clar, unusual_weight, wt_inline_corr, weight_unit_kind = self._extract_weight(
             normalized,
             effective_visit_type=effective_visit_type,
             effective_beneficiary=effective_ben,
         )
+        if wt_inline_corr:
+            detected_correction = True
+        extracted_numbers: list[dict[str, Any]] = []
         if weight_kg is not None:
             patch["weight_kg"] = weight_kg
             if weight_source:
                 patch["weight_source_text"] = weight_source
                 provenance["weight_kg"] = weight_source
+            extracted_numbers.append(
+                {
+                    "field": "weight_kg",
+                    "value": weight_kg,
+                    "normalized_decimal": format_decimal_clean(Decimal(str(weight_kg))),
+                    "unit": "kg",
+                    "source_unit": weight_unit_kind,
+                    "source_text": weight_source or "",
+                    "status": "draft",
+                }
+            )
+        elif unusual_weight is not None:
+            u_val, u_src = unusual_weight
+            extracted_numbers.append(
+                {
+                    "field": "weight_kg",
+                    "value": u_val,
+                    "normalized_decimal": format_decimal_clean(Decimal(str(u_val))),
+                    "unit": "kg",
+                    "source_unit": weight_unit_kind,
+                    "source_text": u_src,
+                    "status": "needs_confirmation",
+                }
+            )
         if weight_clar is not None:
             clarifications.append(weight_clar)
 
@@ -1241,9 +574,11 @@ class VisitFieldExtractor:
         clarifications.extend(v_clars)
 
         # 6. Next visit date (ISO YYYY-MM-DD)
-        next_date, date_source, date_clar = self._extract_next_visit_date(
+        next_date, date_source, date_clar, date_inline_corr = self._extract_next_visit_date(
             normalized, reference_date=ref_date
         )
+        if date_inline_corr:
+            detected_correction = True
         if next_date is not None:
             patch["next_visit_date"] = next_date
             if date_source:
@@ -1270,19 +605,31 @@ class VisitFieldExtractor:
                 re.IGNORECASE,
             )
             if m_bare:
-                bare_val = _parse_number_phrase(m_bare.group("qty"))
-                if bare_val is not None:
+                bare_dec = parse_decimal_phrase(m_bare.group("qty"))
+                if bare_dec is not None:
+                    bare_val = decimal_to_float(bare_dec, places=3)
                     min_kg, max_kg, _ctx = self._weight_bounds(
                         effective_visit_type=effective_visit_type,
                         effective_beneficiary=effective_ben,
                         text=normalized,
                     )
                     if min_kg <= bare_val <= max_kg:
-                        weight_kg = round(bare_val, 3)
+                        weight_kg = bare_val
                         weight_source = m_bare.group("qty").strip()
                         patch["weight_kg"] = weight_kg
                         patch["weight_source_text"] = weight_source
                         provenance["weight_kg"] = weight_source
+                        extracted_numbers.append(
+                            {
+                                "field": "weight_kg",
+                                "value": weight_kg,
+                                "normalized_decimal": format_decimal_clean(bare_dec),
+                                "unit": "kg",
+                                "source_unit": "unitless",
+                                "source_text": weight_source,
+                                "status": "draft",
+                            }
+                        )
 
         # 7. Grounded follow-up actions
         actions = self._derive_follow_up_actions(
@@ -1293,6 +640,23 @@ class VisitFieldExtractor:
         )
         if actions:
             patch["follow_up_actions"] = actions
+
+        # 7b. Dynamic observations, repeatable events & explicit removals
+        dynamic_observations, obs_numbers = self._extract_dynamic_observations(
+            normalized,
+            unusual_weight=unusual_weight,
+            has_structured_fields=bool(patch),
+        )
+        extracted_numbers.extend(obs_numbers)
+        dynamic_events = self._build_dynamic_events(
+            v_completed=v_completed,
+            v_due=v_due,
+            v_prov=v_prov,
+            next_date=next_date,
+        )
+        remove_obs_keys, remove_event_names = self._extract_removals(
+            normalized, existing_draft=existing_draft
+        )
 
         # Identify corrected fields when correction intent OR contextual replacement is detected
         if not detected_correction and existing_draft is not None:
@@ -1326,24 +690,25 @@ class VisitFieldExtractor:
             and existing_draft.weight_kg is not None
             and len(normalized.split()) <= 3
         ):
-            bare_only = _parse_number_phrase(normalized)
-            if bare_only is not None:
+            bare_dec = parse_decimal_phrase(normalized)
+            if bare_dec is not None:
+                bare_only = decimal_to_float(bare_dec, places=3)
                 min_kg, max_kg, _ctx = self._weight_bounds(
                     effective_visit_type=effective_visit_type,
                     effective_beneficiary=effective_ben,
                     text=normalized,
                 )
-                if min_kg <= bare_only <= max_kg and round(bare_only, 3) != existing_draft.weight_kg:
-                    val_r = round(bare_only, 3)
+                if min_kg <= bare_only <= max_kg and bare_only != existing_draft.weight_kg:
+                    val_str = format_decimal_clean(bare_dec)
                     clarifications.append(
                         FieldClarification(
                             field_name="weight_kg",
                             reason="ambiguous_value",
                             prompt_hint=(
                                 f"Do you want me to update the previously recorded weight "
-                                f"to {val_r} kilograms?"
+                                f"to {val_str} kilograms?"
                             ),
-                            candidates=[f"{val_r}"],
+                            candidates=[val_str],
                         )
                     )
 
@@ -1367,6 +732,44 @@ class VisitFieldExtractor:
                 for a in actions
             ):
                 corrected_fields.append("follow_up_actions")
+            non_sup_obs = [o for o in dynamic_observations if o.key != "supplement_adherence"]
+            if non_sup_obs or (dynamic_observations and "follow_up_actions" not in corrected_fields):
+                corrected_fields.append("observations")
+            if dynamic_events and "vaccinations_completed" not in corrected_fields and "vaccinations_due" not in corrected_fields:
+                corrected_fields.append("events")
+
+        extraction_status = "no_entities"
+        if clarifications:
+            extraction_status = "clarification_needed"
+        elif detected_correction or remove_obs_keys or remove_event_names:
+            extraction_status = "corrected"
+        elif patch or dynamic_observations or dynamic_events:
+            extraction_status = "extracted"
+
+        trace = UtteranceExtractionTrace(
+            raw_transcript=text,
+            finalized_transcript=text,
+            normalized_transcript=normalized,
+            detected_entities={
+                "fields": {
+                    k: (
+                        [a.model_dump() for a in v]
+                        if k == "follow_up_actions"
+                        else v
+                    )
+                    for k, v in patch.items()
+                },
+                "observations": [o.model_dump() for o in dynamic_observations],
+                "events": [e.model_dump() for e in dynamic_events],
+                "removals": {
+                    "observation_keys": remove_obs_keys,
+                    "event_names": remove_event_names,
+                },
+            },
+            extracted_numbers=extracted_numbers,
+            source_phrases=dict(provenance),
+            extraction_status=extraction_status,
+        )
 
         return ExtractionResult(
             patch=patch,
@@ -1374,6 +777,11 @@ class VisitFieldExtractor:
             detected_correction=detected_correction,
             corrected_fields=corrected_fields,
             provenance=provenance,
+            observations=dynamic_observations,
+            events=dynamic_events,
+            remove_observation_keys=remove_obs_keys,
+            remove_event_names=remove_event_names,
+            trace=trace,
         )
 
     def apply_to_draft(
@@ -1472,8 +880,8 @@ class VisitFieldExtractor:
             ]
             existing_actions = list(updated.follow_up_actions)
             for inc in incoming_actions:
-                # If correcting next_visit_date, replace prior routine_visit action date cleanly
-                if is_correction and inc.action_type == "routine_visit" and inc.due_date:
+                # Whenever next_visit_date is set or updated, keep a single current routine_visit action
+                if inc.action_type == "routine_visit" and inc.due_date:
                     existing_actions = [
                         a for a in existing_actions if a.action_type != "routine_visit"
                     ]
@@ -1485,6 +893,56 @@ class VisitFieldExtractor:
                 ):
                     existing_actions.append(inc)
             updated.follow_up_actions = existing_actions
+
+        # Dynamic observations: upsert by normalized key, remove explicit deletions
+        if result.remove_observation_keys:
+            rm_obs = {k.strip().lower() for k in result.remove_observation_keys}
+            updated.observations = [
+                o for o in updated.observations if o.key.strip().lower() not in rm_obs
+            ]
+        for obs in result.observations:
+            replaced = False
+            for idx, existing_obs in enumerate(updated.observations):
+                if existing_obs.key.lower() == obs.key.lower():
+                    updated.observations[idx] = obs
+                    replaced = True
+                    break
+            if not replaced:
+                updated.observations.append(obs)
+        # If weight_kg was confirmed cleanly via scalar patch, clear any stale needs_confirmation weight observation
+        if "weight_kg" in patch and patch["weight_kg"] is not None:
+            updated.observations = [
+                o for o in updated.observations if o.key.lower() != "weight_kg"
+            ]
+
+        # Repeatable events (immunisation etc.): upsert in-place by (event_type, name.lower())
+        if result.remove_event_names:
+            rm_ev = {n.strip().lower() for n in result.remove_event_names}
+            updated.events = [
+                e for e in updated.events if e.name.strip().lower() not in rm_ev
+            ]
+            # Also reflect removal in legacy vaccine arrays
+            updated.vaccinations_completed = [
+                v for v in updated.vaccinations_completed if v.strip().lower() not in rm_ev
+            ]
+            updated.vaccinations_due = [
+                v for v in updated.vaccinations_due if v.strip().lower() not in rm_ev
+            ]
+        for ev in result.events:
+            replaced = False
+            for idx, existing_ev in enumerate(updated.events):
+                if (
+                    existing_ev.event_type.lower() == ev.event_type.lower()
+                    and existing_ev.name.lower() == ev.name.lower()
+                ):
+                    updated.events[idx] = ev
+                    replaced = True
+                    break
+            if not replaced:
+                updated.events.append(ev)
+
+        if result.trace is not None:
+            updated.utterance_traces.append(result.trace)
 
         # Update clarifications: clear resolved fields, upsert newly emitted clarifications
         resolved_fields = {k for k, v in patch.items() if v is not None and v != []}
@@ -1589,20 +1047,26 @@ class VisitFieldExtractor:
         text: str,
         *,
         effective_visit_type: VisitType | None = None,
-    ) -> tuple[SyntheticBeneficiary | None, str | None, FieldClarification | None]:
-        # 1. Explicit beneficiary ID lookup (highest precision)
-        id_match = _BEN_ID_RE.search(text)
-        spoken_id = (
-            f"BEN-{id_match.group(1)}"
-            if id_match
-            else extract_spoken_beneficiary_id(text)
-        )
+    ) -> tuple[SyntheticBeneficiary | None, str | None, FieldClarification | None, bool]:
+        # 1. Explicit beneficiary ID lookup (handles BEN-1042, BE. N 1044, spoken digits, repeated corrections)
+        spoken_id, id_src, id_corr, id_conflicts = resolve_beneficiary_id_mention(text)
+        if id_conflicts:
+            return (
+                None,
+                None,
+                FieldClarification(
+                    field_name="beneficiary_id",
+                    reason="conflict",
+                    prompt_hint=f"I heard multiple beneficiary IDs ({' or '.join(id_conflicts)}). Which beneficiary ID is correct?",
+                    candidates=id_conflicts,
+                ),
+                False,
+            )
         if spoken_id:
             found = self._directory.get_by_id(spoken_id)
             if found is not None:
-                src_str = id_match.group(0) if id_match else spoken_id
-                return found, src_str, None
-            if id_match or re.search(r"\b(?:ben|id)\b", text, re.IGNORECASE):
+                return found, id_src or spoken_id, None, id_corr
+            if re.search(r"\b(?:b[\s.]*e[\s.]*n|id)\b", text, re.IGNORECASE):
                 return (
                     None,
                     None,
@@ -1612,6 +1076,7 @@ class VisitFieldExtractor:
                         prompt_hint=f"I could not find {spoken_id} in the beneficiary list. Please repeat the beneficiary's name or ID.",
                         candidates=[],
                     ),
+                    id_corr,
                 )
 
         all_bens = self._directory.list_all()
@@ -1628,13 +1093,14 @@ class VisitFieldExtractor:
             max_len = max(item[0] for item in full_matches)
             top = [(b, s) for length, b, s in full_matches if length == max_len]
             if len(top) == 1:
-                return top[0][0], top[0][1], None
-            return self._resolve_or_clarify_candidates(
+                return top[0][0], top[0][1], None, False
+            res_b, res_s, res_c = self._resolve_or_clarify_candidates(
                 [b for b, _ in top],
                 source_text=top[0][1],
                 text_lower=text_lower,
                 effective_visit_type=effective_visit_type,
             )
+            return res_b, res_s, res_c, False
 
         # 3. Multi-word alias matches (e.g., "lakshmi narayanan", "kavitha baby", "kavitha newborn")
         multi_matches: list[tuple[int, SyntheticBeneficiary, str]] = []
@@ -1657,13 +1123,14 @@ class VisitFieldExtractor:
                     top_bens.append(b)
                     top_src = top_src or s
             if len(top_bens) == 1:
-                return top_bens[0], top_src, None
-            return self._resolve_or_clarify_candidates(
+                return top_bens[0], top_src, None, False
+            res_b, res_s, res_c = self._resolve_or_clarify_candidates(
                 top_bens,
                 source_text=top_src,
                 text_lower=text_lower,
                 effective_visit_type=effective_visit_type,
             )
+            return res_b, res_s, res_c, False
 
         # 4. Single-word alias & first-name matches across ALL beneficiaries
         candidates: list[SyntheticBeneficiary] = []
@@ -1713,20 +1180,21 @@ class VisitFieldExtractor:
                             baby_matches.append(ben)
                             break
             if len(baby_matches) == 1:
-                return baby_matches[0], matched_term, None
+                return baby_matches[0], matched_term, None, False
 
         if not candidates:
-            return None, None, None
+            return None, None, None, False
 
         if len(candidates) == 1:
-            return candidates[0], matched_term, None
+            return candidates[0], matched_term, None, False
 
-        return self._resolve_or_clarify_candidates(
+        res_b, res_s, res_c = self._resolve_or_clarify_candidates(
             candidates,
             source_text=matched_term,
             text_lower=text_lower,
             effective_visit_type=effective_visit_type,
         )
+        return res_b, res_s, res_c, False
 
     def _resolve_or_clarify_candidates(
         self,
@@ -1797,76 +1265,76 @@ class VisitFieldExtractor:
         *,
         effective_visit_type: VisitType | None,
         effective_beneficiary: SyntheticBeneficiary | None,
-    ) -> tuple[float | None, str | None, FieldClarification | None]:
-        raw_kg: float | None = None
-        source_text: str | None = None
+    ) -> tuple[float | None, str | None, FieldClarification | None, tuple[float, str] | None, bool, str | None]:
+        candidates = find_weight_candidates(text)
+        if not candidates:
+            return None, None, None, None, False, None
 
-        # 1. Compound kg + gram ("3 kilo 200 gram")
-        m_comp = _COMPOUND_WEIGHT_PATTERN.search(text)
-        if m_comp:
-            kg_part = _parse_number_phrase(m_comp.group("kg_qty"))
-            g_part = _parse_number_phrase(m_comp.group("g_qty"))
-            if kg_part is not None and g_part is not None:
-                raw_kg = kg_part + (g_part / 1000.0)
-                source_text = m_comp.group(0).strip()
+        selected, inline_corr, conflicts = resolve_repeated_candidates(text, candidates)
+        if conflicts:
+            cand_strs = [format_decimal_clean(c.value_kg) for c in conflicts]
+            return (
+                None,
+                None,
+                FieldClarification(
+                    field_name="weight_kg",
+                    reason="conflict",
+                    prompt_hint=(
+                        f"I heard conflicting weights ({' or '.join(cand_strs)} kilograms). "
+                        "Which weight is correct?"
+                    ),
+                    candidates=cand_strs,
+                ),
+                None,
+                False,
+                None,
+            )
 
-        # 2. Kilograms ("fifty two kilo", "2.8 kg", "ढाई किलो", "साढ़े तीन किलो", "ववेट fifty two kilo")
-        if raw_kg is None:
-            m_kg = _KG_WEIGHT_PATTERN.search(text)
-            if m_kg:
-                val = _parse_number_phrase(m_kg.group("qty"))
-                if val is not None:
-                    raw_kg = val
-                    source_text = m_kg.group(0).strip()
+        assert selected is not None
+        source_text = re.sub(
+            r"(?:[\s,]+(?:and|aur|और))+$", "", selected.source_text.strip(), flags=re.IGNORECASE
+        )
+        weight_kg = decimal_to_float(selected.value_kg, places=3)
+        weight_str = format_decimal_clean(selected.value_kg)
 
-        # 3. Grams ("2800 gram", "2800g", "2500 ग्राम")
-        if raw_kg is None:
-            m_g = _GRAM_WEIGHT_PATTERN.search(text)
-            if m_g:
-                val = _parse_number_phrase(m_g.group("qty"))
-                if val is not None:
-                    raw_kg = val / 1000.0
-                    source_text = m_g.group(0).strip()
-
-        # 4. Explicit weight cue without unit ("weight is 52", "वजन 2.8")
-        if raw_kg is None:
-            m_cue = _CUE_ONLY_WEIGHT_PATTERN.search(text)
-            if m_cue:
-                val = _parse_number_phrase(m_cue.group("qty"))
-                if val is not None:
-                    raw_kg = val
-                    source_text = m_cue.group(0).strip()
-
-        if raw_kg is None:
-            return None, None, None
-
-        weight_kg = round(raw_kg, 3)
-
-        # Physiological bounds validation
+        # Physiological bounds validation: retain unusual value cleanly as uncertain/needs_confirmation
         min_kg, max_kg, context_label = self._weight_bounds(
             effective_visit_type=effective_visit_type,
             effective_beneficiary=effective_beneficiary,
             text=text,
         )
         if weight_kg < min_kg or weight_kg > max_kg:
+            # Special unit-clarification hint for unitless newborn gram figures (e.g. "weight is 2800")
+            if (
+                not selected.has_explicit_unit
+                and context_label == "newborn/infant"
+                and 400 <= weight_kg <= 9999
+            ):
+                kg_from_g = format_decimal_clean(selected.value_kg / Decimal("1000"))
+                hint = (
+                    f"I heard {source_text}. Did you mean {int(weight_kg)} grams "
+                    f"({kg_from_g} kilograms)? Is that correct?"
+                )
+            else:
+                hint = (
+                    f"I heard {source_text} ({weight_str} kg), which seems unusual for a "
+                    f"{context_label} record. Should I keep {weight_str} kg or would you like to correct it?"
+                )
             return (
                 None,
                 None,
                 FieldClarification(
                     field_name="weight_kg",
-                    reason=(
-                        f"Extracted weight {weight_kg} kg from '{source_text}' is outside "
-                        f"plausible {context_label} bounds ({min_kg}–{max_kg} kg)."
-                    ),
-                    prompt_hint=(
-                        f"I heard {source_text} ({weight_kg} kg), which seems unusual for a "
-                        f"{context_label} record. Please repeat the weight in kilograms or grams."
-                    ),
-                    candidates=[],
+                    reason="ambiguous_value",
+                    prompt_hint=hint,
+                    candidates=[weight_str],
                 ),
+                (weight_kg, source_text or f"{weight_str} kg"),
+                inline_corr,
+                selected.unit_kind,
             )
 
-        return weight_kg, source_text, None
+        return weight_kg, source_text, None, None, inline_corr, selected.unit_kind
 
     def _weight_bounds(
         self,
@@ -2037,112 +1505,47 @@ class VisitFieldExtractor:
         text: str,
         *,
         reference_date: date,
-    ) -> tuple[str | None, str | None, FieldClarification | None]:
-        # 1. Explicit ISO YYYY-MM-DD
-        m_iso = _ISO_DATE_RE.search(text)
-        if m_iso:
-            y, m, d = int(m_iso.group("y")), int(m_iso.group("m")), int(m_iso.group("d"))
-            try:
-                parsed = date(y, m, d)
-                return parsed.isoformat(), m_iso.group(0), None
-            except ValueError:
-                return None, None, self._invalid_date_clarification(m_iso.group(0))
-
-        # 2. Explicit DD/MM/YYYY or DD-MM-YYYY
-        m_dmy = _DMY_DATE_RE.search(text)
-        if m_dmy:
-            d, m, y = int(m_dmy.group("d")), int(m_dmy.group("m")), int(m_dmy.group("y"))
-            if y < 100:
-                y += 2000
-            try:
-                parsed = date(y, m, d)
-                return parsed.isoformat(), m_dmy.group(0), None
-            except ValueError:
-                return None, None, self._invalid_date_clarification(m_dmy.group(0))
-
-        # 3. Day + Month or Month + Day ("25 November", "twenty eighth November", "28 Nov", "31 February")
-        for pat in (_DAY_MONTH_RE, _MONTH_DAY_RE):
-            m_dm = pat.search(text)
-            if m_dm:
-                day_val = self._parse_day_token(m_dm.group("day"))
-                month_val = _MONTH_NAMES.get(m_dm.group("month").lower())
-                year_str = m_dm.group("year")
-                if day_val is not None and month_val is not None:
-                    year_val = int(year_str) if year_str else reference_date.year
-                    try:
-                        candidate = date(year_val, month_val, day_val)
-                    except ValueError:
-                        return None, None, self._invalid_date_clarification(m_dm.group(0))
-                    # If no year was given and date is in the past, roll to next year
-                    if not year_str and candidate < reference_date:
-                        try:
-                            candidate = date(year_val + 1, month_val, day_val)
-                        except ValueError:
-                            return None, None, self._invalid_date_clarification(m_dm.group(0))
-                    return candidate.isoformat(), m_dm.group(0), None
-
-        # 4. Relative day offsets ("after 7 days", "7 din baad", "सात दिन बाद")
-        m_days = _AFTER_DAYS_RE.search(text)
-        if m_days:
-            raw_n = m_days.group("n1") or m_days.group("n2")
-            days = self._parse_count_token(raw_n)
-            if days is not None and 0 < days <= 365:
-                return (reference_date + timedelta(days=days)).isoformat(), m_days.group(0), None
-
-        # 5. Relative week offsets ("after 2 weeks", "2 hafte baad")
-        m_weeks = _AFTER_WEEKS_RE.search(text)
-        if m_weeks:
-            raw_n = m_weeks.group("n1") or m_weeks.group("n2")
-            weeks = self._parse_count_token(raw_n)
-            if weeks is not None and 0 < weeks <= 52:
+    ) -> tuple[str | None, str | None, FieldClarification | None, bool]:
+        candidates = find_date_candidates(text, reference_date=reference_date)
+        if not candidates:
+            m_ambig = AMBIGUOUS_DATE_RE.search(text)
+            if m_ambig:
                 return (
-                    (reference_date + timedelta(days=7 * weeks)).isoformat(),
-                    m_weeks.group(0),
                     None,
+                    None,
+                    FieldClarification(
+                        field_name="next_visit_date",
+                        reason=f"Next visit date '{m_ambig.group(0)}' is too ambiguous to convert to a calendar date.",
+                        prompt_hint="Please specify an exact date or number of days for the next visit.",
+                        candidates=[],
+                    ),
+                    False,
                 )
+            return None, None, None, False
 
-        # 6. Ambiguous date phrases ("some day next month", "next month", "agle mahine")
-        # Check BEFORE next_week so "some day next week" is caught as ambiguous!
-        m_ambig = _AMBIGUOUS_DATE_RE.search(text)
-        if m_ambig:
+        selected, inline_corr, conflicts = resolve_date_candidates(text, candidates)
+        if conflicts:
+            cand_strs = [c.iso_date for c in conflicts if c.iso_date]
             return (
                 None,
                 None,
                 FieldClarification(
                     field_name="next_visit_date",
-                    reason=f"Next visit date '{m_ambig.group(0)}' is too ambiguous to convert to a calendar date.",
-                    prompt_hint="Please specify an exact date or number of days for the next visit.",
-                    candidates=[],
+                    reason="conflict",
+                    prompt_hint=(
+                        f"I heard multiple dates ({' or '.join(cand_strs)}). "
+                        "Which next visit date is correct?"
+                    ),
+                    candidates=cand_strs,
                 ),
+                False,
             )
 
-        # 7. "next week" / "agle hafte"
-        m_nw = _NEXT_WEEK_RE.search(text)
-        if m_nw:
-            return (reference_date + timedelta(days=7)).isoformat(), m_nw.group(0), None
+        assert selected is not None
+        if selected.invalid_calendar_date or selected.iso_date is None:
+            return None, None, self._invalid_date_clarification(selected.source_text), inline_corr
 
-        # 8. "day after tomorrow" / "parso"
-        m_parso = _DAY_AFTER_TOMORROW_RE.search(text)
-        if m_parso and not _PAST_KAL_GUARD_RE.search(text):
-            return (reference_date + timedelta(days=2)).isoformat(), m_parso.group(0), None
-
-        # 9. "tomorrow" / "kal" (guarded against past-tense Hindi "kal se" / "kal tha")
-        m_kal = _TOMORROW_RE.search(text)
-        if m_kal and not _PAST_KAL_GUARD_RE.search(text):
-            return (reference_date + timedelta(days=1)).isoformat(), m_kal.group(0), None
-
-        # 10. Weekday ("next Monday", "agle somwar")
-        m_wd = _WEEKDAY_NEXT_RE.search(text)
-        if m_wd:
-            raw_wd = m_wd.group("wd1") or m_wd.group("wd2")
-            wd_idx = _WEEKDAY_NAMES.get(raw_wd.lower()) if raw_wd else None
-            if wd_idx is not None:
-                delta = (wd_idx - reference_date.weekday()) % 7
-                if delta == 0:
-                    delta = 7
-                return (reference_date + timedelta(days=delta)).isoformat(), m_wd.group(0), None
-
-        return None, None, None
+        return selected.iso_date, selected.source_text, None, inline_corr
 
     def _parse_day_token(self, raw_day: str) -> int | None:
         cleaned = raw_day.strip().lower()
@@ -2240,6 +1643,360 @@ class VisitFieldExtractor:
             )
 
         return actions
+
+    def _extract_dynamic_observations(
+        self,
+        text: str,
+        *,
+        unusual_weight: tuple[float, str] | None,
+        has_structured_fields: bool,
+    ) -> tuple[list[DynamicObservation], list[dict[str, Any]]]:
+        """Extract extensible measurements, feeding/care status, counselling & uncaptured clinical notes."""
+        observations: list[DynamicObservation] = []
+        numbers: list[dict[str, Any]] = []
+        covered_spans: list[tuple[int, int]] = []
+
+        if unusual_weight is not None:
+            u_val, u_src = unusual_weight
+            observations.append(
+                DynamicObservation(
+                    key="weight_kg",
+                    label="Weight (Needs Confirmation)",
+                    value=u_val,
+                    unit="kg",
+                    category="measurement",
+                    status="needs_confirmation",
+                    source_text=u_src,
+                )
+            )
+
+        # 1. Height / length in cm
+        m_len = re.search(
+            rf"{_LB}(?:height|length|lambai|लंबाई|ಎತ್ತರ|ಉದ್ದ|உயரம்)\s*(?:is|hai|है|=|:|was)?\s*(?P<qty>{_QTY_PHRASE})\s*(?:cm|centimeter|centimeters|सेमी)?{_RB}",
+            text,
+            re.IGNORECASE,
+        )
+        if m_len:
+            dec_val = parse_decimal_phrase(m_len.group("qty"))
+            if dec_val is not None and Decimal("20") <= dec_val <= Decimal("220"):
+                val_r = decimal_to_float(dec_val, places=2)
+                observations.append(
+                    DynamicObservation(
+                        key="height_cm",
+                        label="Height / Length",
+                        value=val_r,
+                        unit="cm",
+                        category="measurement",
+                        status="confirmed",
+                        source_text=m_len.group(0).strip(),
+                    )
+                )
+                numbers.append({"field": "height_cm", "value": val_r, "normalized_decimal": format_decimal_clean(dec_val), "unit": "cm", "source_text": m_len.group(0).strip(), "status": "confirmed"})
+                covered_spans.append(m_len.span())
+
+        # 2. MUAC in cm
+        m_muac = re.search(
+            rf"{_LB}(?:muac|mid[\s-]*upper[\s-]*arm)\s*(?:is|=|:)?\s*(?P<qty>{_QTY_PHRASE})\s*(?:cm|सेमी)?{_RB}",
+            text,
+            re.IGNORECASE,
+        )
+        if m_muac:
+            dec_val = parse_decimal_phrase(m_muac.group("qty"))
+            if dec_val is not None and Decimal("5") <= dec_val <= Decimal("45"):
+                val_r = decimal_to_float(dec_val, places=2)
+                observations.append(
+                    DynamicObservation(
+                        key="muac_cm",
+                        label="MUAC",
+                        value=val_r,
+                        unit="cm",
+                        category="measurement",
+                        status="confirmed",
+                        source_text=m_muac.group(0).strip(),
+                    )
+                )
+                numbers.append({"field": "muac_cm", "value": val_r, "normalized_decimal": format_decimal_clean(dec_val), "unit": "cm", "source_text": m_muac.group(0).strip(), "status": "confirmed"})
+                covered_spans.append(m_muac.span())
+
+        # 3. Temperature (supports digits and spoken decimal phrases like "99 point 8")
+        m_temp = re.search(
+            rf"{_LB}(?:temp|temperature|tapman|तापमान|ಜ್ವರ|ತಾಪಮಾನ|வெப்பநிலை)\s*(?:is|hai|है|=|:)?\s*(?P<qty>{_QTY_PHRASE})\s*(?P<unit>°?\s*[cf]|celsius|fahrenheit|degree|degrees)?{_RB}",
+            text,
+            re.IGNORECASE,
+        )
+        if m_temp:
+            dec_t = parse_decimal_phrase(m_temp.group("qty"))
+            if dec_t is not None and Decimal("30") <= dec_t <= Decimal("110"):
+                tval = decimal_to_float(dec_t, places=1)
+                raw_u = (m_temp.group("unit") or "").strip().lower()
+                unit = "°C" if ("c" in raw_u or tval < 45) else "°F"
+                observations.append(
+                    DynamicObservation(
+                        key="temperature",
+                        label="Temperature",
+                        value=tval,
+                        unit=unit,
+                        category="measurement",
+                        status="confirmed",
+                        source_text=m_temp.group(0).strip(),
+                    )
+                )
+                numbers.append({"field": "temperature", "value": tval, "normalized_decimal": format_decimal_clean(dec_t), "unit": unit, "source_text": m_temp.group(0).strip(), "status": "confirmed"})
+                covered_spans.append(m_temp.span())
+
+        # 4. Blood pressure (e.g. "BP 110/70", "BP is 120 by 80")
+        m_bp = re.search(
+            rf"{_LB}(?:bp|b\.p\.|blood\s+pressure|रक्तचाप)\s*(?:is|hai|है|=|:)?\s*(?P<sys>\d{{2,3}})\s*(?:/|by|over)\s*(?P<dia>\d{{2,3}}){_RB}",
+            text,
+            re.IGNORECASE,
+        )
+        if m_bp:
+            bp_str = f"{m_bp.group('sys')}/{m_bp.group('dia')}"
+            observations.append(
+                DynamicObservation(
+                    key="blood_pressure",
+                    label="Blood Pressure",
+                    value=bp_str,
+                    unit="mmHg",
+                    category="measurement",
+                    status="confirmed",
+                    source_text=m_bp.group(0).strip(),
+                )
+            )
+            numbers.append({"field": "blood_pressure", "value": bp_str, "unit": "mmHg", "source_text": m_bp.group(0).strip(), "status": "confirmed"})
+            covered_spans.append(m_bp.span())
+
+        # 5. Hemoglobin (Hb)
+        m_hb = re.search(
+            rf"{_LB}(?:hb|h\.b\.|hemoglobin|haemoglobin|हीमोग्लोबिन)\s*(?:is|hai|है|=|:)?\s*(?P<qty>{_QTY_PHRASE})\s*(?:g/dl|gm%|grams?)?{_RB}",
+            text,
+            re.IGNORECASE,
+        )
+        if m_hb:
+            dec_hb = parse_decimal_phrase(m_hb.group("qty"))
+            if dec_hb is not None and Decimal("2.0") <= dec_hb <= Decimal("22.0"):
+                hb_r = decimal_to_float(dec_hb, places=1)
+                observations.append(
+                    DynamicObservation(
+                        key="hemoglobin_g_dl",
+                        label="Hemoglobin (Hb)",
+                        value=hb_r,
+                        unit="g/dL",
+                        category="measurement",
+                        status="confirmed",
+                        source_text=m_hb.group(0).strip(),
+                    )
+                )
+                numbers.append({"field": "hemoglobin_g_dl", "value": hb_r, "normalized_decimal": format_decimal_clean(dec_hb), "unit": "g/dL", "source_text": m_hb.group(0).strip(), "status": "confirmed"})
+                covered_spans.append(m_hb.span())
+
+        # 6. Feeding / breastfeeding status
+        m_feed = re.search(
+            r"(?:exclusive(?:ly)?\s+breastfeeding|breastfeeding\s+(?:well|poorly|not\s+well|started|regularly|ok|good|fine)|not\s+(?:feeding|breastfeeding)(?:\s+well)?|poor\s+feeding|feeding\s+(?:well|poorly|fine|ok|normal)|स्तनपान\s+(?:ठीक|अच्छा|नहीं)|दूध\s+(?:ठीक\s+से\s+)?पी\s+रहा)",
+            text,
+            re.IGNORECASE,
+        )
+        if m_feed:
+            observations.append(
+                DynamicObservation(
+                    key="feeding_status",
+                    label="Feeding / Breastfeeding",
+                    value=m_feed.group(0).strip(),
+                    category="feeding",
+                    status="confirmed",
+                    source_text=m_feed.group(0).strip(),
+                )
+            )
+            covered_spans.append(m_feed.span())
+
+        # 7. IFA / Calcium supplement adherence
+        m_supp = re.search(
+            r"(?:taking\s+(?:ifa|iron|calcium)(?:\s+tablets?)?(?:\s+regularly)?|not\s+taking\s+(?:ifa|iron|calcium)(?:\s+tablets?)?|ifa\s+(?:completed|started|skipped|missed|adherence)|calcium\s+(?:started|taken|regular)|आयरन\s+की\s+गोली\s+(?:ले\s+रही|नहीं\s+ले\s+रही))",
+            text,
+            re.IGNORECASE,
+        )
+        if m_supp:
+            observations.append(
+                DynamicObservation(
+                    key="supplement_adherence",
+                    label="IFA / Calcium Supplements",
+                    value=m_supp.group(0).strip(),
+                    category="supplements",
+                    status="confirmed",
+                    source_text=m_supp.group(0).strip(),
+                )
+            )
+            covered_spans.append(m_supp.span())
+
+        # 8. Umbilical cord / hygiene / skin-to-skin care
+        m_care = re.search(
+            r"(?:umbilical\s+cord\s+[^,.]+|cord\s+(?:is\s+)?(?:clean|dry|healthy)|skin[\s-]+to[\s-]+skin\s+care[^,.]*|kangaroo\s+mother\s+care[^,.]*)",
+            text,
+            re.IGNORECASE,
+        )
+        if m_care:
+            observations.append(
+                DynamicObservation(
+                    key="newborn_care_note",
+                    label="Newborn Care",
+                    value=m_care.group(0).strip(),
+                    category="newborn_care",
+                    status="confirmed",
+                    source_text=m_care.group(0).strip(),
+                )
+            )
+            covered_spans.append(m_care.span())
+
+        # 9. Counselling given
+        m_coun = re.search(
+            r"(?:counsel+ed\s+(?:on|about)\s+[^,.]+|advised\s+(?:on|for|about)\s+[^,.]+|परिवार\s+को\s+[^।,.]+\s+सलाह\s+दी)",
+            text,
+            re.IGNORECASE,
+        )
+        if m_coun:
+            observations.append(
+                DynamicObservation(
+                    key="counselling_topic",
+                    label="Counselling Given",
+                    value=m_coun.group(0).strip(),
+                    category="counselling",
+                    status="confirmed",
+                    source_text=m_coun.group(0).strip(),
+                )
+            )
+            covered_spans.append(m_coun.span())
+
+        # 10. Arbitrary spoken detail catch-all: if worker spoke a rich clinical sentence without
+        # triggering only conversational acks ("yes", "no", "ok", "confirm") and no dynamic obs matched,
+        # keep the detail preserved as a clinical_note so spoken info is never silently dropped.
+        stripped = text.strip()
+        words = stripped.split()
+        is_ack_or_removal = bool(
+            re.fullmatch(
+                r"(?:yes|yeah|yep|no|nope|ok|okay|done|confirm|save|submit|cancel|read back|skip|hello|hi|haan|जी|हाँ|नहीं)\W*",
+                stripped,
+                re.IGNORECASE,
+            )
+            or re.search(r"\b(?:remove|delete|clear|drop|हटा|मिटा)\b", stripped, re.IGNORECASE)
+        )
+        if (
+            not observations
+            and not has_structured_fields
+            and not is_ack_or_removal
+            and len(words) >= 4
+        ):
+            observations.append(
+                DynamicObservation(
+                    key="clinical_note",
+                    label="Additional Clinical Note",
+                    value=stripped,
+                    category="clinical_note",
+                    status="confirmed",
+                    source_text=stripped,
+                )
+            )
+
+        return observations, numbers
+
+    def _build_dynamic_events(
+        self,
+        *,
+        v_completed: list[str],
+        v_due: list[str],
+        v_prov: dict[str, str],
+        next_date: str | None,
+    ) -> list[DynamicEvent]:
+        """Build repeatable per-item immunisation events cleanly."""
+        events: list[DynamicEvent] = []
+        for vac in v_completed:
+            events.append(
+                DynamicEvent(
+                    event_type="immunisation",
+                    name=vac,
+                    status="completed",
+                    date=None,
+                    source_text=v_prov.get("vaccinations_completed"),
+                )
+            )
+        completed_lower = {v.lower() for v in v_completed}
+        for vac in v_due:
+            if vac.lower() in completed_lower:
+                continue
+            events.append(
+                DynamicEvent(
+                    event_type="immunisation",
+                    name=vac,
+                    status="due",
+                    date=next_date,
+                    source_text=v_prov.get("vaccinations_due"),
+                )
+            )
+        return events
+
+    def _extract_removals(
+        self,
+        text: str,
+        *,
+        existing_draft: VisitDraft | None,
+    ) -> tuple[list[str], list[str]]:
+        """Detect explicit spoken removal/deletion requests for dynamic observations or events."""
+        m_rm = re.search(
+            r"\b(?:remove|delete|clear|drop)\s+(?:that\s+|the\s+)?(?P<target>[a-z0-9\s\-_/]{2,40})",
+            text,
+            re.IGNORECASE,
+        )
+        if not m_rm:
+            return [], []
+        target = m_rm.group("target").strip().lower()
+        obs_keys: list[str] = []
+        event_names: list[str] = []
+
+        # Map common spoken labels to dynamic observation keys
+        obs_aliases = {
+            "feeding": "feeding_status",
+            "breastfeeding": "feeding_status",
+            "height": "height_cm",
+            "length": "height_cm",
+            "muac": "muac_cm",
+            "temp": "temperature",
+            "temperature": "temperature",
+            "bp": "blood_pressure",
+            "blood pressure": "blood_pressure",
+            "hb": "hemoglobin_g_dl",
+            "hemoglobin": "hemoglobin_g_dl",
+            "supplement": "supplement_adherence",
+            "ifa": "supplement_adherence",
+            "calcium": "supplement_adherence",
+            "cord": "newborn_care_note",
+            "counselling": "counselling_topic",
+            "counseling": "counselling_topic",
+            "note": "clinical_note",
+            "clinical note": "clinical_note",
+        }
+        for alias, key in obs_aliases.items():
+            if alias in target:
+                obs_keys.append(key)
+
+        if existing_draft is not None:
+            for obs in existing_draft.observations:
+                if obs.key.lower() in target or obs.label.lower() in target:
+                    if obs.key not in obs_keys:
+                        obs_keys.append(obs.key)
+            for ev in existing_draft.events:
+                if ev.name.lower() in target:
+                    if ev.name not in event_names:
+                        event_names.append(ev.name)
+            for vac in list(existing_draft.vaccinations_due) + list(existing_draft.vaccinations_completed):
+                if vac.lower() in target and vac not in event_names:
+                    event_names.append(vac)
+
+        # Also check canonical vaccine mentions directly
+        for canon in ("BCG", "OPV", "Hepatitis B", "Pentavalent", "Rota", "PCV", "IPV", "MR", "DPT", "TT", "Td"):
+            if re.search(rf"\b{re.escape(canon.lower())}\b", target):
+                if canon not in event_names:
+                    event_names.append(canon)
+
+        return obs_keys, event_names
 
 
 def _dedupe_preserve_order(items: list[str]) -> list[str]:

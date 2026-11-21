@@ -17,6 +17,8 @@ from datetime import date, datetime, timezone, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from decimal import Decimal
+
 from app.conversation.models import (
     ActionType,
     ClarificationRequest,
@@ -34,14 +36,23 @@ from app.conversation.state_machine import (
     ConversationStateMachine,
     InvalidTransitionError,
     classify_confirmation_intent,
+    format_unambiguous_spoken_date,
     is_completion_intent,
 )
-from app.core.config import get_settings
+from app.core.config import build_contextual_stt_options, get_settings
 from app.core.logging import log_event
 from app.danger_signs.detector import detect_danger_signs, get_referral_message
 from app.danger_signs.models import DangerMatch, DetectionResult
 from app.extraction.extractor import VisitFieldExtractor
-from app.extraction.models import FollowUpAction, VisitDraft
+from app.extraction.models import DynamicObservation, FieldClarification, FollowUpAction, VisitDraft
+from app.extraction.numbers import format_decimal_clean
+from app.extraction.secondary_recognition import (
+    IMPORTANT_CONFIRMABLE_FIELDS,
+    NUMERIC_OBSERVATION_KEYS,
+    SecondarySpeechRecognizer,
+    assess_numeric_uncertainty,
+    compare_numeric_interpretations,
+)
 from app.services.beneficiaries import SyntheticBeneficiaryDirectory
 from app.voice.interfaces import TranscriptEvent
 from app.voice.orchestration.session import VoiceSessionOrchestrator
@@ -192,7 +203,7 @@ def format_visit_contract(
             },
         )
 
-    return {
+    payload: dict[str, Any] = {
         "schema_version": "v1",
         "visit_id": visit_state.visit_draft_id,
         "session_id": session_id,
@@ -217,6 +228,59 @@ def format_visit_contract(
         "timezone": "Asia/Kolkata",
         "synthetic": True,
     }
+    if visit_state.observations:
+        serialized_obs = []
+        for idx, o in enumerate(visit_state.observations):
+            if o.get("key") is None:
+                continue
+            val = o.get("value")
+            if isinstance(val, bool):
+                vtype = "boolean"
+            elif isinstance(val, (int, float)):
+                vtype = "number"
+            else:
+                vtype = "text"
+            obs_status = str(o.get("status", "confirmed"))
+            if obs_status not in {"needs_confirmation", "confirmed", "corrected", "uncertain", "removed"}:
+                obs_status = "confirmed"
+            serialized_obs.append(
+                {
+                    "id": str(o.get("id") or f"obs_{o.get('key')}_{idx}"),
+                    "key": str(o.get("key", "")),
+                    "label": str(o.get("label", o.get("key", ""))),
+                    "value": val,
+                    "value_type": vtype,
+                    "unit": o.get("unit"),
+                    "source_text": o.get("source_text"),
+                    "turn_id": o.get("turn_id"),
+                    "confidence": o.get("confidence"),
+                    "extraction_stage": "uncertain" if obs_status in {"needs_confirmation", "uncertain"} else "normalized",
+                    "status": obs_status,
+                }
+            )
+        if serialized_obs:
+            payload["observations"] = serialized_obs
+    if visit_state.events:
+        serialized_events = []
+        for idx, e in enumerate(visit_state.events):
+            if not e.get("name"):
+                continue
+            ev_obj: dict[str, Any] = {
+                "id": str(e.get("id") or f"evt_{str(e.get('event_type', 'immunisation')).lower()}_{str(e.get('name', '')).lower().replace(' ', '_')}_{idx}"),
+                "event_type": str(e.get("event_type", "immunisation")),
+                "name": str(e.get("name", "")),
+                "status": str(e.get("status", "due")),
+                "date": e.get("date"),
+                "source_text": e.get("source_text"),
+                "turn_id": e.get("turn_id"),
+                "confirmation_status": "confirmed",
+            }
+            if e.get("notes"):
+                ev_obj["attributes"] = {"notes": str(e["notes"])}
+            serialized_events.append(ev_obj)
+        if serialized_events:
+            payload["events"] = serialized_events
+    return payload
 
 
 class HealthcareSessionPipeline:
@@ -233,6 +297,8 @@ class HealthcareSessionPipeline:
         reference_date: date | None = None,
         continuous_editing: bool = False,
         review_silence_timeout_s: float = 12.0,
+        secondary_recognizer: SecondarySpeechRecognizer | None = None,
+        confirm_important_numbers: bool = False,
     ) -> None:
         self.session_id = session_id
         self.worker_id = worker_id
@@ -242,6 +308,8 @@ class HealthcareSessionPipeline:
         self._reference_date = reference_date
         self.continuous_editing = continuous_editing
         self.review_silence_timeout_s = review_silence_timeout_s
+        self._secondary_recognizer = secondary_recognizer
+        self.confirm_important_numbers = confirm_important_numbers
 
         ben_name: str | None = None
         if beneficiary_id:
@@ -265,8 +333,197 @@ class HealthcareSessionPipeline:
         self._committed_at: str | None = None
         self._contract_alerts: dict[str, dict[str, Any]] = {}
         self._orchestrator: VoiceSessionOrchestrator | None = None
-        self._pending_ambiguous_patch: ExtractionUpdate | None = None
+        self._last_stt_beneficiary_id: str | None = beneficiary_id
+        self._stt_reconnect_task: asyncio.Task[None] | None = None
+        # Typed pending confirmation queue keyed by field name (weight_kg, next_visit_date,
+        # beneficiary_id, temperature, blood_pressure, hemoglobin_g_dl)
+        self._pending_numeric_confirmations: dict[str, dict[str, Any]] = {}
+        self._pending_source_texts: dict[str, str | None] = {}
+        self._pending_obs_candidates: dict[str, dict[str, Any]] = {}
+        self._pending_beneficiary_names: dict[str, str] = {}
+        self._pending_follow_up_actions: dict[str, list[FollowUpAction]] = {}
+        self._awaiting_numeric_repeat_field: str | None = None
         self._silence_task: asyncio.Task[None] | None = None
+
+    def set_secondary_recognizer(self, recognizer: SecondarySpeechRecognizer | None) -> None:
+        self._secondary_recognizer = recognizer
+
+    async def _reconnect_stt_safely(self, stt: Any) -> None:
+        try:
+            await stt.reconnect_with_context()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            log_event(
+                logger,
+                "stt_context_reconnect_failed",
+                session=self.session_id,
+                reason=str(exc)[:120],
+            )
+
+    def _sync_stt_context_from_visit(self, orchestrator: VoiceSessionOrchestrator) -> None:
+        """Keep STT speaker_names & keywords synced to the active beneficiary without overloading."""
+        stt = getattr(orchestrator, "_stt", None)
+        update_ctx = getattr(stt, "update_context", None)
+        if not callable(update_ctx):
+            return
+        ctx = build_contextual_stt_options(
+            beneficiary_name=self.sm.visit.beneficiary_name,
+            beneficiary_id=self.sm.visit.beneficiary_id,
+        )
+        update_ctx(
+            speaker_names=ctx["speaker_names"],
+            keywords=ctx["keywords"],
+        )
+        # Reopen live Prisma WS on beneficiary change so handshake headers
+        # (`x-speaker-names`, `x-keywords`, `x-previous-text`) actually refresh.
+        new_bid = self.sm.visit.beneficiary_id
+        if new_bid and new_bid != self._last_stt_beneficiary_id:
+            self._last_stt_beneficiary_id = new_bid
+            reconnect_fn = getattr(stt, "reconnect_with_context", None)
+            if callable(reconnect_fn) and getattr(stt, "is_connected", False):
+                if self._stt_reconnect_task is not None and not self._stt_reconnect_task.done():
+                    self._stt_reconnect_task.cancel()
+                self._stt_reconnect_task = asyncio.create_task(
+                    self._reconnect_stt_safely(stt),
+                    name=f"stt-ctx-reconnect-{self.session_id}",
+                )
+
+    def _is_baby_context(self) -> bool:
+        vtype = self.sm.visit.visit_type.value if self.sm.visit.visit_type else None
+        if vtype == "Newborn":
+            return True
+        if self.sm.visit.beneficiary_id:
+            ben = self._directory.get_by_id(self.sm.visit.beneficiary_id)
+            if ben and ben.category in {"newborn", "infant"}:
+                return True
+        return False
+
+    def _format_numeric_confirmation_prompt(
+        self,
+        field_name: str,
+        value: Any,
+        *,
+        language: str,
+        unit: str | None = None,
+    ) -> str:
+        lang = normalize_language(language)
+        if field_name == "weight_kg":
+            val_s = format_decimal_clean(Decimal(str(value)))
+            is_baby = self._is_baby_context()
+            if lang == "hi-IN":
+                subject = "बच्चे का वज़न" if is_baby else "वज़न"
+                return f"मैंने {subject} {val_s} किलोग्राम सुना है। क्या यह सही है?"
+            if lang == "kn-IN":
+                subject = "ಮಗುವಿನ ತೂಕ" if is_baby else "ತೂಕ"
+                return f"{subject} {val_s} ಕಿಲೋಗ್ರಾಂ ಎಂದು ಕೇಳಿಸಿದೆ. ಇದು ಸರಿಯೇ?"
+            if lang == "ta-IN":
+                subject = "குழந்தையின் எடை" if is_baby else "எடை"
+                return f"{subject} {val_s} கிலோகிராம் என்று கேட்டது. இது சரியா?"
+            subject = "the baby's weight" if is_baby else "the weight"
+            return f"I heard {subject} as {val_s} kilograms. Is that correct?"
+        if field_name == "next_visit_date":
+            spoken_date = format_unambiguous_spoken_date(str(value)) or str(value)
+            if lang == "hi-IN":
+                return f"मैंने अगली विज़िट की तारीख {spoken_date} सुनी है। क्या यह सही है?"
+            if lang == "kn-IN":
+                return f"ಮುಂದಿನ ಭೇಟಿಯ ದಿನಾಂಕ {spoken_date} ಎಂದು ಕೇಳಿಸಿದೆ. ಇದು ಸರಿಯೇ?"
+            if lang == "ta-IN":
+                return f"அடுத்த வருகை தேதி {spoken_date} என்று கேட்டது. இது சரியா?"
+            return f"I heard the next visit date as {spoken_date}. Is that correct?"
+        if field_name == "beneficiary_id":
+            bid = str(value).strip().upper()
+            if lang == "hi-IN":
+                return f"मैंने लाभार्थी आईडी {bid} सुनी है। क्या यह सही है?"
+            if lang == "kn-IN":
+                return f"ಫಲಾನುಭವಿ ಐಡಿ {bid} ಎಂದು ಕೇಳಿಸಿದೆ. ಇದು ಸರಿಯೇ?"
+            if lang == "ta-IN":
+                return f"பயனாளி ஐடி {bid} என்று கேட்டது. இது சரியா?"
+            return f"I heard the beneficiary ID as {bid}. Is that correct?"
+        if field_name == "temperature":
+            u = unit or "°F"
+            val_s = format_decimal_clean(Decimal(str(value)))
+            if lang == "hi-IN":
+                return f"मैंने तापमान {val_s} {u} सुना है। क्या यह सही है?"
+            if lang == "kn-IN":
+                return f"ತಾಪಮಾನ {val_s} {u} ಎಂದು ಕೇಳಿಸಿದೆ. ಇದು ಸರಿಯೇ?"
+            if lang == "ta-IN":
+                return f"வெப்பநிலை {val_s} {u} என்று கேட்டது. இது சரியா?"
+            return f"I heard the temperature as {val_s} {u}. Is that correct?"
+        if field_name == "blood_pressure":
+            u = unit or "mmHg"
+            if lang == "hi-IN":
+                return f"मैंने ब्लड प्रेशर {value} {u} सुना है। क्या यह सही है?"
+            if lang == "kn-IN":
+                return f"ರಕ್ತದೊತ್ತಡ {value} {u} ಎಂದು ಕೇಳಿಸಿದೆ. ಇದು ಸರಿಯೇ?"
+            if lang == "ta-IN":
+                return f"ரத்த அழுத்தம் {value} {u} என்று கேட்டது. இது சரியா?"
+            return f"I heard the blood pressure as {value} {u}. Is that correct?"
+        if field_name == "hemoglobin_g_dl":
+            u = unit or "g/dL"
+            val_s = format_decimal_clean(Decimal(str(value)))
+            if lang == "hi-IN":
+                return f"मैंने हीमोग्लोबिन {val_s} {u} सुना है। क्या यह सही है?"
+            if lang == "kn-IN":
+                return f"ಹಿಮೋಗ್ಲೋಬಿನ್ {val_s} {u} ಎಂದು ಕೇಳಿಸಿದೆ. ಇದು ಸರಿಯೇ?"
+            if lang == "ta-IN":
+                return f"ஹீமோகுளோபின் {val_s} {u} என்று கேட்டது. இது சரியா?"
+            return f"I heard the hemoglobin as {val_s} {u}. Is that correct?"
+        return f"I heard {field_name} as {value}. Is that correct?"
+
+    def _format_repeat_numeric_prompt(self, field_name: str, *, language: str) -> str:
+        lang = normalize_language(language)
+        if field_name == "weight_kg":
+            if lang == "hi-IN":
+                return "ठीक है, कृपया सही वज़न दोबारा बोलें।"
+            if lang == "kn-IN":
+                return "ಸರಿ, ದಯವಿಟ್ಟು ಸರಿಯಾದ ತೂಕವನ್ನು ಮತ್ತೆ ಹೇಳಿ."
+            if lang == "ta-IN":
+                return "சரி, தயவுசெய்து சரியான எடையை மீண்டும் சொல்லுங்கள்."
+            return "Okay, please repeat the weight."
+        if field_name == "next_visit_date":
+            if lang == "hi-IN":
+                return "ठीक है, कृपया अगली विज़िट की सही तारीख दोबारा बोलें।"
+            if lang == "kn-IN":
+                return "ಸರಿ, ದಯವಿಟ್ಟು ಮುಂದಿನ ಭೇಟಿಯ ಸರಿಯಾದ ದಿನಾಂಕವನ್ನು ಮತ್ತೆ ಹೇಳಿ."
+            if lang == "ta-IN":
+                return "சரி, தயவுசெய்து அடுத்த வருகையின் சரியான தேதியை மீண்டும் சொல்லுங்கள்."
+            return "Okay, please repeat the next visit date."
+        if field_name == "beneficiary_id":
+            if lang == "hi-IN":
+                return "ठीक है, कृपया सही लाभार्थी आईडी दोबारा बोलें।"
+            if lang == "kn-IN":
+                return "ಸರಿ, ದಯವಿಟ್ಟು ಸರಿಯಾದ ಫಲಾನುಭವಿ ಐಡಿಯನ್ನು ಮತ್ತೆ ಹೇಳಿ."
+            if lang == "ta-IN":
+                return "சரி, தயவுசெய்து சரியான பயனாளி ஐடியை மீண்டும் சொல்லுங்கள்."
+            return "Okay, please repeat the beneficiary ID."
+        if field_name == "temperature":
+            if lang == "hi-IN":
+                return "ठीक है, कृपया सही तापमान दोबारा बोलें।"
+            if lang == "kn-IN":
+                return "ಸರಿ, ದಯವಿಟ್ಟು ಸರಿಯಾದ ತಾಪಮಾನವನ್ನು ಮತ್ತೆ ಹೇಳಿ."
+            if lang == "ta-IN":
+                return "சரி, தயவுசெய்து சரியான வெப்பநிலையை மீண்டும் சொல்லுங்கள்."
+            return "Okay, please repeat the temperature."
+        if field_name == "blood_pressure":
+            if lang == "hi-IN":
+                return "ठीक है, कृपया सही ब्लड प्रेशर दोबारा बोलें।"
+            if lang == "kn-IN":
+                return "ಸರಿ, ದಯವಿಟ್ಟು ಸರಿಯಾದ ರಕ್ತದೊತ್ತಡವನ್ನು ಮತ್ತೆ ಹೇಳಿ."
+            if lang == "ta-IN":
+                return "சரி, தயவுசெய்து சரியான ரத்த அழுத்தத்தை மீண்டும் சொல்லுங்கள்."
+            return "Okay, please repeat the blood pressure."
+        if field_name == "hemoglobin_g_dl":
+            if lang == "hi-IN":
+                return "ठीक है, कृपया सही हीमोग्लोबिन मान दोबारा बोलें।"
+            if lang == "kn-IN":
+                return "ಸರಿ, ದಯವಿಟ್ಟು ಸರಿಯಾದ ಹಿಮೋಗ್ಲೋಬಿನ್ ಮೌಲ್ಯವನ್ನು ಮತ್ತೆ ಹೇಳಿ."
+            if lang == "ta-IN":
+                return "சரி, தயவுசெய்து சரியான ஹீமோகுளோபின் அளவை மீண்டும் சொல்லுங்கள்."
+            return "Okay, please repeat the hemoglobin value."
+        if lang == "hi-IN":
+            return "ठीक है, कृपया सही मान दोबारा बोलें।"
+        return f"Okay, please repeat the {field_name}."
 
     def attach_orchestrator(self, orchestrator: VoiceSessionOrchestrator) -> None:
         self._orchestrator = orchestrator
@@ -466,6 +723,7 @@ class HealthcareSessionPipeline:
                 )
                 orchestrator.telemetry.steps.beneficiary_identified = True
                 orchestrator.telemetry.steps.identity_voice_confirmed = True
+                self._sync_stt_context_from_visit(orchestrator)
                 await self._dispatch_transition(transition, orchestrator)
                 return True
 
@@ -485,6 +743,7 @@ class HealthcareSessionPipeline:
                     )
                     if len(matches) == 1:
                         orchestrator.telemetry.steps.beneficiary_identified = True
+                        self._sync_stt_context_from_visit(orchestrator)
                     await self._dispatch_transition(lookup_trans, orchestrator)
                     return True
                 await self._dispatch_transition(rej_transition, orchestrator)
@@ -533,6 +792,271 @@ class HealthcareSessionPipeline:
             existing_draft=existing_draft,
         )
 
+        # 2a-bis. If worker rejected a confirmation and repeated a bare value (e.g. "101.2",
+        # "120 by 80", "11.4", "2.8"), re-extract with the awaited field cue if needed.
+        if self._awaiting_numeric_repeat_field:
+            awaited = self._awaiting_numeric_repeat_field
+            has_awaited = awaited in extraction.patch or any(
+                o.key == awaited for o in extraction.observations
+            )
+            if (
+                not has_awaited
+                and not extraction.patch
+                and not extraction.observations
+                and classify_confirmation_intent(event.text) not in {"confirm", "reject"}
+            ):
+                cue_map = {
+                    "weight_kg": "weight",
+                    "next_visit_date": "next visit",
+                    "beneficiary_id": "beneficiary id",
+                    "temperature": "temp",
+                    "blood_pressure": "bp",
+                    "hemoglobin_g_dl": "hb",
+                }
+                cue = cue_map.get(awaited)
+                if cue:
+                    retry_ext = self._extractor.extract(
+                        f"{cue} {event.text}",
+                        reference_date=self._reference_date,
+                        active_language=lang,
+                        existing_draft=existing_draft,
+                    )
+                    if awaited in retry_ext.patch or any(
+                        o.key == awaited for o in retry_ext.observations
+                    ):
+                        extraction = retry_ext
+                        extraction.detected_correction = True
+
+        # 2b. Optional secondary recognition (Section E): ONLY when a critical number is uncertain/inconsistent
+        utterance_pcm = event.metadata.get("utterance_pcm")
+        uncertainty = assess_numeric_uncertainty(
+            event.text,
+            extraction,
+            stt_confidence=event.confidence,
+        )
+        if (
+            uncertainty.should_recheck
+            and isinstance(utterance_pcm, (bytes, bytearray))
+            and len(utterance_pcm) > 0
+            and self._secondary_recognizer is not None
+        ):
+            orchestrator.telemetry.secondary_recognition_runs += 1
+            stt_obj = getattr(orchestrator, "_stt", None)
+            ctx_snap = (
+                stt_obj.context_snapshot()
+                if stt_obj is not None and hasattr(stt_obj, "context_snapshot")
+                else {}
+            )
+            try:
+                sec_res = await self._secondary_recognizer.recognize_segment(
+                    bytes(utterance_pcm),
+                    sample_rate=int(event.metadata.get("sample_rate") or 16000),
+                    language_code=str(ctx_snap.get("language_code") or "indic-auto"),
+                    language_candidates=ctx_snap.get("language_candidates"),
+                    keywords=ctx_snap.get("keywords"),
+                    speaker_names=ctx_snap.get("speaker_names"),
+                    previous_text=ctx_snap.get("previous_text"),
+                    topic=ctx_snap.get("topic"),
+                )
+                sec_text = str(sec_res.get("transcript", "")).strip()
+                if sec_text:
+                    comparison = compare_numeric_interpretations(
+                        extraction,
+                        sec_text,
+                        extractor=self._extractor,
+                        reference_date=self._reference_date,
+                        active_language=lang,
+                        existing_draft=existing_draft,
+                    )
+                    if comparison.has_disagreement:
+                        orchestrator.telemetry.secondary_recognition_conflicts += 1
+                        disagreed_set = set(comparison.disagreed_fields)
+                        for df in comparison.disagreed_fields:
+                            extraction.patch.pop(df, None)
+                            if df == "weight_kg":
+                                extraction.patch.pop("weight_source_text", None)
+                            elif df == "next_visit_date":
+                                extraction.patch.pop("next_visit_date_source_text", None)
+                            elif df == "beneficiary_id":
+                                extraction.patch.pop("beneficiary_name", None)
+                        # Remove disagreed numeric DynamicObservations so unconfirmed vitals don't commit
+                        if disagreed_set & set(NUMERIC_OBSERVATION_KEYS):
+                            extraction.observations = [
+                                o for o in extraction.observations if o.key not in disagreed_set
+                            ]
+                            for obs_key in NUMERIC_OBSERVATION_KEYS:
+                                if (
+                                    obs_key in disagreed_set
+                                    and len(comparison.candidate_values.get(obs_key, [])) == 1
+                                    and comparison.candidate_observations.get(obs_key)
+                                ):
+                                    cand_obs = comparison.candidate_observations[obs_key][0]
+                                    self._pending_obs_candidates[obs_key] = cand_obs.model_dump(mode="json")
+                                    self._pending_source_texts[obs_key] = cand_obs.source_text or sec_text
+                        # Replace clarifications on disagreed fields with comparison clarifications
+                        extraction.clarifications = [
+                            c for c in extraction.clarifications if c.field_name not in disagreed_set
+                        ] + comparison.clarifications
+                        # If secondary recovered a single candidate weight when primary omitted it,
+                        # stage it as a needs_confirmation observation for mandatory worker confirmation.
+                        if "weight_kg" in disagreed_set and len(comparison.candidate_values.get("weight_kg", [])) == 1:
+                            cand_val = float(comparison.candidate_values["weight_kg"][0])
+                            if not any(o.key == "weight_kg" for o in extraction.observations):
+                                extraction.observations.append(
+                                    DynamicObservation(
+                                        key="weight_kg",
+                                        label="Weight (Needs Confirmation)",
+                                        value=cand_val,
+                                        unit="kg",
+                                        category="measurement",
+                                        status="needs_confirmation",
+                                        source_text=sec_text,
+                                    )
+                                )
+            except Exception as exc:
+                log_event(
+                    logger,
+                    "secondary_stt_skipped",
+                    session=self.session_id,
+                    reason=str(exc)[:120],
+                )
+
+        # 2c. Mandatory inline numeric confirmation when configured OR when awaiting repeat/uncertain
+        existing_clar_fields = {c.field_name for c in extraction.clarifications}
+        in_readback_or_submit = self.sm.state in (
+            ConversationState.READ_BACK_CONFIRMATION,
+            ConversationState.READY_TO_CONFIRM,
+            ConversationState.ASK_READBACK_PREFERENCE,
+            ConversationState.ASK_SUBMISSION_CONFIRMATION,
+        )
+        if self.confirm_important_numbers and not in_readback_or_submit:
+            if (
+                "weight_kg" in extraction.patch
+                and "weight_kg" not in existing_clar_fields
+                and self._awaiting_numeric_repeat_field != "weight_kg"
+            ):
+                cand_w = extraction.patch.pop("weight_kg")
+                cand_src = extraction.patch.pop("weight_source_text", None)
+                self._pending_source_texts["weight_kg"] = cand_src
+                prompt_text = self._format_numeric_confirmation_prompt(
+                    "weight_kg", cand_w, language=lang
+                )
+                extraction.clarifications.append(
+                    FieldClarification(
+                        field_name="weight_kg",
+                        reason="ambiguous_value",
+                        prompt_hint=prompt_text,
+                        candidates=[format_decimal_clean(Decimal(str(cand_w)))],
+                    )
+                )
+                extraction.observations.append(
+                    DynamicObservation(
+                        key="weight_kg",
+                        label="Weight (Needs Confirmation)",
+                        value=cand_w,
+                        unit="kg",
+                        category="measurement",
+                        status="needs_confirmation",
+                        source_text=cand_src or event.text,
+                    )
+                )
+
+            if (
+                "next_visit_date" in extraction.patch
+                and "next_visit_date" not in existing_clar_fields
+                and self._awaiting_numeric_repeat_field != "next_visit_date"
+            ):
+                cand_date = str(extraction.patch.pop("next_visit_date"))
+                cand_src = extraction.patch.pop("next_visit_date_source_text", None)
+                self._pending_source_texts["next_visit_date"] = cand_src
+                if "follow_up_actions" in extraction.patch:
+                    all_acts: list[FollowUpAction] = list(extraction.patch["follow_up_actions"])
+                    held = [a for a in all_acts if a.due_date == cand_date]
+                    kept = [a for a in all_acts if a.due_date != cand_date]
+                    if held:
+                        self._pending_follow_up_actions["next_visit_date"] = held
+                    if kept:
+                        extraction.patch["follow_up_actions"] = kept
+                    else:
+                        extraction.patch.pop("follow_up_actions", None)
+                prompt_text = self._format_numeric_confirmation_prompt(
+                    "next_visit_date", cand_date, language=lang
+                )
+                extraction.clarifications.append(
+                    FieldClarification(
+                        field_name="next_visit_date",
+                        reason="ambiguous_value",
+                        prompt_hint=prompt_text,
+                        candidates=[cand_date],
+                    )
+                )
+
+            if (
+                "beneficiary_id" in extraction.patch
+                and extraction.patch["beneficiary_id"] != self.sm.visit.beneficiary_id
+                and "beneficiary_id" not in existing_clar_fields
+                and self._awaiting_numeric_repeat_field != "beneficiary_id"
+            ):
+                cand_bid = str(extraction.patch.pop("beneficiary_id"))
+                cand_bname = extraction.patch.pop("beneficiary_name", None)
+                if cand_bname:
+                    self._pending_beneficiary_names[cand_bid] = str(cand_bname)
+                prompt_text = self._format_numeric_confirmation_prompt(
+                    "beneficiary_id", cand_bid, language=lang
+                )
+                extraction.clarifications.append(
+                    FieldClarification(
+                        field_name="beneficiary_id",
+                        reason="ambiguous_value",
+                        prompt_hint=prompt_text,
+                        candidates=[cand_bid],
+                    )
+                )
+
+            gated_obs: list[DynamicObservation] = []
+            for obs in extraction.observations:
+                if (
+                    obs.key in NUMERIC_OBSERVATION_KEYS
+                    and obs.key not in existing_clar_fields
+                    and self._awaiting_numeric_repeat_field != obs.key
+                ):
+                    self._pending_obs_candidates[obs.key] = obs.model_dump(mode="json")
+                    self._pending_source_texts[obs.key] = obs.source_text or event.text
+                    prompt_text = self._format_numeric_confirmation_prompt(
+                        obs.key, obs.value, unit=obs.unit, language=lang
+                    )
+                    extraction.clarifications.append(
+                        FieldClarification(
+                            field_name=obs.key,
+                            reason="ambiguous_value",
+                            prompt_hint=prompt_text,
+                            candidates=[str(obs.value)],
+                        )
+                    )
+                else:
+                    gated_obs.append(obs)
+            extraction.observations = gated_obs
+
+        # Ensure any uncertain numeric observation with a pending clarification is not silently saved
+        clar_obs_keys = {
+            c.field_name for c in extraction.clarifications if c.field_name in NUMERIC_OBSERVATION_KEYS
+        }
+        if clar_obs_keys:
+            kept_obs: list[DynamicObservation] = []
+            for obs in extraction.observations:
+                if obs.key in clar_obs_keys:
+                    self._pending_obs_candidates.setdefault(obs.key, obs.model_dump(mode="json"))
+                else:
+                    kept_obs.append(obs)
+            extraction.observations = kept_obs
+
+        if self._awaiting_numeric_repeat_field and (
+            self._awaiting_numeric_repeat_field in extraction.patch
+            or any(o.key == self._awaiting_numeric_repeat_field for o in extraction.observations)
+        ):
+            self._awaiting_numeric_repeat_field = None
+            extraction.detected_correction = True
+
         # Preserve source provenance phrases and structured follow-ups for v1 contract
         if "weight_source_text" in extraction.patch:
             self._weight_source_text = extraction.patch["weight_source_text"]
@@ -544,19 +1068,31 @@ class HealthcareSessionPipeline:
             vtype_hint = extraction.patch.get("visit_type") or (
                 self.sm.visit.visit_type.value if self.sm.visit.visit_type else None
             )
-            existing_descs = {f["description"] for f in self._structured_follow_ups}
             for act in extracted_followups:
-                if act.description not in existing_descs:
+                mapped_type = _map_follow_up_action_type(act.action_type, vtype_hint)
+                # Replace prior scheduled routine home visit follow-up when a new date is given
+                if act.action_type == "routine_visit" and act.due_date:
+                    self._structured_follow_ups = [
+                        f
+                        for f in self._structured_follow_ups
+                        if not (
+                            f.get("action_type") == mapped_type
+                            and str(f.get("description", "")).startswith("Conduct")
+                        )
+                    ]
+                if not any(
+                    f.get("description") == act.description and f.get("due_date") == act.due_date
+                    for f in self._structured_follow_ups
+                ):
                     self._structured_follow_ups.append(
                         {
-                            "action_type": _map_follow_up_action_type(act.action_type, vtype_hint),
+                            "action_type": mapped_type,
                             "description": act.description,
                             "due_date": act.due_date,
                             "priority": act.priority,
                             "source_phrase": act.source_phrase,
                         }
                     )
-                    existing_descs.add(act.description)
 
         # Build 1B ExtractionUpdate DTO
         sm_clarifications = [
@@ -600,8 +1136,25 @@ class HealthcareSessionPipeline:
             update_kwargs["follow_up_actions"] = [a.description for a in extracted_followups]
             explicit_fields.add("follow_up_actions")
 
+        obs_dicts = [o.model_dump(mode="json") for o in extraction.observations]
+        if obs_dicts:
+            update_kwargs["observations"] = obs_dicts
+            explicit_fields.add("observations")
+
+        event_dicts = [e.model_dump(mode="json") for e in extraction.events]
+        if event_dicts:
+            update_kwargs["events"] = event_dicts
+            explicit_fields.add("events")
+
+        rm_obs = set(extraction.remove_observation_keys)
+        rm_ev = set(extraction.remove_event_names)
+        trace_dict = extraction.trace.model_dump(mode="json") if extraction.trace else None
+
         update = ExtractionUpdate(
             **update_kwargs,
+            remove_observation_keys=rm_obs,
+            remove_event_names=rm_ev,
+            trace=trace_dict,
             clarifications=sm_clarifications,
             explicit_fields=explicit_fields if explicit_fields else None,
             detected_language=lang,
@@ -610,11 +1163,10 @@ class HealthcareSessionPipeline:
         # 3. Route into Conversation State Machine (1B)
         if danger_fired:
             # Record any extracted fields silently into the draft without interrupting urgent referral speech
-            if explicit_fields:
-                for field_name in explicit_fields:
-                    val = getattr(update, field_name)
-                    if val is not None:
-                        setattr(self.sm.visit, field_name, val)
+            if explicit_fields or rm_obs or rm_ev:
+                self.sm._apply_update_fields(
+                    update, is_patch=bool(rm_obs or rm_ev), merge_lists=True
+                )
                 await orchestrator.emit_event(
                     "visit_draft_updated",
                     visit_id=self.sm.visit.visit_draft_id,
@@ -666,56 +1218,188 @@ class HealthcareSessionPipeline:
             await self._dispatch_transition(transition, orchestrator)
             return True
 
-        # Pending confirmation of an ambiguous numeric replacement ("Do you want me to update weight to 2.8?")
-        if self._pending_ambiguous_patch is not None and not explicit_fields:
+        # Clear any stale pending confirmation if the worker directly spoke a new value
+        for f_cleared in list(explicit_fields) + [o.key for o in extraction.observations]:
+            self._pending_numeric_confirmations.pop(f_cleared, None)
+
+        # Pending confirmation of an ambiguous or uncertain numeric value (Section F)
+        if self._pending_numeric_confirmations and not explicit_fields:
             amb_intent = classify_confirmation_intent(event.text)
             if amb_intent == "confirm":
-                pending = self._pending_ambiguous_patch
-                self._pending_ambiguous_patch = None
+                pending_field = next(iter(self._pending_numeric_confirmations))
+                entry = self._pending_numeric_confirmations.pop(pending_field)
+                pending: ExtractionUpdate = entry["patch"]
+                src_text = entry.get("source_text")
+                if pending_field == "weight_kg" and src_text:
+                    self._weight_source_text = src_text
+                elif pending_field == "next_visit_date" and src_text:
+                    self._next_visit_date_source_text = src_text
+                if pending_field == "next_visit_date":
+                    for act in self._pending_follow_up_actions.pop("next_visit_date", []):
+                        self._structured_follow_ups.append(
+                            {
+                                "action_type": _map_follow_up_action_type(
+                                    act.action_type,
+                                    self.sm.visit.visit_type.value if self.sm.visit.visit_type else None,
+                                ),
+                                "description": act.description,
+                                "due_date": act.due_date,
+                                "priority": act.priority,
+                                "source_phrase": act.source_phrase,
+                            }
+                        )
+                self.sm.pending_clarifications = [
+                    c for c in self.sm.pending_clarifications if c.field != pending_field
+                ]
+                orchestrator.telemetry.numeric_confirmations_accepted += 1
                 orchestrator.telemetry.correction_count += 1
                 transition = self.sm.apply_continuous_update(
-                    pending, is_correction=True, language=lang
-                )
-                await self._dispatch_transition(transition, orchestrator)
-                return True
-            if amb_intent == "reject":
-                self._pending_ambiguous_patch = None
-                self.sm.pending_clarifications = []
-                transition = self.sm.apply_continuous_update(
-                    ExtractionUpdate(detected_language=lang),
-                    is_correction=False,
+                    pending,
+                    is_correction=True,
+                    merge_lists=(pending_field in NUMERIC_OBSERVATION_KEYS),
                     language=lang,
                 )
+                if pending_field == "beneficiary_id" and self.sm.visit.beneficiary_id:
+                    orchestrator.telemetry.steps.beneficiary_identified = True
+                    orchestrator.telemetry.steps.identity_voice_confirmed = True
+                    self._sync_stt_context_from_visit(orchestrator)
                 await self._dispatch_transition(transition, orchestrator)
+                if self._pending_numeric_confirmations:
+                    next_field = next(iter(self._pending_numeric_confirmations))
+                    next_hint = self._pending_numeric_confirmations[next_field].get("prompt_hint")
+                    if next_hint:
+                        orchestrator.telemetry.numeric_confirmations_requested += 1
+                        await orchestrator.emit_event(
+                            "clarification_required",
+                            visit_id=self.sm.visit.visit_draft_id,
+                            field=next_field,
+                            reason="ambiguous_value",
+                            prompt_text=next_hint,
+                            language=lang,
+                        )
+                        await orchestrator.speak_direct(next_hint, language=lang)
+                return True
+            if amb_intent == "reject":
+                rejected_field = next(iter(self._pending_numeric_confirmations))
+                self._pending_numeric_confirmations.pop(rejected_field, None)
+                self._pending_source_texts.pop(rejected_field, None)
+                self._pending_obs_candidates.pop(rejected_field, None)
+                self._pending_follow_up_actions.pop(rejected_field, None)
+                self._awaiting_numeric_repeat_field = rejected_field
+                self.sm.pending_clarifications = []
+                orchestrator.telemetry.numeric_confirmations_rejected += 1
+                repeat_prompt = self._format_repeat_numeric_prompt(rejected_field, language=lang)
+                await orchestrator.emit_event(
+                    "clarification_required",
+                    visit_id=self.sm.visit.visit_draft_id,
+                    field=rejected_field,
+                    reason="ambiguous_value",
+                    prompt_text=repeat_prompt,
+                    language=lang,
+                )
+                await orchestrator.speak_direct(repeat_prompt, language=lang)
                 return True
 
         # Continuous editing workflow (Basic Mode live conversation, Sections 1–9)
         if self.continuous_editing:
             done_intent = is_completion_intent(event.text)
-            if explicit_fields or sm_clarifications:
+            if explicit_fields or sm_clarifications or rm_obs or rm_ev:
                 orchestrator.telemetry.steps.visit_notes_captured = True
-                # Capture pending ambiguous weight candidate if present
+                # Capture pending ambiguous/uncertain numeric candidates for YES/NO spoken confirmation
                 for c in sm_clarifications:
-                    if c.field == "weight_kg" and c.reason == "ambiguous_value" and c.candidates:
-                        try:
-                            cand_w = float(c.candidates[0])
-                            self._pending_ambiguous_patch = ExtractionUpdate(
-                                weight_kg=cand_w,
-                                explicit_fields={"weight_kg"},
-                                detected_language=lang,
-                            )
-                        except ValueError:
-                            pass
-                if extraction.detected_correction and explicit_fields:
+                    if (
+                        c.field in IMPORTANT_CONFIRMABLE_FIELDS
+                        and c.reason in {"ambiguous_value", "conflict"}
+                        and c.candidates
+                    ):
+                        if len(c.candidates) == 1:
+                            cand_raw = c.candidates[0]
+                            patch_obj: ExtractionUpdate | None = None
+                            if c.field == "weight_kg":
+                                try:
+                                    patch_obj = ExtractionUpdate(
+                                        weight_kg=float(cand_raw),
+                                        explicit_fields={"weight_kg"},
+                                        detected_language=lang,
+                                    )
+                                except ValueError:
+                                    patch_obj = None
+                            elif c.field == "next_visit_date":
+                                patch_obj = ExtractionUpdate(
+                                    next_visit_date=str(cand_raw),
+                                    explicit_fields={"next_visit_date"},
+                                    detected_language=lang,
+                                )
+                            elif c.field == "beneficiary_id":
+                                bid = str(cand_raw).strip().upper()
+                                bname = self._pending_beneficiary_names.pop(bid, None)
+                                if not bname:
+                                    ben = self._directory.get_by_id(bid)
+                                    bname = ben.full_name if ben else None
+                                exp_set = {"beneficiary_id"} | ({"beneficiary_name"} if bname else set())
+                                patch_obj = ExtractionUpdate(
+                                    beneficiary_id=bid,
+                                    beneficiary_name=bname,
+                                    explicit_fields=exp_set,
+                                    detected_language=lang,
+                                )
+                            elif c.field in NUMERIC_OBSERVATION_KEYS:
+                                obs_dict = self._pending_obs_candidates.pop(c.field, None)
+                                if obs_dict is None:
+                                    unit_defaults = {
+                                        "temperature": "°F",
+                                        "blood_pressure": "mmHg",
+                                        "hemoglobin_g_dl": "g/dL",
+                                    }
+                                    label_defaults = {
+                                        "temperature": "Temperature",
+                                        "blood_pressure": "Blood Pressure",
+                                        "hemoglobin_g_dl": "Hemoglobin (Hb)",
+                                    }
+                                    val_parsed: Any = cand_raw
+                                    if c.field in {"temperature", "hemoglobin_g_dl"}:
+                                        try:
+                                            val_parsed = float(cand_raw)
+                                        except ValueError:
+                                            val_parsed = cand_raw
+                                    obs_dict = DynamicObservation(
+                                        key=c.field,
+                                        label=label_defaults[c.field],
+                                        value=val_parsed,
+                                        unit=unit_defaults[c.field],
+                                        category="measurement",
+                                        status="confirmed",
+                                        source_text=self._pending_source_texts.get(c.field) or event.text,
+                                    ).model_dump(mode="json")
+                                else:
+                                    obs_dict["status"] = "confirmed"
+                                patch_obj = ExtractionUpdate(
+                                    observations=[obs_dict],
+                                    explicit_fields={"observations"},
+                                    detected_language=lang,
+                                )
+                            if patch_obj is not None:
+                                self._pending_numeric_confirmations[c.field] = {
+                                    "patch": patch_obj,
+                                    "source_text": self._pending_source_texts.pop(c.field, None),
+                                    "prompt_hint": c.question,
+                                }
+                                orchestrator.telemetry.numeric_confirmations_requested += 1
+                        elif c.reason == "conflict":
+                            # Conflicting values: ask worker to repeat/choose without staging either
+                            self._awaiting_numeric_repeat_field = c.field
+                            orchestrator.telemetry.numeric_confirmations_requested += 1
+                if (extraction.detected_correction and explicit_fields) or rm_obs or rm_ev:
                     orchestrator.telemetry.correction_count += 1
                 transition = self.sm.apply_continuous_update(
                     update,
-                    is_correction=extraction.detected_correction,
+                    is_correction=bool(extraction.detected_correction or rm_obs or rm_ev),
                     merge_lists=True,
                     language=lang,
                 )
                 if self.sm.visit.beneficiary_id:
                     orchestrator.telemetry.steps.beneficiary_identified = True
+                    self._sync_stt_context_from_visit(orchestrator)
                     if self.sm.identity_verified:
                         orchestrator.telemetry.steps.identity_voice_confirmed = True
                 orchestrator.telemetry.steps.clarifications_resolved = (
@@ -825,6 +1509,12 @@ class HealthcareSessionPipeline:
         if "vaccinations_due" in fields and isinstance(fields["vaccinations_due"], list):
             kwargs["vaccinations_due"] = [str(x) for x in fields["vaccinations_due"] if str(x).strip()]
             explicit.add("vaccinations_due")
+        if "observations" in fields and isinstance(fields["observations"], list):
+            kwargs["observations"] = [dict(x) for x in fields["observations"] if isinstance(x, dict)]
+            explicit.add("observations")
+        if "events" in fields and isinstance(fields["events"], list):
+            kwargs["events"] = [dict(x) for x in fields["events"] if isinstance(x, dict)]
+            explicit.add("events")
 
         if not explicit and not clear_fields:
             return
@@ -838,6 +1528,30 @@ class HealthcareSessionPipeline:
         orchestrator.telemetry.correction_count += 1
         transition = self.sm.apply_continuous_update(
             update, is_correction=True, merge_lists=False, language=self.language
+        )
+        await self._dispatch_transition(transition, orchestrator)
+
+    async def handle_remove_item(
+        self,
+        *,
+        observation_key: str | None = None,
+        event_name: str | None = None,
+        orchestrator: VoiceSessionOrchestrator,
+    ) -> None:
+        """Handle explicit removal of a dynamic observation or repeatable event."""
+        self._cancel_silence_timer()
+        rm_obs = {observation_key} if observation_key else set()
+        rm_ev = {event_name} if event_name else set()
+        if not rm_obs and not rm_ev:
+            return
+        update = ExtractionUpdate(
+            remove_observation_keys=rm_obs,
+            remove_event_names=rm_ev,
+            detected_language=self.language,
+        )
+        orchestrator.telemetry.correction_count += 1
+        transition = self.sm.apply_continuous_update(
+            update, is_correction=True, merge_lists=True, language=self.language
         )
         await self._dispatch_transition(transition, orchestrator)
 

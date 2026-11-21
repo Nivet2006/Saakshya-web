@@ -845,7 +845,9 @@ def generate_clarification_text(
     prompts: list[str] = []
 
     for req in clarifications:
-        if lang == "en-IN" and req.question and req.question.strip():
+        if req.question and req.question.strip() and (
+            lang == "en-IN" or req.reason in {"ambiguous_value", "conflict", "uncertain_danger_sign"}
+        ):
             prompt = req.question.strip()
         elif req.field in templates:
             prompt = templates[req.field].format(field=req.field)
@@ -853,7 +855,7 @@ def generate_clarification_text(
             prompt = req.question.strip()
         else:
             prompt = templates["default"].format(field=req.field)
-        if req.candidates:
+        if req.candidates and (len(req.candidates) >= 2 or req.reason != "ambiguous_value"):
             options_str = ", ".join(req.candidates)
             if lang == "hi-IN":
                 prompt = f"{prompt} विकल्प: {options_str}।"
@@ -1130,6 +1132,10 @@ class ConversationStateMachine:
             self.visit.weight_kg = update.weight_kg
             self.confirmed_fields.add("weight_kg")
             changed.append("weight_kg")
+            # Clear any prior uncertain weight observation once confirmed scalar is recorded
+            self.visit.observations = [
+                o for o in self.visit.observations if str(o.get("key", "")).lower() != "weight_kg"
+            ]
 
         if "vaccinations_completed" in fields and update.vaccinations_completed is not None:
             old_vc = list(self.visit.vaccinations_completed)
@@ -1198,6 +1204,107 @@ class ConversationStateMachine:
             _record("follow_up_actions", old_fa, list(new_fa))
             self.confirmed_fields.add("follow_up_actions")
             changed.append("follow_up_actions")
+
+        # Dynamic observations: upsert by normalized key and support explicit removal
+        if update.remove_observation_keys:
+            rm_obs = {k.strip().lower() for k in update.remove_observation_keys if k.strip()}
+            old_obs = list(self.visit.observations)
+            new_obs = [
+                o for o in old_obs if str(o.get("key", "")).strip().lower() not in rm_obs
+            ]
+            if new_obs != old_obs:
+                _record("observations", old_obs, new_obs)
+                self.visit.observations = new_obs
+                if "observations" not in changed:
+                    changed.append("observations")
+
+        if "observations" in fields and update.observations is not None:
+            old_obs = [dict(o) for o in self.visit.observations]
+            if is_patch and not merge_lists:
+                new_obs = [dict(o) for o in update.observations]
+            else:
+                new_obs = [dict(o) for o in self.visit.observations]
+                for inc_obs in update.observations:
+                    inc_key = str(inc_obs.get("key", "")).strip().lower()
+                    if not inc_key:
+                        continue
+                    replaced = False
+                    for idx, cur in enumerate(new_obs):
+                        if str(cur.get("key", "")).strip().lower() == inc_key:
+                            new_obs[idx] = dict(inc_obs)
+                            replaced = True
+                            break
+                    if not replaced:
+                        new_obs.append(dict(inc_obs))
+            if new_obs != old_obs:
+                _record("observations", old_obs, new_obs)
+                self.visit.observations = new_obs
+                if "observations" not in changed:
+                    changed.append("observations")
+
+        # Repeatable events: upsert in-place by (event_type, name.lower()) and support removal
+        if update.remove_event_names:
+            rm_ev = {n.strip().lower() for n in update.remove_event_names if n.strip()}
+            old_ev = list(self.visit.events)
+            new_ev = [
+                e for e in old_ev if str(e.get("name", "")).strip().lower() not in rm_ev
+            ]
+            if new_ev != old_ev:
+                _record("events", old_ev, new_ev)
+                self.visit.events = new_ev
+                if "events" not in changed:
+                    changed.append("events")
+            # Keep legacy lists aligned on event deletion
+            f_comp = [v for v in self.visit.vaccinations_completed if v.strip().lower() not in rm_ev]
+            f_due = [v for v in self.visit.vaccinations_due if v.strip().lower() not in rm_ev]
+            if f_comp != self.visit.vaccinations_completed:
+                self.visit.vaccinations_completed = f_comp
+                if "vaccinations_completed" not in changed:
+                    changed.append("vaccinations_completed")
+            if f_due != self.visit.vaccinations_due:
+                self.visit.vaccinations_due = f_due
+                if "vaccinations_due" not in changed:
+                    changed.append("vaccinations_due")
+
+        if "events" in fields and update.events is not None:
+            old_ev = [dict(e) for e in self.visit.events]
+            if is_patch and not merge_lists:
+                new_ev = [dict(e) for e in update.events]
+            else:
+                new_ev = [dict(e) for e in self.visit.events]
+                for inc_ev in update.events:
+                    ev_type = str(inc_ev.get("event_type", "immunisation")).strip().lower()
+                    ev_name = str(inc_ev.get("name", "")).strip().lower()
+                    if not ev_name:
+                        continue
+                    replaced = False
+                    for idx, cur in enumerate(new_ev):
+                        if (
+                            str(cur.get("event_type", "immunisation")).strip().lower() == ev_type
+                            and str(cur.get("name", "")).strip().lower() == ev_name
+                        ):
+                            new_ev[idx] = dict(inc_ev)
+                            replaced = True
+                            break
+                    if not replaced:
+                        new_ev.append(dict(inc_ev))
+            if new_ev != old_ev:
+                _record("events", old_ev, new_ev)
+                self.visit.events = new_ev
+                if "events" not in changed:
+                    changed.append("events")
+                # Keep legacy vaccination arrays synchronized when UI edits an event directly
+                if is_patch and not merge_lists:
+                    imm_events = [e for e in new_ev if str(e.get("event_type", "")).lower() == "immunisation"]
+                    self.visit.vaccinations_completed = [
+                        str(e["name"]) for e in imm_events if e.get("status") == "completed" and e.get("name")
+                    ]
+                    self.visit.vaccinations_due = [
+                        str(e["name"]) for e in imm_events if e.get("status") in {"due", "scheduled"} and e.get("name")
+                    ]
+
+        if update.trace is not None:
+            self.visit.utterance_traces.append(dict(update.trace))
 
         # Any update invalidates a previously generated summary
         if changed:

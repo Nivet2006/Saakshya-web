@@ -18,6 +18,18 @@ FollowUpActionType = Literal[
 ]
 FollowUpPriority = Literal["normal", "high", "urgent"]
 VisitStatus = Literal["draft", "confirmed", "committed"]
+ObservationStatus = Literal["confirmed", "uncertain", "needs_confirmation"]
+ObservationCategory = Literal[
+    "measurement",
+    "feeding",
+    "maternal_health",
+    "newborn_care",
+    "supplements",
+    "counselling",
+    "clinical_note",
+    "other",
+]
+EventStatus = Literal["completed", "due", "scheduled", "deferred", "cancelled"]
 
 
 def _validate_iso_date(value: str | None) -> str | None:
@@ -27,6 +39,52 @@ def _validate_iso_date(value: str | None) -> str | None:
         raise ValueError(f"Expected ISO-8601 YYYY-MM-DD date, got {value!r}")
     date.fromisoformat(value)
     return value
+
+
+class DynamicObservation(BaseModel):
+    """Extensible observation captured dynamically from worker speech or UI edit."""
+
+    key: str
+    label: str
+    value: Any
+    unit: str | None = None
+    category: ObservationCategory = "other"
+    status: ObservationStatus = "confirmed"
+    confidence: float | None = None
+    source_text: str | None = None
+    turn_id: int | None = None
+
+
+class DynamicEvent(BaseModel):
+    """Repeatable clinical event (e.g., individual immunisation, ANC contact, counselling)."""
+
+    event_type: str = "immunisation"
+    name: str
+    status: EventStatus = "due"
+    date: str | None = None
+    notes: str | None = None
+    source_text: str | None = None
+    confidence: float | None = None
+    turn_id: int | None = None
+
+    @field_validator("date")
+    @classmethod
+    def validate_event_date(cls, value: str | None) -> str | None:
+        return _validate_iso_date(value)
+
+
+class UtteranceExtractionTrace(BaseModel):
+    """Multi-stage audit trace for a single worker utterance."""
+
+    turn_id: int | None = None
+    language: str = "hi-IN"
+    raw_transcript: str
+    finalized_transcript: str | None = None
+    normalized_transcript: str
+    detected_entities: dict[str, Any] = Field(default_factory=dict)
+    extracted_numbers: list[dict[str, Any]] = Field(default_factory=list)
+    source_phrases: dict[str, str] = Field(default_factory=dict)
+    extraction_status: str = "extracted"
 
 
 class FollowUpAction(BaseModel):
@@ -69,6 +127,9 @@ class VisitDraft(BaseModel):
     danger_signs: list[str] = Field(default_factory=list)
     danger_sign_flagged: bool = False
     follow_up_actions: list[FollowUpAction] = Field(default_factory=list)
+    observations: list[DynamicObservation] = Field(default_factory=list)
+    events: list[DynamicEvent] = Field(default_factory=list)
+    utterance_traces: list[UtteranceExtractionTrace] = Field(default_factory=list)
     status: VisitStatus = "draft"
     confirmed_fields: list[str] = Field(default_factory=list)
     clarifications_needed: list[FieldClarification] = Field(default_factory=list)
@@ -94,3 +155,8 @@ class ExtractionResult(BaseModel):
     detected_correction: bool = False
     corrected_fields: list[str] = Field(default_factory=list)
     provenance: dict[str, str] = Field(default_factory=dict)
+    observations: list[DynamicObservation] = Field(default_factory=list)
+    events: list[DynamicEvent] = Field(default_factory=list)
+    remove_observation_keys: list[str] = Field(default_factory=list)
+    remove_event_names: list[str] = Field(default_factory=list)
+    trace: UtteranceExtractionTrace | None = None
