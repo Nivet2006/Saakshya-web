@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore, getFirestore } from 'firebase/firestore';
 
 export const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'AIzaSyAVS-DrwWQX2Ho3eD_qwk9aU6mNoQksGsg',
@@ -15,7 +15,13 @@ export const firebaseConfig = {
 // Initialize Firebase (safely singleton for Next.js SSR & client re-renders)
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// Use auto-detect long polling to prevent Safari/browser WebKit "Listen/channel access control checks" CORS blocks
+export const db = getApps().length > 0
+  ? getFirestore(app)
+  : initializeFirestore(app, {
+      experimentalAutoDetectLongPolling: true,
+    });
 
 export const isFirebaseConfigured = Boolean(
   firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.projectId !== 'demo-project'
