@@ -16,8 +16,10 @@ Converts noisy, spoken household-visit notes in Indic languages and natural Indi
 > **Upload Instructions:** Drag and drop your `.mp4` videos and `.png`/`.jpg` screenshot directly into the GitHub README editor (or save them under `docs/media/`) and replace the placeholders below.
 
 ### 1. Voice Visit Demo — English
-<!-- Replace with GitHub video URL or relative path e.g. docs/media/demo-english.mp4 -->
-[▶ Watch English Demo Video](https://github.com/user-attachments/assets/PLACEHOLDER-ENGLISH-DEMO-VIDEO)
+
+<video src="docs/media/english.mp4" controls="controls" width="100%"></video>
+
+[▶ Watch / Download English Demo Video](docs/media/english.mp4)
 
 ### 2. Voice Visit Demo — Tamil (தமிழ்)
 
