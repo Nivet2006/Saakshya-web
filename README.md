@@ -23,11 +23,7 @@ Converts noisy, spoken household-visit notes in Indic languages and natural Indi
 <!-- Replace with GitHub video URL or relative path e.g. docs/media/demo-tamil.mp4 -->
 [▶ Watch Tamil Demo Video](https://github.com/user-attachments/assets/PLACEHOLDER-TAMIL-DEMO-VIDEO)
 
-### 3. Voice Visit Demo — Kannada (ಕನ್ನಡ)
-<!-- Replace with GitHub video URL or relative path e.g. docs/media/demo-kannada.mp4 -->
-[▶ Watch Kannada Demo Video](https://github.com/user-attachments/assets/PLACEHOLDER-KANNADA-DEMO-VIDEO)
-
-### 4. Auto-Filled ASHA Field Report & PDF Export Screenshot
+### 3. Auto-Filled ASHA Field Report & PDF Export Screenshot
 ![Saakshya ASHA Report Screenshot](image.png)
 
 ---
