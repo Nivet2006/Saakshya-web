@@ -28,8 +28,7 @@ Converts noisy, spoken household-visit notes in Indic languages and natural Indi
 [▶ Watch Kannada Demo Video](https://github.com/user-attachments/assets/PLACEHOLDER-KANNADA-DEMO-VIDEO)
 
 ### 4. Auto-Filled ASHA Field Report & PDF Export Screenshot
-<!-- Replace with GitHub image URL or relative path e.g. docs/media/report-screenshot.png -->
-![Saakshya ASHA Report Screenshot](docs/media/report-screenshot.png)
+![Saakshya ASHA Report Screenshot](image.png)
 
 ---
 
@@ -111,23 +110,24 @@ sakshya-web/
 
 ### Option A: One-Click Local Launcher (Recommended)
 
-`start_demo.py` validates prerequisites (`python3 >= 3.11`, `node`, `npm`), initializes `.env` and `sakshya-web-main/.env.local` if missing, sets up `backend/.venv` and `node_modules`, starts FastAPI (`http://localhost:8000`) and Next.js (`http://localhost:3000`), and opens the app in your browser:
+Use the platform-specific one-click launcher (`start_demo.bat` for Windows, `start_demo.command` for macOS). Both automatically validate prerequisites (`python3 >= 3.11`, `node`, `npm`), initialize `.env` and `sakshya-web-main/.env.local` if missing, set up `backend/.venv` and `node_modules`, start FastAPI (`http://localhost:8000`) and Next.js (`http://localhost:3000`), and open the app in your browser:
 
-```bash
-# macOS / Linux
-python3 start_demo.py
+- **Windows:** Double-click **`start_demo.bat`** in File Explorer, or run from Command Prompt / PowerShell:
+  ```bat
+  start_demo.bat
+  ```
 
-# macOS Finder double-click
-./start_demo.command
+- **macOS:** Double-click **`start_demo.command`** in Finder (if needed once, make executable with `chmod +x start_demo.command`), or run from Terminal:
+  ```bash
+  ./start_demo.command
+  ```
 
-# Windows
-start_demo.bat
-
-# Useful flags
-python3 start_demo.py --check-only   # Verify environment and health without launching UI
-python3 start_demo.py --no-browser   # Start servers in terminal without opening browser
-python3 start_demo.py --with-cli     # Also open the terminal CLI voice client alongside Web UI
-```
+- **Cross-Platform CLI Options (`start_demo.py`):**
+  ```bash
+  python3 start_demo.py --check-only   # Verify environment and health without launching UI
+  python3 start_demo.py --no-browser   # Start servers in terminal without opening browser
+  python3 start_demo.py --with-cli     # Also open the terminal CLI voice client alongside Web UI
+  ```
 
 ### Option B: Manual Backend Setup
 
