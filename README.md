@@ -28,6 +28,13 @@ Converts noisy, spoken household-visit notes in Indic languages and natural Indi
 ### 3. Auto-Filled ASHA Field Report & PDF Export Screenshot
 ![Saakshya ASHA Report Screenshot](image.png)
 
+### 4. Auto Route Map Generator for ASHA Workers (Google Maps Navigation)
+Automatically sequences an ASHA worker's daily household visits from the Primary Health Centre (PHC), highlights urgent high-risk/VLBW priority homes, and provides one-click **Navigate** (integrated directly with Google Maps) and **Start Voice Visit** actions.
+
+![Saakshya ASHA Route Map UI](docs/media/route-map-ui.png)
+
+![ASHA Village GPS Route Map](sakshya-web-main/public/images/asha-route-map.jpg)
+
 ---
 
 ## 1. Architecture & Voice Pipeline

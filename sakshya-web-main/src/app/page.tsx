@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AshaHomeView } from '@/components/asha/AshaHomeView';
 import { AshaReportsView } from '@/components/asha/AshaReportsView';
+import { AshaRouteMapView } from '@/components/asha/AshaRouteMapView';
 import { BeneficiaryDirectoryView } from '@/components/asha/BeneficiaryDirectoryView';
 import { FollowUpQueueView } from '@/components/asha/FollowUpQueueView';
 import { OfflineDraftsView } from '@/components/asha/OfflineDraftsView';
@@ -311,6 +312,16 @@ export default function HomePage() {
               onStartVoiceVisit={handleStartVoiceVisit}
               onAddBeneficiary={handleAddBeneficiary}
               currentLanguage={currentLanguage}
+            />
+          )}
+
+          {ashaSection === 'routemap' && (
+            <AshaRouteMapView
+              profile={currentProfile}
+              beneficiaries={beneficiaries}
+              visits={visits}
+              dangerAlerts={dangerAlerts}
+              onStartVoiceVisit={handleStartVoiceVisit}
             />
           )}
 

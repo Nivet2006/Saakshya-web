@@ -17,6 +17,7 @@ import {
   History,
   Home,
   LogOut,
+  MapPin,
   Menu,
   Mic,
   RefreshCw,
@@ -30,6 +31,7 @@ export type AshaNavSection =
   | 'home'
   | 'voice'
   | 'beneficiaries'
+  | 'routemap'
   | 'followups'
   | 'history'
   | 'offline'
@@ -91,6 +93,11 @@ export const AppShell: React.FC<AppShellProps> = ({
       id: 'beneficiaries',
       label: ui.navBeneficiaries,
       icon: <Users className="h-4 w-4" aria-hidden="true" />,
+    },
+    {
+      id: 'routemap',
+      label: 'Route Map',
+      icon: <MapPin className="h-4 w-4" aria-hidden="true" />,
     },
     {
       id: 'followups',
