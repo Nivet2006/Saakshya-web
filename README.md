@@ -14,8 +14,10 @@ Converts noisy, spoken household-visit notes in Indic languages and natural Indi
 ## Demo Videos & Screenshots
 
 ### 1. Voice Visit Demo — English
-<!-- Replace with GitHub video URL or relative path e.g. docs/media/demo-english.mp4 -->
-[▶ Watch English Demo Video](https://github.com/user-attachments/assets/PLACEHOLDER-ENGLISH-DEMO-VIDEO)
+
+<video src="docs/media/english.mp4" controls="controls" width="100%"></video>
+
+[▶ Watch / Download English Demo Video](docs/media/english.mp4)
 
 ### 2. Voice Visit Demo — Tamil (தமிழ்)
 
