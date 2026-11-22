@@ -1,4 +1,4 @@
-# ASHA Voice Field Register (Sakshya)
+# ASHA Voice Field Register (Saakshya)
 
 Voice-first maternal, newborn, and immunisation home-visit register and emergency referral assistant for **ASHAs (Accredited Social Health Activists)** and **PHC Supervisors** under India's **National Health Mission (NHM)**.
 
@@ -7,7 +7,29 @@ Converts noisy, spoken household-visit notes in Indic languages and natural Indi
 **Three Integrated Components:**
 1. **Python Voice & Healthcare AI Backend (`backend/`)** — FastAPI WebSocket orchestrator (`Gnani Prisma v3.0` STT, `Gnani Timbre v3.0` TTS, ONNX Silero VAD barge-in, Gemini/Groq LLM adapters, exact-`Decimal` numeric/date extraction, NHM danger-sign & clinical risk engines).
 2. **Next.js Clinical Web Application (`sakshya-web-main/`)** — Bilingual/multilingual ASHA worker & PHC supervisor web workspace with live microphone streaming, Audio Diagnostics, Offline IndexedDB drafts, Printable NHM Reports, and Supabase/Firebase sync.
-3. **Companion Android Mobile App (`../sakshya-app` — *Sakshya ASHA*)** — React Native + Expo Android field app with native 16 kHz `pcm_s16le` hardware `AudioRecord` capture, Push-to-Talk voice workflow, Firebase Firestore + Android Room persistence, and standalone Release APK builds.
+3. **Companion Android Mobile App (`../sakshya-app` — *Saakshya ASHA*)** — React Native + Expo Android field app with native 16 kHz `pcm_s16le` hardware `AudioRecord` capture, Push-to-Talk voice workflow, Firebase Firestore + Android Room persistence, and standalone Release APK builds.
+
+---
+
+## Demo Videos & Screenshots
+
+> **Upload Instructions:** Drag and drop your `.mp4` videos and `.png`/`.jpg` screenshot directly into the GitHub README editor (or save them under `docs/media/`) and replace the placeholders below.
+
+### 1. Voice Visit Demo — English
+<!-- Replace with GitHub video URL or relative path e.g. docs/media/demo-english.mp4 -->
+[▶ Watch English Demo Video](https://github.com/user-attachments/assets/PLACEHOLDER-ENGLISH-DEMO-VIDEO)
+
+### 2. Voice Visit Demo — Tamil (தமிழ்)
+<!-- Replace with GitHub video URL or relative path e.g. docs/media/demo-tamil.mp4 -->
+[▶ Watch Tamil Demo Video](https://github.com/user-attachments/assets/PLACEHOLDER-TAMIL-DEMO-VIDEO)
+
+### 3. Voice Visit Demo — Kannada (ಕನ್ನಡ)
+<!-- Replace with GitHub video URL or relative path e.g. docs/media/demo-kannada.mp4 -->
+[▶ Watch Kannada Demo Video](https://github.com/user-attachments/assets/PLACEHOLDER-KANNADA-DEMO-VIDEO)
+
+### 4. Auto-Filled ASHA Field Report & PDF Export Screenshot
+<!-- Replace with GitHub image URL or relative path e.g. docs/media/report-screenshot.png -->
+![Saakshya ASHA Report Screenshot](docs/media/report-screenshot.png)
 
 ---
 
@@ -80,7 +102,7 @@ sakshya-web/
 ├── docs/                                 # Architecture, Gnani integration, Android Room schema, NHM citations
 └── firebase.json / firestore.rules       # Firebase hosting & Firestore configuration
 
-../sakshya-app/                           # Sibling repository: Sakshya ASHA Android Mobile App (React Native + Expo)
+../sakshya-app/                           # Sibling repository: Saakshya ASHA Android Mobile App (React Native + Expo)
 ```
 
 ---
@@ -168,7 +190,7 @@ Built with **Next.js `14.2.18`**, **React `18.3.1`**, **Tailwind CSS**, **Framer
 
 ---
 
-## 6. Companion Android Mobile App (`Sakshya ASHA` — `../sakshya-app`)
+## 6. Companion Android Mobile App (`Saakshya ASHA` — `../sakshya-app`)
 
 The field mobile client lives in the sibling repository **`sakshya-app`** (`React Native 0.74.5 + Expo 51`), engineered to pair directly with this FastAPI Voice Backend over REST and `/ws/voice`.
 
