@@ -15,9 +15,7 @@ Converts noisy, spoken household-visit notes in Indic languages and natural Indi
 
 ### 1. Voice Visit Demo — English
 
-<div align="center">
-  <iframe width="100%" height="480" src="https://www.youtube.com/embed/95zhO-07A8E" title="Saakshya - English Voice Visit Demo" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen style="width: 100%; max-width: 850px; aspect-ratio: 16 / 9; border-radius: 12px; border: 0;"></iframe>
-</div>
+[![Saakshya English Voice Visit Demo](docs/media/english-player.jpg)](https://www.youtube.com/watch?v=95zhO-07A8E)
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=95zhO-07A8E">▶ <b>Watch English Voice Visit Demo on YouTube</b></a> &nbsp;|&nbsp; <a href="docs/media/english.mp4">Local MP4 Stream</a>
@@ -25,9 +23,7 @@ Converts noisy, spoken household-visit notes in Indic languages and natural Indi
 
 ### 2. Voice Visit Demo — Tamil (தமிழ்)
 
-<div align="center">
-  <iframe width="100%" height="480" src="https://www.youtube.com/embed/sJQvE8ixwz0" title="Saakshya - Tamil Voice Visit Demo" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen style="width: 100%; max-width: 850px; aspect-ratio: 16 / 9; border-radius: 12px; border: 0;"></iframe>
-</div>
+[![Saakshya Tamil Voice Visit Demo](docs/media/tamil-player.jpg)](https://www.youtube.com/watch?v=sJQvE8ixwz0)
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=sJQvE8ixwz0">▶ <b>Watch Tamil Voice Visit Demo on YouTube</b></a> &nbsp;|&nbsp; <a href="docs/media/tamil.mp4">Local MP4 Stream</a>
